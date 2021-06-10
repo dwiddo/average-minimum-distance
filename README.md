@@ -1,7 +1,6 @@
 # amd
 
-The amd package allows you to read .cifs to obtain their periodic set representation,
-calculate AMD/PDD isometric invariants and compare them.
+For the calculation and comparison of AMD/PDD isometric invariants. Includes functions for extracting periodic set representations of crystal structures from .cif files.
 
 ## Requirements
 
@@ -10,25 +9,20 @@ calculate AMD/PDD isometric invariants and compare them.
 
 ## Guide
 
-All of the following require installing ```amd```, and including
-
-```py
-import amd
-```
-
 ### Reading .cifs
 
-amd includes functionality to read .cif files and extract their motif and cell in Cartesian form. To do so requires either the ```ase``` or ```ccdc``` package. ```ase``` is the default and recommended, as it can be easily pip installed. ```ccdc``` is not recommended, but in some specific cases it can provide useful options. ```ccdc``` requires a valid license to use.
+```amd``` includes functionality to read .cif files and extract their motif and cell in Cartesian form. To do so requires either  ```ase``` or ```ccdc```. ```ase``` is the default and recommended, as it can be easily pip installed. ```ccdc``` is not recommended, but in some specific cases it provides useful options. Using ```ccdc``` requires a valid license.
 
-All readers return ```PeriodicSet``` objects, which have attributes ```.name```, ```.motif``` and ```.cell```. ```PeriodicSet```s are intended for easy use with the AMD/PDD calculators.
+All readers return ```PeriodicSet``` objects, which have attributes ```name```, ```motif``` and ```cell```. ```PeriodicSet```s are intended for easy use with the AMD/PDD calculators.
 
 The following creates a ```CifReader``` object which can be iterated over to get all (valid) structures in a .cif:
 
 ```py
+import amd
 reader = amd.CifReader('path/to/file.cif')
 ```
 
-This can be used in a loop, comprehension or converted to a list,
+This can be used in a loop, comprehension or converted to a list:
 
 ```py
 for periodic_set in reader:
