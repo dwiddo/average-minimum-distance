@@ -14,14 +14,15 @@ def pdd(periodic_set, k, order=True):
     m = distance_matrix.shape[0]
     
     dists, weights = np.unique(distance_matrix, axis=0, return_counts=True)
-    pdd = np.hstack((weights[:, np.newaxis].transpose() / m, dists))
+    pdd = np.hstack(weights.transpose() / m, dists)
     
     if order:
         inds = np.lexsort(np.rot90(dists))
         pdd = pdd[inds]
 
     return pdd
-    
+
+
 
 def ppc(periodic_set):
     m, n = periodic_set[0].shape

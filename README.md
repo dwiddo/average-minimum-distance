@@ -1,6 +1,6 @@
-# amd: distance-based isometric invariants
+# amd
 
-For calculation and comparison of AMD/PDD isometric invariants. Includes functions for extracting periodic set representations of crystal structures from .cif files.
+For the calculation and comparison of AMD/PDD isometric invariants. Includes functions for extracting periodic set representations of crystal structures from .cif files.
 
 ## Requirements
 
@@ -11,7 +11,7 @@ For calculation and comparison of AMD/PDD isometric invariants. Includes functio
 
 ### Reading .cifs
 
-amd includes functionality to read .cif files and extract their motif and cell in Cartesian form. To do so requires either ase or ccdc. ase is the default and recommended, as it can be easily pip installed. ccdc is not recommended, but in some specific cases it provides useful options. Using ccdc requires a valid license.
+```amd``` includes functionality to read .cif files and extract their motif and cell in Cartesian form. To do so requires either  ```ase``` or ```ccdc```. ```ase``` is the default and recommended, as it can be easily pip installed. ```ccdc``` is not recommended, but in some specific cases it provides useful options. Using ```ccdc``` requires a valid license.
 
 All readers return ```PeriodicSet``` objects, which have attributes ```name```, ```motif``` and ```cell```. ```PeriodicSet```s are intended for easy use with the AMD/PDD calculators.
 
@@ -31,41 +31,33 @@ for periodic_set in reader:
 periodic_sets = list(reader)
 ```
 
-By default, the reader will skip structures that cannot be read and print a warning.
-
-If your .cif contains just one structure, use:
+If your .cif contains just one structure, use the syntax:
 
 ```py
 periodic_set = list(amd.CifReader('path/to/one_structure.cif'))[0]
 ```
 
-If you have a folder with many .cifs each with one structure:
+If you have a folder with many .cifs each with one structure, you can use this list comprehension:
 
 ```py
 import os
 folder = 'path/to/cif_folder'
-periodic_sets = [list(amd.CifReader(os.path.join(folder, filename)))[0] 
-                 for filename os.listdir(folder)]
+periodic_sets = [list(amd.CifReader(os.path.join(folder, filename)))[0] for filename os.listdir(folder)]
 ```
 
-```CifReader``` has several optional arguments:
+The ```CifReader``` has several optional arguments. Most useful is ```remove_hydrogens``` which defaults to False. To remove Hydrogen atoms when reading, use
 
 ```py
-reader = amd.CifReader(filename,
-                       reader='ase',
-                       remove_hydrogens=False,
-                       allow_disorder=False,
-                       dtype=np.float64,
-                       heaviest_component=False)
+reader = amd.CifReader('path/to/file.cif', remove_hydrogens=True)
 ```
 
-Most useful (and stable) is ```remove_hydrogens```. The rest are usually not needed and should be changed from the defaults with some caution.
+The rest of the arguments of ```CifReader``` are usually not of use and should be changed from the defaults with caution.
 
-```reader``` ('ase' or 'ccdc') is the backend package used to read the .cif. ase is recommended and can be easily pip installed. Choosing ccdc allows setting ```heaviest_component``` to True, this is used to remove solvents by removing all but the heaviest connected component in the asymmetric unit. For some .cifs this can produce unintended results.
+```dtype```  controls the floating point precision to which motif/cell data is stored, which may be of use for many .cifs (default ```np.float64```; should only change to ```np.float32```). 
 
-```allow_disorder``` contols handling of disordered structures. By default they are skipped by the reader and a warning is printed. Disordered structures don't make sense under the periodic set model; there is no good way to interpret them. Setting this to True will ignore disorder, including every atomic site regardless. Note: when disorder information is missing on a site, the reader assumes there is no disorder there.
+If ```allow_disorder``` is False (default), when any disorder is detected in a structure it will be skipped and a warning. Disordered structures don't make sense under the periodic set model; there is no good way to interpret them. Setting this to True will ignore disorder, including every atomic site regardless. 
 
-```dtype``` is the numpy datatype of the motif and cell returned by the reader. The default ```np.float64``` should be fine for most cases. If the size of the data is limiting it may help to set ```dtype=np.float32```.
+The argument ```reader``` (default ```'ase'```) chooses the backend package used to read the .cif. ```ase``` is recommended and can be easily pip installed. Choosing ```'ccdc'``` provides one extra optional argument for the ```CifReader```, ```heaviest_component``` (default False). This is used to remove solvents, when True it will remove all but the heaviest connected component in the asymmetric unit. For many .cifs this can produce unintended results.
 
 ### Calculating AMDs and PDDs
 
@@ -91,8 +83,6 @@ cell = np.identity(3)       # unit cell = identity
 cubic_pdd = pdd((motif, cell), 100)
 ```
 
-PDDs are returned as a concatenated matrix with weights in the first column.
-
 Remember that amd and pdd always expect Cartesian forms of a motif and cell, with all points inside the cell. If you have unit cell parameters or fractional coodinates, then use ```amd.cellpar_to_cell``` to convert a,b,c,alpha,beta,gamma to a 3x3 Cartesian cell, then ```motif = np.matmul(frac_motif, cell)``` to get the motif in Cartesian form before passing to ```amd``` or ```pdd```.
 
 ### Comparing AMDs and PDDs
@@ -115,13 +105,3 @@ To compare a collection pairwise, just pass it in twice, e.g.:
 amds = [amd.amd(s, 100) for s in amd.CifReader('structures.cif')]
 distance_matrix = amd.compare(amds, amds)
 ```
-
-To compare two PDDs, use ```amd.emd```. This gives the Earth mover's distance between crystals in two seperate .cifs:
-
-```py
-pdd_1 = amd.pdd(list(amd.CifReader('crystal_1.cif'))[0])
-pdd_2 = amd.pdd(list(amd.CifReader('crystal_2.cif'))[0])
-dist = amd.emd(pdd_1, pdd_2)
-```
-
-A simple function for comparing many PDDs is not yet implimented, but is easy enough with a loop over two lists of PDDs.
