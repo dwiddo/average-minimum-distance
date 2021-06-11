@@ -21,7 +21,7 @@ def pdd(periodic_set, k, order=True):
         pdd = pdd[inds]
 
     return pdd
-    
+
 
 def ppc(periodic_set):
     m, n = periodic_set[0].shape

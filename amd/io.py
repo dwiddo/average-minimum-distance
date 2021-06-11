@@ -8,13 +8,14 @@ warnings.formatwarning = _warning
 
 
 def lexsort(x):
+    '''lexicographically sort rows of matrix x'''
     return x[np.lexsort(np.rot90(x))]
 
 def cellpar_to_cell(a, b, c, alpha, beta, gamma):
-    """
+    '''
     Simplified version of function from ase.geometry.
     Unit cell params (3 lengths, 3 angles) --> cell as 3x3 np array.
-    """
+    '''
 
     # Handle orthorhombic cells separately to avoid rounding errors
     eps = 2 * np.spacing(90.0, dtype=np.float64)  # around 1.4e-14
@@ -55,10 +56,11 @@ class Reader:
         self.heaviest_component = heaviest_component
         
     def _read(self, iterable, parser):
-        '''generates PeriodicSets from iterable and parser depending on reader.
+        '''
+        generates PeriodicSets from iterable and parser depending on reader.
         
-           iterable: generates objects containing the Periodic Set data
-           parser  : function taking a generated object, returning a PeriodicSet (or None for "bad" sets) 
+        iterable: generates objects containing the Periodic Set data
+        parser  : function taking a generated object, returning a PeriodicSet (or None for "bad" sets) 
         '''
         for item in iterable:
             periodic_set = parser(item)
@@ -191,19 +193,6 @@ class Reader:
         # packing duplicates points on the edge (within 0.001) of the unit cell, this removes dupes
         frac_motif = np.around(frac_motif, decimals=10)
         frac_motif = np.array([p for p in frac_motif if (p >= 0).all() and (p < 1).all()])
-        
-        # pdists = pdist(frac_motif)
-        # if (pdists <= 1e-5).any():
-        #     accounted_for = set()
-        #     frac_motif_ = []
-        #     for i, p in enumerate(frac_motif):
-        #         if i not in accounted_for:
-        #             frac_motif_.append(p)
-        #             for j, p_ in enumerate(frac_motif[i+1:]):
-        #                 if np.linalg.norm(p - p_) <= 1e-5:
-        #                     accounted_for.add(i+j+1)
-        
-        #     frac_motif = np.array(frac_motif_)
         
         cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
         motif = frac_motif @ cell

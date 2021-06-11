@@ -1,23 +1,23 @@
 import numpy as np
 from scipy.spatial.distance import cdist
 
-# l-infinity distance (between two AMDs)
 def linf(v, v_):
+    '''l-infinity distance (between two AMDs)'''
     return np.amax(np.abs(v-v_))
 
-# Earth mover's distance between two PDDs
 def emd(pdd, pdd_):
+    '''Earth mover's distance between two PDDs'''
     from .core.Wasserstein import wasserstein
     dm = cdist(pdd[:, 1:], pdd_[:, 1:], metric='chebyshev')
     return wasserstein(pdd[:, 0], pdd_[:, 0], dm)
 
-# either: two 2D matrices (compare rows as AMDs pairwise)
-#         a 1D reference and 2D (compare one to many)
 
-# for batch comparisons of AMDs.
-# either arg can be any of: an AMD, a list of AMDs, or a np.array with AMDs in rows.
-# returns a float for 1 v 1 comparison, a vector for 1 v many, a distance matrix for many vs many.
 def compare(reference, comparison, k=None):
+    
+    '''for batch comparisons of AMDs.
+       Either arg can be any of: an AMD, a list of AMDs, or a np.array with AMDs in rows.
+       Returns a float for 1 v 1 comparison, a vector for 1 v many, a distance matrix for many vs many.
+    '''
     
     if isinstance(reference, list):
         reference = np.array(reference)
@@ -37,3 +37,6 @@ def compare(reference, comparison, k=None):
         reference = np.array([reference])
         
     return cdist(reference, comparison, metric='chebyshev')
+
+if __name__ == '__main__':
+    pass
