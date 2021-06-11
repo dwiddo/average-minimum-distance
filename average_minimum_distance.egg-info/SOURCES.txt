@@ -1,0 +1,17 @@
+LICENSE
+README.md
+pyproject.toml
+setup.cfg
+amd/__init__.py
+amd/calculate.py
+amd/compare.py
+amd/io.py
+amd/core/PeriodicSet.py
+amd/core/Wasserstein.py
+amd/core/__init__.py
+amd/core/core.py
+average_minimum_distance.egg-info/PKG-INFO
+average_minimum_distance.egg-info/SOURCES.txt
+average_minimum_distance.egg-info/dependency_links.txt
+average_minimum_distance.egg-info/requires.txt
+average_minimum_distance.egg-info/top_level.txt
