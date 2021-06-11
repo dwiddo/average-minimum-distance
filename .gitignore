@@ -1,5 +1,0 @@
-*.toml
-*.cfg
-average_minimum_distance.egg-info/
-build/
-dist/

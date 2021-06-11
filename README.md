@@ -17,6 +17,8 @@ average-minimum-distance is imported with ```import amd```.
 
 ## Guide
 
+See the iPython notebook in the tests folder for examples with real cif files.
+
 ### Reading .cifs
 
 amd includes functionality to read .cif files and extract their motif and cell in Cartesian form. To do so requires either ase or ccdc. ase is the default and recommended, as it can be easily pip installed. ccdc is not recommended, but in some specific cases it provides useful options. Using ccdc requires a valid license.
