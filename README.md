@@ -1,4 +1,4 @@
-# amd: distance-based isometric invariants
+# amd: distance-based isometry invariants
 
 For calculation and comparison of AMD/PDD isometric invariants. Includes functions for extracting periodic set representations of crystal structures from .cif files.
 
@@ -6,6 +6,14 @@ For calculation and comparison of AMD/PDD isometric invariants. Includes functio
 
 - numpy and scipy
 - ase or ccdc to read in .cif files (ase recommended).
+
+Use pip to install average-minimum-distance and ase (if required):
+
+```shell
+pip install average-minimum-distance ase
+```
+
+average-minimum-distance is imported with ```import amd```.
 
 ## Guide
 

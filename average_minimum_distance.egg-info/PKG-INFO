@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: average-minimum-distance
-Version: 1.0.3
+Version: 1.0.4
 Summary: For calculation and comparison of AMD/PDD isometric invariants. Includes .cif reading functionality.
 Home-page: https://github.com/dwiddo/average-minimum-distance
 Author: Daniel Widdowson
@@ -10,7 +10,7 @@ Platform: UNKNOWN
 Description-Content-Type: text/markdown
 License-File: LICENSE
 
-# amd: distance-based isometric invariants
+# amd: distance-based isometry invariants
 
 For calculation and comparison of AMD/PDD isometric invariants. Includes functions for extracting periodic set representations of crystal structures from .cif files.
 
@@ -18,6 +18,14 @@ For calculation and comparison of AMD/PDD isometric invariants. Includes functio
 
 - numpy and scipy
 - ase or ccdc to read in .cif files (ase recommended).
+
+Use pip to install average-minimum-distance and ase (if required):
+
+```shell
+pip install average-minimum-distance ase
+```
+
+average-minimum-distance is imported with ```import amd```.
 
 ## Guide
 
