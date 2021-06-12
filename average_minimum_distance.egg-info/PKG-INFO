@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: average-minimum-distance
-Version: 1.0.4
+Version: 1.0.5
 Summary: For calculation and comparison of AMD/PDD isometric invariants. Includes .cif reading functionality.
 Home-page: https://github.com/dwiddo/average-minimum-distance
 Author: Daniel Widdowson
@@ -12,7 +12,7 @@ License-File: LICENSE
 
 # amd: distance-based isometry invariants
 
-For calculation and comparison of AMD/PDD isometric invariants. Includes functions for extracting periodic set representations of crystal structures from .cif files.
+For calculation and comparison of [AMD](<https://arxiv.org/abs/2009.02488>)/PDD isometric invariants. Includes functions for extracting periodic set representations of crystal structures from .cif files.
 
 ## Requirements
 
@@ -28,6 +28,8 @@ pip install average-minimum-distance ase
 average-minimum-distance is imported with ```import amd```.
 
 ## Guide
+
+See the iPython notebook in the tests folder for examples with real cif files.
 
 ### Reading .cifs
 
@@ -47,8 +49,6 @@ This can be used in a loop, comprehension or converted to a list:
 ```py
 for periodic_set in reader:
     print(periodic_set.motif.shape[0]) # prints number of motif points
-
-periodic_sets = list(reader)
 ```
 
 By default, the reader will skip structures that cannot be read and print a warning.
@@ -86,6 +86,8 @@ Most useful (and stable) is ```remove_hydrogens```. The rest are usually not nee
 ```allow_disorder``` contols handling of disordered structures. By default they are skipped by the reader and a warning is printed. Disordered structures don't make sense under the periodic set model; there is no good way to interpret them. Setting this to True will ignore disorder, including every atomic site regardless. Note: when disorder information is missing on a site, the reader assumes there is no disorder there.
 
 ```dtype``` is the numpy datatype of the motif and cell returned by the reader. The default ```np.float64``` should be fine for most cases. If the size of the data is limiting it may help to set ```dtype=np.float32```.
+
+If you want 
 
 ### Calculating AMDs and PDDs
 

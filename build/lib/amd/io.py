@@ -8,14 +8,14 @@ warnings.formatwarning = _warning
 
 
 def lexsort(x):
-    '''lexicographically sort rows of matrix x'''
+    """lexicographically sort rows of matrix x"""
     return x[np.lexsort(np.rot90(x))]
 
 def cellpar_to_cell(a, b, c, alpha, beta, gamma):
-    '''
-    Simplified version of function from ase.geometry.
+    """Simplified version of function from ase.geometry.
+    
     Unit cell params (3 lengths, 3 angles) --> cell as 3x3 np array.
-    '''
+    """
 
     # Handle orthorhombic cells separately to avoid rounding errors
     eps = 2 * np.spacing(90.0, dtype=np.float64)  # around 1.4e-14
@@ -43,6 +43,9 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
 
 
 class Reader:
+    """Base Reader class. Contains parser functions for
+    converting ase CifBlock and ccdc Entry objects to PeriodicSets.
+    """
     
     def __init__(self, remove_hydrogens=False,
                        allow_disorder=False,
@@ -50,27 +53,25 @@ class Reader:
                        heaviest_component=False     # ccdc only
                        ):
         
+        # settings
         self.remove_hydrogens = remove_hydrogens
         self.allow_disorder = allow_disorder
         self.dtype = dtype
         self.heaviest_component = heaviest_component
         
     def _read(self, iterable, parser):
-        '''
-        generates PeriodicSets from iterable and parser depending on reader.
-        
-        iterable: generates objects containing the Periodic Set data
-        parser  : function taking a generated object, returning a PeriodicSet (or None for "bad" sets) 
-        '''
+        """Iterates over iterable, passing items through parser and
+        yielding the result if it is not None.
+        """
         for item in iterable:
             periodic_set = parser(item)
             if periodic_set is not None:
                 yield periodic_set
                 
-    ### parsers ###
+    ### Parsers. Intended to be passed to _read ###
     
     def _CIFBlock_to_PeriodicSet(self, block):
-        '''ase.io.cif.CIFBlock --> PeriodicSet. Returns None for a "bad" set.'''
+        """ase.io.cif.CIFBlock --> PeriodicSet. Returns None for a "bad" set."""
         
         if not self.allow_disorder:
             occupancies = block.get('_atom_site_occupancy')
@@ -140,7 +141,7 @@ class Reader:
     
     
     def _Entry_to_PeriodicSet(self, entry):
-        '''ccdc.entry.Entry --> PeriodicSet. Returns None for a "bad" set.'''
+        """ccdc.entry.Entry --> PeriodicSet. Returns None for a "bad" set."""
         
         try:
             crystal = entry.crystal
@@ -211,7 +212,9 @@ class Reader:
     def __iter__(self):
         yield from self._generator
 
-
+# Subclasses of Reader read from different sources (CSD, .cif).
+# The __init__ function should initialise self._generator by calling
+# self._read(iterable, parser) with an iterable which 
 
 class CSDReader(Reader):
     
@@ -235,7 +238,7 @@ class CSDReader(Reader):
         self._generator = self._read(iterable, self._Entry_to_PeriodicSet)
     
     def _init_ccdc_reader(self, refcodes):
-        '''Generates ccdc Entries from CSD refcodes'''
+        """Generates ccdc Entries from CSD refcodes"""
         from ccdc.io import EntryReader
         reader = EntryReader('CSD')
         for refcode in refcodes:
@@ -268,7 +271,6 @@ class CifReader(Reader):
         elif reader == 'ccdc':
             from ccdc.io import EntryReader
             self._generator = self._read(EntryReader(filename), self._Entry_to_PeriodicSet)
-
 
 if __name__ == '__main__':
     pass

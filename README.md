@@ -75,6 +75,8 @@ Most useful (and stable) is ```remove_hydrogens```. The rest are usually not nee
 
 ```dtype``` is the numpy datatype of the motif and cell returned by the reader. The default ```np.float64``` should be fine for most cases. If the size of the data is limiting it may help to set ```dtype=np.float32```.
 
+If you want 
+
 ### Calculating AMDs and PDDs
 
 The functions ```amd.amd``` and ```amd.pdd``` are for AMD and PDD calculations respectively. They have 2 required arguments:
