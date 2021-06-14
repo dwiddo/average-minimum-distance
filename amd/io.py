@@ -8,13 +8,13 @@ warnings.formatwarning = _warning
 
 
 def lexsort(x):
-    """lexicographically sort rows of matrix x"""
+    """lexicographically sort rows of matrix x."""
     return x[np.lexsort(np.rot90(x))]
 
 def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     """Simplified version of function from ase.geometry.
     
-    Unit cell params (3 lengths, 3 angles) --> cell as 3x3 np array.
+    Unit cell params a,b,c,α,β,γ --> cell as 3x3 ndarray.
     """
 
     # Handle orthorhombic cells separately to avoid rounding errors
@@ -247,7 +247,6 @@ class CSDReader(Reader):
                 yield entry
             except RuntimeError:
                 warnings.warn(f'Identifier {refcode} not found in database.')
-
 
 class CifReader(Reader):
     

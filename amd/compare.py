@@ -42,7 +42,7 @@ def emd(pdd, pdd_, metric='chebyshev', **kwargs):
 
 def compare(reference, comparison, k=None, metric='chebyshev', **kwargs):
     """
-    For batch or single comparisons of AMDs.
+    For batch or single comparisons of AMDs for a single k.
     Computes distance between each pair of the two collections of inputs, 
     essentially wrapping scipy's cdist.
     
@@ -59,7 +59,7 @@ def compare(reference, comparison, k=None, metric='chebyshev', **kwargs):
     metric : str or callable, optional
         Usually AMDs are compared with the Chebyshev/l-infinity distance.
         Can take any metric + kwargs accepted by scipy.spatial.distance.cdist.
-        
+
     Returns
     -------
     ndarray
