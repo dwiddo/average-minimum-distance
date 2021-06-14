@@ -47,7 +47,7 @@ def pdd(periodic_set, k, order=True, collapse=True):
         PDD of periodic_set up to k. 
     """
     
-    _, pdd, _ = nearest_neighbours(periodic_set[0], periodic_set[1], k)
+    pdd, _, _ = nearest_neighbours(periodic_set[0], periodic_set[1], k)
     m = pdd.shape[0]
     
     if collapse:

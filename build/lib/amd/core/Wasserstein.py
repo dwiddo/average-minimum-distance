@@ -21,8 +21,6 @@ __maintainer__ = "Cameron Hargreaves"
 '''
 
 import numpy as np
-from scipy.spatial.distance import squareform
-
 from numba import njit
 
 def main():
@@ -121,8 +119,8 @@ def network_simplex(source_demands, sink_demands, network_costs):
     demands = np.concatenate((-source_d_int, sink_d_int)).astype(np.int64)
 
     # Create fully connected arcs between all sources and sinks
-    conn_tails = np.array([i for i, x in enumerate(sources) for j, y in enumerate(sinks)], dtype=np.int64)
-    conn_heads = np.array([j + sources.shape[0] for i, x in enumerate(sources) for j, y in enumerate(sinks)], dtype=np.int64)
+    conn_tails = np.array([i for i in range(sources.shape[0]) for _ in range(sinks.shape[0])], dtype=np.int64)
+    conn_heads = np.array([j + sources.shape[0] for _ in range(sources.shape[0]) for j in range(sinks.shape[0])], dtype=np.int64)
 
     # Add arcs to and from the dummy node
     dummy_tails = []

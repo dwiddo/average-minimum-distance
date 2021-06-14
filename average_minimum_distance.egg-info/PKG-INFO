@@ -1,11 +1,12 @@
 Metadata-Version: 2.1
 Name: average-minimum-distance
-Version: 1.0.5
-Summary: For calculation and comparison of AMD/PDD isometric invariants. Includes .cif reading functionality.
+Version: 1.0.6
+Summary: For calculation and comparison of AMD/PDD isometric invariants of periodic sets. Includes .cif reading functionality.
 Home-page: https://github.com/dwiddo/average-minimum-distance
 Author: Daniel Widdowson
 Author-email: sgdwiddo@liverpool.ac.uk
-License: UNKNOWN
+License: MIT License
+Keywords: isometry,invariant,cif
 Platform: UNKNOWN
 Description-Content-Type: text/markdown
 License-File: LICENSE
@@ -81,13 +82,11 @@ reader = amd.CifReader(filename,
 
 Most useful (and stable) is ```remove_hydrogens```. The rest are usually not needed and should be changed from the defaults with some caution.
 
-```reader``` ('ase' or 'ccdc') is the backend package used to read the .cif. ase is recommended and can be easily pip installed. Choosing ccdc allows setting ```heaviest_component``` to True, this is used to remove solvents by removing all but the heaviest connected component in the asymmetric unit. For some .cifs this can produce unintended results.
+```reader``` ('ase' or 'ccdc') is the backend package used to read the .cif. ase is recommended and can be easily pip installed. Choosing ccdc allows setting ```heaviest_component``` to True, this is used to remove solvents by removing all but the heaviest connected component in the asymmetric unit. **For some .cifs this can produce unintended results.**
 
-```allow_disorder``` contols handling of disordered structures. By default they are skipped by the reader and a warning is printed. Disordered structures don't make sense under the periodic set model; there is no good way to interpret them. Setting this to True will ignore disorder, including every atomic site regardless. Note: when disorder information is missing on a site, the reader assumes there is no disorder there.
+```allow_disorder``` contols handling of disordered structures. By default they are skipped by the reader and a warning is printed. Disordered structures don't make sense under the periodic set model; there is no good way to interpret them. Setting this to True will ignore disorder, including every atomic site regardless. **Note: when disorder information is missing on a site, the reader assumes there is no disorder there.**
 
 ```dtype``` is the numpy datatype of the motif and cell returned by the reader. The default ```np.float64``` should be fine for most cases. If the size of the data is limiting it may help to set ```dtype=np.float32```.
-
-If you want 
 
 ### Calculating AMDs and PDDs
 
@@ -115,11 +114,11 @@ cubic_pdd = pdd((motif, cell), 100)
 
 PDDs are returned as a concatenated matrix with weights in the first column.
 
-Remember that amd and pdd always expect Cartesian forms of a motif and cell, with all points inside the cell. If you have unit cell parameters or fractional coodinates, then use ```amd.cellpar_to_cell``` to convert a,b,c,alpha,beta,gamma to a 3x3 Cartesian cell, then ```motif = np.matmul(frac_motif, cell)``` to get the motif in Cartesian form before passing to ```amd``` or ```pdd```.
+Remember that amd and pdd always expect Cartesian forms of a motif and cell, with all points inside the cell. If you have unit cell parameters or fractional coodinates, then use ```amd.cellpar_to_cell``` to convert a,b,c,α,β,γ to a 3x3 Cartesian cell, then ```motif = np.matmul(frac_motif, cell)``` to get the motif in Cartesian form before passing to ```amd``` or ```pdd```.
 
 ### Comparing AMDs and PDDs
 
-So far, AMDs are simply compared with l-infinity/chebyshev distance. To compare AMDs, it is recommended you use ```amd.compare```. It has two required arguments, ```reference``` and ```comparison```, which both may either by a single AMD, a list of AMDs, or a numpy array with AMDs in rows. In any case the length of all AMDs must be equal. For m reference AMDs and n comparison AMDs, ```amd.compare``` returns a distance matrix with shape ```(m, n)```, where the (i,j)-th entry is the AMD distance between reference i and comparison j. For example, this code compares all structures in one .cif to all structures in another by AMD100:
+AMDs are usually compared with l-infinity/Chebyshev distance. ```amd.compare``` is used for comparing sets of (or single) AMDs. It has two required arguments, ```reference``` and ```comparison```, which both may either be single vectors or  matrices with the vectors to compare in rows. The number of columns in ```reference``` and ```comparison``` must agree. ```amd.compare``` also optionally accepts any metric supported by ```scipy.spatial.distance.cdist```, default chebyshev. For input shapes (m,k) and (n,k), a distance matrix with shape ```(m, n)``` is returned where the (i,j)-th entry is the distance between ```reference[i]``` and ```comparison[j]```. For example, this compares everything in one .cif to everything in another with AMD100:
 
 ```py
 import amd
@@ -131,7 +130,7 @@ set_2_amds = [amd.amd(s, k) for s in amd.CifReader('set_2.cif')]
 distance_matrix = amd.compare(set_1_amds, set_2_amds)
 ```
 
-To compare a collection pairwise, just pass it in twice, e.g.:
+To compare a collection pairwise, just pass it in twice:
 
 ```py
 amds = [amd.amd(s, 100) for s in amd.CifReader('structures.cif')]
