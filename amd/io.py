@@ -1,10 +1,30 @@
-import numpy as np
 from .core.PeriodicSet import PeriodicSet
-
+import numpy as np
 import warnings
 def _warning(message, category, filename, lineno, file=None, line=None):
     return f'{filename}:{lineno}: {category.__name__}: {message}\n'
 warnings.formatwarning = _warning
+
+# error checks?
+try:
+    from ase.io.cif import parse_cif                     # .cif -> Iterable[CIFBlock]
+    from ase.spacegroup.spacegroup import parse_sitesym  # string symop -> rot, trans
+    _ASE_ENABLED = True
+except ImportError:
+    _ASE_ENABLED = False
+
+try:
+    from ccdc.io import EntryReader             # .cif or 'CSD' -> Iterable[Entry]
+    from ccdc.search import TextNumericSearch   # refcode -> family of refcodes
+    _CCDC_ENABLED = True
+except ImportError:
+    _CCDC_ENABLED = False
+
+try:
+    import h5py
+    _H5PY_ENABLED = True
+except ImportError:
+    _H5PY_ENABLED = False
 
 
 def lexsort(x):
@@ -36,29 +56,37 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     assert cz_sqr >= 0
     
     return np.array([
-            [a, 0, 0], 
+            [a,           0,           0], 
             [b*cos_gamma, b*sin_gamma, 0],
-            [c*cos_beta, c*cy, c*np.sqrt(cz_sqr)]
-    ])
+            [c*cos_beta,  c*cy,        c*np.sqrt(cz_sqr)]])
 
 
-class Reader:
+class _Reader:
     """Base Reader class. Contains parser functions for
     converting ase CifBlock and ccdc Entry objects to PeriodicSets.
     """
     
-    def __init__(self, remove_hydrogens=False,
-                       allow_disorder=False,
-                       dtype=np.float64,
-                       heaviest_component=False     # ccdc only
-                       ):
+    disorder_options = {'skip', 'ordered_sites', 'all_sites'}
+    
+    def __init__(self, 
+                 remove_hydrogens=False,      
+                 disorder='skip',
+                 dtype=np.float64, 
+                 heaviest_component=False,
+                 types=False,
+                ):
         
         # settings
         self.remove_hydrogens = remove_hydrogens
-        self.allow_disorder = allow_disorder
+        if disorder not in _Reader.disorder_options:
+            raise ValueError(f'disorder parameter {disorder} must be one of {_Reader.disorder_options}')
+        self.disorder = disorder
         self.dtype = dtype
         self.heaviest_component = heaviest_component
-        
+        self.types = types
+    
+    # basically wraps an iterable passing its outputs through a function
+    # and skips if the function returned None
     def _read(self, iterable, parser):
         """Iterates over iterable, passing items through parser and
         yielding the result if it is not None.
@@ -72,72 +100,133 @@ class Reader:
     
     def _CIFBlock_to_PeriodicSet(self, block):
         """ase.io.cif.CIFBlock --> PeriodicSet. Returns None for a "bad" set."""
+                              
+        cell = block.get_cell().array
         
-        if not self.allow_disorder:
+        # get asymmetric unit's fractional motif
+        asym_frac_motif = [block.get(name) for name in ['_atom_site_fract_x',
+                                                        '_atom_site_fract_y',
+                                                        '_atom_site_fract_z']]
+        if None in asym_frac_motif:
+            asym_motif = [block.get(name) for name in ['_atom_site_cartn_x',
+                                                       '_atom_site_cartn_y',
+                                                       '_atom_site_cartn_z']]
+            if None in asym_motif:
+                warnings.warn(f'Skipping {block.name}, coordinates not found in structure')
+                return None
+                
+            asym_frac_motif = np.array(asym_motif) @ np.linalg.inv(cell)
+            
+        asym_frac_motif = np.array(asym_frac_motif).T     # fract coords in cif
+        
+        # get indexes of sites to remove in asymmetric unit
+        remove = []
+        
+        # hydrogens
+        asym_symbols = block.get_symbols()
+        if self.remove_hydrogens:
+            remove.extend([i for i, sym in enumerate(asym_symbols) if sym == 'H'])
+        
+        # disorder 
+        disordered = []
+        if self.disorder != 'all_sites':
             occupancies = block.get('_atom_site_occupancy')
             if occupancies is not None:
-                occupancies = {occ for occ in occupancies if isinstance(occ, (float, int))}
-                if any(o != 1 for o in occupancies):
-                    warnings.warn(f'Skipping disordered structure {block.name}')
+                # indices with fractional occupancy
+                for i, occ in enumerate(occupancies):
+                    if i not in remove and isinstance(occ, (float, int)) and occ < 1:
+                        disordered.append(i)
+                
+                if self.disorder == 'skip' and len(disordered) > 0:
+                    warnings.warn(f'Skipping {block.name} as structure is disordered')
                     return None
+                else:
+                    remove.extend(disordered)
         
-        # often raises a UserWarning about space groups that doesn't appear to matter.
-        failed = True
+        asym_frac_motif = np.delete(asym_frac_motif, remove, axis=0)
+        asym_symbols = [s for i, s in enumerate(asym_symbols) if i not in remove]
+        
+        if asym_frac_motif.shape[0] == 0:
+            warnings.warn('Skipping {block.name} with no accepted sites')
+            return None
+        
+        # remove/replace?
+        sitesym = block._get_sitesym()
+        if not sitesym:
+            sitesym = ('x,y,z',)
+
+        rotations, translations = parse_sitesym(sitesym)
+        
+        frac_motif = []
+        symbols = []
+        for i, site in enumerate(asym_frac_motif):
+            for rot, trans in zip(rotations, translations):
+                if not frac_motif:
+                    frac_motif.append(site)
+                    symbols.append(asym_symbols[i])
+                    continue
+                site_ = np.mod(np.dot(rot, site) + trans, 1)
+                t = site_ - frac_motif
+                mask = np.all( (abs(t) < 1e-3) | (abs(abs(t) - 1.0) < 1e-3), axis=1)
+                if not np.any(mask) or (self.disorder == 'all_sites' and i in disordered):
+                    frac_motif.append(site_)
+                    symbols.append(asym_symbols[i])
+                else:
+                    warnings.warn(f'{block.name} has overlapping sites')
+        
+        frac_motif = np.array(frac_motif)
+        
+        """
+        # try to expand asymmetric unit with spacegroup
+        sg = None
         from ase.spacegroup.spacegroup import SpacegroupValueError
         try:
-            with warnings.catch_warnings(): 
+            with warnings.catch_warnings(): # stops annoying warning that doesn't seem to matter
                 warnings.simplefilter('ignore')
-                
-                atoms = block.get_atoms()
-                
-                if self.remove_hydrogens:
-                    nums = atoms.get_atomic_numbers()
-                    for i in sorted(np.argwhere(nums == 1), reverse=True):
-                        del atoms[i]
-                        
-                motif, cell = atoms.get_positions(wrap=True), atoms.get_cell().array
-                failed = False
+                sg = block.get_spacegroup(True)
+                frac_motif, _ = sg.equivalent_sites(asym_frac_motif, onduplicates='warn')
                 
         except SpacegroupValueError as e:
-            # if get_atoms fails (ase wanted more spacegroup info) and the only symop
-            # is the identity, try getting data manually
+            # if there is not enough info for ase to get spacegroup
+            # if the only operation is +x,+y,+z or ops are missing, just get all points
             
-            # to work, need excatly one symop (identity), cellpars and fract coords
-
-            symops = block.get('_space_group_symop_operation_xyz')
-            if symops is None:
-                symops = block.get('_symmetry_equiv_pos_as_xyz')    # superceded by the above
-
-            if symops is not None and len(symops) == 1:
+            failed = False
+            
+            symops = None
+            for tag in ('_space_group_symop_operation_xyz',
+                        '_space_group_symop.operation_xyz',
+                        '_symmetry_equiv_pos_as_xyz'):
                 
-                op = ','.join([s.replace('+', '') for s in symops[0].split(',')])
-                if op == 'x,y,z':
-                    
-                    cellpar = block.get_cellpar()
-                    if cellpar is not None:
-                        
-                        cell = cellpar_to_cell(*cellpar)
-                        
-                        coords = [block.get('_atom_site_fract_x'), block.get('_atom_site_fract_y'), block.get('_atom_site_fract_z')]
-                        if None not in coords:
-                        
-                            frac_motif = np.array(coords).T
-                            
-                            if self.remove_hydrogens:
-                                types = block.get('_atom_site_type_symbol')
-                                non_H_indexes = [i for i, t in enumerate(types) if t not in 'HD']
-                                frac_motif = frac_motif[non_H_indexes]
-                            
-                            motif = frac_motif @ cell
-                            failed = False
+                if tag in block:
+                    symops = block[tag]
 
-        if failed:
-            warnings.warn(f'Skipping {block.name}: insufficient spacegroup data for ase to read structure.')
-            return None
+            if symops is not None:
+                if len(symops) > 1:
+                    failed = True
+                elif len(symops) == 1:
+                    op = ','.join([s.replace('+', '') for s in symops[0].split(',')])
+                    if op != 'x,y,z':
+                        failed = True
+            
+            if failed:
+                warnings.warn(f'Skipping {block.name} as positions could not be determined (insufficient symmetry data)')
+                return None
+            
+            frac_motif = asym_frac_motif
+        """
+        
+        frac_motif = np.mod(frac_motif, 1)  # wrap
+        
+        motif = frac_motif @ cell
         
         motif, cell = self._normalise_motif_cell(motif, cell)
         
-        return PeriodicSet(name=block.name, motif=motif, cell=cell)
+        if self.types:
+            periodic_set = PeriodicSet(motif, cell, name=block.name, types=symbols)
+        else:
+            periodic_set = PeriodicSet(motif, cell, name=block.name)
+            
+        return periodic_set
     
     
     def _Entry_to_PeriodicSet(self, entry):
@@ -166,41 +255,110 @@ class Reader:
                     component_weights.append(weight)
                 crystal.molecule = crystal.molecule.components[np.argmax(np.array(component_weights))]
         
+        
+        # hydrogens
         if self.remove_hydrogens:
             mol = crystal.molecule
             mol.remove_atoms(a for a in mol.atoms if a.atomic_symbol in 'HD')
             crystal.molecule = mol
             
         if not crystal.molecule.all_atoms_have_sites:
-            warnings.warn(f'Skipping {entry.identifier} as some atoms do not have sites')
-            return None
+            warnings.warn(f'In {entry.identifier} some atoms do not have sites')
             
-        # disorder check
-        occupancies = {a.occupancy for a in crystal.molecule.atoms if isinstance(a.occupancy, (float, int))}
-        if not self.allow_disorder:
-            if crystal.has_disorder or any(occ != 1 for occ in occupancies):    # or entry.has_disorder:
-                warnings.warn(f'Skipping disordered structure {entry.identifier}')
-                return None
+        # disorder 
+        if self.disorder != 'all_sites':
+            mol = crystal.molecule
+            
+            disordered = []
+            for atom in mol.atoms:
+                occ = atom.occupancy
+                if isinstance(occ, (float, int)) and occ < 1:
+                    disordered.append(atom)
+            
+            if len(disordered) > 0:
+                if self.disorder == 'skip':
+                    warnings.warn(f'Skipping {entry.identifier} as structure is disordered')
+                    return None
+                elif self.disorder == 'ordered_sites':
+                    mol.remove_atoms(disordered)
+            
+            crystal.molecule = mol
         
-        atoms = crystal.packing(inclusion='OnlyAtomsIncluded').atoms
-            
+        """
+        # not sure why, but ccdc may alter the symops from those in the cif.
+        # tried to pack the cell directly with the symops but it didn't work.
+        
+        asym_frac_motif = np.array([[
+                            a.fractional_coordinates.x, 
+                            a.fractional_coordinates.y, 
+                            a.fractional_coordinates.z]
+                            for a in crystal.molecule.atoms])
+        
+        sitesym = crystal.symmetry_operators
+        if not sitesym:
+            sitesym = ('x,y,z',)
+        
+        rotations = []
+        translations = []
+        for op in sitesym:
+            rot = crystal.symmetry_rotation(op)
+            trans = crystal.symmetry_translation(op)
+            rotations.append(np.array([rot[0:3], rot[3:6], rot[6:9]]))
+            translations.append(trans)
+        
+        rotations = np.array(rotations)
+        translations = np.array(translations)
+
+        frac_motif = []
+        for site in asym_frac_motif:
+            for rot, trans in zip(rotations, translations):
+                site_ = np.mod(np.dot(rot, site) + trans, 1)
+                if not frac_motif:
+                    frac_motif.append(site)
+                    continue
+                t = site_ - frac_motif
+                mask = np.all((abs(t) < 1e-3) | (abs(abs(t) - 1.0) < 1e-3), axis=1)
+                if not np.any(mask):
+                    frac_motif.append(site_)
+                else:
+                    warnings.warn(f'{crystal.identifier} has overlapping sites')
+        
+        # frac_motif = np.array(frac_motif)
+        """
+        try:
+            atoms = crystal.packing(inclusion='OnlyAtomsIncluded').atoms
+        except RuntimeError as e:
+            atoms = crystal.molecule.atoms
+                    
         frac_motif = np.array([[
                         a.fractional_coordinates.x, 
                         a.fractional_coordinates.y, 
                         a.fractional_coordinates.z]
                         for a in atoms])
         
+        if frac_motif.shape[0] == 0:
+            warnings.warn('Skipping {block.name} with no accepted sites')
+            return None
         
         # packing duplicates points on the edge (within 0.001) of the unit cell, this removes dupes
         frac_motif = np.around(frac_motif, decimals=10)
-        frac_motif = np.array([p for p in frac_motif if (p >= 0).all() and (p < 1).all()])
+        
+        types = [a.atomic_symbol for a in atoms]
+        wrapped_inds = {i for i, p in enumerate(frac_motif) if (p >= 0).all() and (p < 1).all()}
+        frac_motif = np.array([frac_motif[i] for i in range(len(frac_motif)) if i in wrapped_inds])
+        types = [types[i] for i in range(len(types)) if i in wrapped_inds]
         
         cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
         motif = frac_motif @ cell
         
         motif, cell = self._normalise_motif_cell(motif, cell)
         
-        return PeriodicSet(name=crystal.identifier, motif=motif, cell=cell)
+        if self.types:
+            periodic_set = PeriodicSet(motif, cell, name=crystal.identifier, types=types)
+        else:
+            periodic_set = PeriodicSet(motif, cell, name=crystal.identifier)
+        
+        return periodic_set
 
     # gives more consistent outputs beteween readers 
     def _normalise_motif_cell(self, motif, cell):
@@ -212,17 +370,17 @@ class Reader:
     def __iter__(self):
         yield from self._generator
 
-# Subclasses of Reader read from different sources (CSD, .cif).
+# Subclasses of _Reader read from different sources (CSD, .cif).
 # The __init__ function should initialise self._generator by calling
 # self._read(iterable, parser) with an iterable which 
 
-class CSDReader(Reader):
+class CSDReader(_Reader):
+    """Given CSD refcodes, reads PeriodicSets with ccdc."""
     
     def __init__(self, refcodes, families=False, **kwargs):
         super().__init__(**kwargs)
         
         if families:
-            from ccdc.search import TextNumericSearch
             
             all_refcodes = []
             for refcode in refcodes:
@@ -239,7 +397,6 @@ class CSDReader(Reader):
     
     def _init_ccdc_reader(self, refcodes):
         """Generates ccdc Entries from CSD refcodes"""
-        from ccdc.io import EntryReader
         reader = EntryReader('CSD')
         for refcode in refcodes:
             try:
@@ -248,7 +405,8 @@ class CSDReader(Reader):
             except RuntimeError:
                 warnings.warn(f'Identifier {refcode} not found in database.')
 
-class CifReader(Reader):
+class CifReader(_Reader):
+    """Read all structures in a .cif with ase or ccdc, yielding PeriodicSets."""
     
     READERS = {'ase', 'ccdc'}    
         
@@ -258,18 +416,154 @@ class CifReader(Reader):
         
         if reader not in CifReader.READERS:
             raise ValueError(f'Invalid reader {reader}. Reader must be one of {CifReader.READERS}')
+
         
         if self.heaviest_component and reader != 'ccdc':
             raise NotImplementedError(f'Parameter heaviest_component not implimented for {reader}, only ccdc.')
         
         # sets up self._generator which yields PeriodicSet objects
         if reader == 'ase':
-            from ase.io.cif import parse_cif
+            
+            if not _ASE_ENABLED:
+                raise ImportError(f'Failed to import ase')
+            
             self._generator = self._read(parse_cif(filename), self._CIFBlock_to_PeriodicSet)
             
         elif reader == 'ccdc':
-            from ccdc.io import EntryReader
+            
+            if not _CCDC_ENABLED:
+                raise ImportError(f'Failed to import ccdc.')
+            
             self._generator = self._read(EntryReader(filename), self._Entry_to_PeriodicSet)
+
+
+
+class SetWriter:
+    """Write PeriodicSets to a .hdf5 file. Requires h5py.
+    Reading the .hdf5 is much faster than parsing a big .cif.
+    Can optionally pass other data, intended to store AMDs/PDDs.
+    """
+
+    str_dtype = h5py.special_dtype(vlen=str)
+    
+    def __init__(self, filename):
+        
+        if not _H5PY_ENABLED:
+            raise ImportError('Failed to import h5py.')
+        
+        self.file = h5py.File(filename, 'w', track_order=True)
+        
+    def write(self, periodic_set):
+        
+        # need a name to store or you can't access items by key
+        if periodic_set.name is None:
+            raise ImportError('Periodic set must have a name to save to .hdf5.')
+        
+        # this group is the PeriodicSet
+        group = self.file.create_group(periodic_set.name)
+        
+        # datasets in the group for motif and cell
+        group.create_dataset('motif', data=periodic_set.motif)
+        group.create_dataset('cell', data=periodic_set.cell)
+        
+        if periodic_set.tags:
+            
+            # a subgroup contains tags that are lists or ndarrays
+            tags_group = group.create_group('tags')
+            for tag in periodic_set.tags:
+                
+                data = periodic_set.tags[tag]
+                
+                # scalars (nums and strs) stored as attrs
+                if np.isscalar(data):
+                    tags_group.attrs[tag] = data
+                
+                elif isinstance(data, np.ndarray):
+                    tags_group.create_dataset(tag, data=data)
+                    
+                elif isinstance(data, list):
+                    
+                    # lists of strings stored as special type for some reason
+                    # if any string is in the tags
+                    if any(isinstance(d, str) for d in data):
+                        data = [str(d) for d in data]
+                        tags_group.create_dataset(tag, data=data, 
+                                                  dtype=SetWriter.str_dtype)
+                        
+                    # everything else castable to ndarray
+                    else:
+                        data = np.asarray(data)
+                        tags_group.create_dataset(tag, data=np.array(data))
+                else:
+                    raise ValueError(f'Cannot store object {data} of type {type(data)} in hdf5')
+    
+    def iwrite(self, periodic_sets):
+        for periodic_set in periodic_sets:
+            self.write(periodic_set)
+        
+    def close(self):
+        self.file.close()
+        
+    def __enter__(self):
+        return self
+
+    # handle exceptions?
+    def __exit__(self, exc_type, exc_value, tb):
+        self.file.close()
+
+class SetReader:
+    """Read PeriodicSets from a .hdf5 file written with SetWriter. Requires h5py.
+    Reading the .hdf5 is much faster than parsing a big .cif.
+    """
+    
+    def __init__(self, filename):
+        
+        if not _H5PY_ENABLED:
+            raise ImportError('Failed to import h5py.')
+        
+        self.file = h5py.File(filename, 'r', track_order=True)
+
+    def _get_set(self, name):
+        # take a name in the set and return the PeriodicSet
+        
+        group = self.file[name]
+        periodic_set = PeriodicSet(group['motif'][:], group['cell'][:], name=name)
+        
+        if 'tags' in group:
+            for tag in group['tags']:
+                # tag: data e.g. 'types': ['C', 'H', 'O',...]
+                data = group['tags'][tag][:]
+                
+                if any(isinstance(d, (bytes, bytearray)) for d in data):
+                    periodic_set.tags[tag] = [d.decode() for d in data]
+                else:
+                    periodic_set.tags[tag] = data
+        
+        for attr in group.attrs:
+            periodic_set.tags[tag] = group.attrs[attr]
+
+        return periodic_set
+    
+    def __getitem__(self, name):
+        # index by name. Not found exc?
+        return self._get_set(name)
+
+    def __iter__(self):
+        # interface to loop over the SetReader
+        # does not close the SetReader when done
+        for name in self.file['/'].keys():
+            yield self._get_set(name)
+
+    def close(self):
+        self.file.close()
+        
+    def __enter__(self):
+        return self
+
+    # handle exceptions?
+    def __exit__(self, exc_type, exc_value, tb):
+        self.file.close()
+
 
 if __name__ == '__main__':
     pass

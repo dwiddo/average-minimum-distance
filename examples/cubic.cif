@@ -10,4 +10,4 @@ _atom_site_type_symbol
 _atom_site_fract_x
 _atom_site_fract_y
 _atom_site_fract_z
-H  0  0  0
+C  0  0  0

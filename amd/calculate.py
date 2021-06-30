@@ -1,6 +1,21 @@
 import numpy as np
-from .core.core import nearest_neighbours
+from .core.nearest_neighbours import nearest_neighbours
+from .core.PeriodicSet import PeriodicSet
 
+def _raw_pdd_from_pset(periodic_set, k):
+    """
+    Takes a PeriodicSet or a tuple (motif, cell) 
+    making the below able to take either.
+    """
+    if isinstance(periodic_set, PeriodicSet):
+        motif, cell = periodic_set.motif, periodic_set.cell
+    else:
+        motif, cell = periodic_set[0], periodic_set[1]
+        
+    pdd, _, _ = nearest_neighbours(motif, cell, k)
+        
+    return pdd
+    
 def amd(periodic_set, k):
     """
     Computes an AMD vector up to k from a periodic set.
@@ -20,8 +35,8 @@ def amd(periodic_set, k):
         AMD of periodic_set up to k. 
     """
     
-    pdd, _, _ = nearest_neighbours(periodic_set[0], periodic_set[1], k)
-    
+    pdd = _raw_pdd_from_pset(periodic_set, k)
+
     return np.average(pdd, axis=0)
 
 def pdd(periodic_set, k, order=True, collapse=True):
@@ -47,7 +62,8 @@ def pdd(periodic_set, k, order=True, collapse=True):
         PDD of periodic_set up to k. 
     """
     
-    pdd, _, _ = nearest_neighbours(periodic_set[0], periodic_set[1], k)
+    pdd = _raw_pdd_from_pset(periodic_set, k)
+        
     m = pdd.shape[0]
     
     if collapse:
@@ -55,7 +71,7 @@ def pdd(periodic_set, k, order=True, collapse=True):
         pdd = np.hstack((weights[:, np.newaxis] / m, dists))
     else:
         dists = pdd
-        pdd = np.hstack(np.full((m,1), 1/m), dists)
+        pdd = np.hstack((np.full((m,1), 1/m), dists))
     
     if order:
         inds = np.lexsort(np.rot90(dists))
@@ -63,6 +79,9 @@ def pdd(periodic_set, k, order=True, collapse=True):
 
     return pdd
 
+def pdd_to_amd(pdd):
+    """Calculates AMD from a PDD."""
+    return np.average(pdd[:,1:], weights=pdd[:,0], axis=0)
 
 def ppc(periodic_set):
     """

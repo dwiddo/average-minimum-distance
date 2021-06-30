@@ -1,20 +1,23 @@
 from collections import namedtuple
 import numpy as np
 
-_PeriodicSet = namedtuple('_PeriodicSet', ['motif', 'cell', 'name'])
-
-class PeriodicSet(_PeriodicSet):
+class PeriodicSet:
     """
     Represents a periodic set. Has attributes motif, cell and name.
     PeriodicSet objects are returned by the Readers in amd.io.
     """
+    def __init__(self, motif, cell, name=None, **kwargs):
+        self.motif = motif
+        self.cell  = cell
+        self.name  = name
+        self.tags = kwargs
 
     def __str__(self):
         m, dims = self.motif.shape
         return f"PeriodicSet({self.name}: {m} motif points in {dims} dimensions)"
     
     def __repr__(self):
-        return f"PeriodicSet(name: {self.name}, cell: {self.cell}, motif: {self.motif})"
+        return f"PeriodicSet(name: {self.name}, cell: {self.cell}, motif: {self.motif}, tags: {self.tags})"
     
     # actually, this doesn't make complete sense. Used for debugging.
     def __eq__(self, other):
