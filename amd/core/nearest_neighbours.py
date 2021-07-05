@@ -5,6 +5,8 @@ from collections import defaultdict
 import numpy as np
 from scipy.spatial import cKDTree
 
+import numba
+
 def _dist(p):
     return sum(x**2 for x in p)
 
@@ -145,6 +147,7 @@ def nearest_neighbours(motif, cell, k):
     return pdd_[:, 1:], cloud, inds[:, 1:]
 
 if __name__ == '__main__':
+    
     motif = np.array([[0,0,0],[0.1,0.1,0.1]])
     cell = np.identity(3)
     cloud, pdd, inds = nearest_neighbours(motif, cell, 10)

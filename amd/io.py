@@ -27,9 +27,9 @@ except ImportError:
     _H5PY_ENABLED = False
 
 
-def lexsort(x):
-    """lexicographically sort rows of matrix x."""
-    return x[np.lexsort(np.rot90(x))]
+# def lexsort(x):
+#     """lexicographically sort rows of matrix x."""
+#     return x[np.lexsort(np.rot90(x))]
 
 def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     """Simplified version of function from ase.geometry.
@@ -100,7 +100,7 @@ class _Reader:
     
     def _CIFBlock_to_PeriodicSet(self, block):
         """ase.io.cif.CIFBlock --> PeriodicSet. Returns None for a "bad" set."""
-                              
+        
         cell = block.get_cell().array
         
         # get asymmetric unit's fractional motif
@@ -161,11 +161,11 @@ class _Reader:
         symbols = []
         for i, site in enumerate(asym_frac_motif):
             for rot, trans in zip(rotations, translations):
+                site_ = np.mod(np.dot(rot, site) + trans, 1)
                 if not frac_motif:
-                    frac_motif.append(site)
+                    frac_motif.append(site_)
                     symbols.append(asym_symbols[i])
                     continue
-                site_ = np.mod(np.dot(rot, site) + trans, 1)
                 t = site_ - frac_motif
                 mask = np.all( (abs(t) < 1e-3) | (abs(abs(t) - 1.0) < 1e-3), axis=1)
                 if not np.any(mask) or (self.disorder == 'all_sites' and i in disordered):
@@ -173,47 +173,9 @@ class _Reader:
                     symbols.append(asym_symbols[i])
                 else:
                     warnings.warn(f'{block.name} has overlapping sites')
+                    print(rot, trans, site, site_, frac_motif)
         
         frac_motif = np.array(frac_motif)
-        
-        """
-        # try to expand asymmetric unit with spacegroup
-        sg = None
-        from ase.spacegroup.spacegroup import SpacegroupValueError
-        try:
-            with warnings.catch_warnings(): # stops annoying warning that doesn't seem to matter
-                warnings.simplefilter('ignore')
-                sg = block.get_spacegroup(True)
-                frac_motif, _ = sg.equivalent_sites(asym_frac_motif, onduplicates='warn')
-                
-        except SpacegroupValueError as e:
-            # if there is not enough info for ase to get spacegroup
-            # if the only operation is +x,+y,+z or ops are missing, just get all points
-            
-            failed = False
-            
-            symops = None
-            for tag in ('_space_group_symop_operation_xyz',
-                        '_space_group_symop.operation_xyz',
-                        '_symmetry_equiv_pos_as_xyz'):
-                
-                if tag in block:
-                    symops = block[tag]
-
-            if symops is not None:
-                if len(symops) > 1:
-                    failed = True
-                elif len(symops) == 1:
-                    op = ','.join([s.replace('+', '') for s in symops[0].split(',')])
-                    if op != 'x,y,z':
-                        failed = True
-            
-            if failed:
-                warnings.warn(f'Skipping {block.name} as positions could not be determined (insufficient symmetry data)')
-                return None
-            
-            frac_motif = asym_frac_motif
-        """
         
         frac_motif = np.mod(frac_motif, 1)  # wrap
         
@@ -225,7 +187,7 @@ class _Reader:
             periodic_set = PeriodicSet(motif, cell, name=block.name, types=symbols)
         else:
             periodic_set = PeriodicSet(motif, cell, name=block.name)
-            
+        
         return periodic_set
     
     
@@ -360,9 +322,8 @@ class _Reader:
         
         return periodic_set
 
-    # gives more consistent outputs beteween readers 
     def _normalise_motif_cell(self, motif, cell):
-        return lexsort(np.around(motif, decimals=10)).astype(self.dtype), np.around(cell, decimals=10).astype(self.dtype)
+        return motif.astype(self.dtype), cell.astype(self.dtype)
 
 
     ### public interface ###

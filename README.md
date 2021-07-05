@@ -26,7 +26,7 @@ average-minimum-distance is imported with ```import amd```.
 
 ## Reading .cifs <a name="Readingcifs"></a>
 
-The core use of this package is AMD and PDD calculations. They take a periodic set described by a unit cell and motif. While these can be passed manually, if you have a .cif file then ```amd.CifReader``` can read it and extract the cell and motif which can be easily passed to the invariant calculators. To read .cifs either ase or ccdc is required, ase is default and recommended. Using ccdc requires a valid license but allows you to use the optional parameter ```heaviest_component``` which attempts to remove solvents from your structure.
+The core use of this package is AMD and PDD calculations. They take a periodic set described by a unit cell and motif. While these can be passed manually, if you have a .cif file then ```amd.CifReader``` can read it and extract the cell and motif which can be easily passed to the invariant calculators. To read .cifs either ase or ccdc is required, ase is default and recommended. Using ccdc requires a valid license but allows you to use the optional parameter ```heaviest_component``` which attempts to remove solvents from your structures.
 
 All readers return ```PeriodicSet``` objects, which have attributes ```motif```, ```cell``` and ```name```. They also have a dictionary ```.tags``` which can store additional information, e.g. invariants, atomic types or density.
 
@@ -37,7 +37,7 @@ import amd
 reader = amd.CifReader('path/to/file.cif')
 ```
 
-This can be used in a loop, comprehension or converted to a list:
+This can be used in a loop, list comprehension or converted to a list:
 
 ```py
 for periodic_set in reader:
@@ -77,9 +77,9 @@ Most useful is ```remove_hydrogens```. ```types``` (may be removed/changed in fu
 
 ```reader``` (one of 'ase' or 'ccdc') is the backend package used to parse the .cif. ase is recommended and available with pip. Choosing ccdc allows setting ```heaviest_component``` to True, this is used to remove solvents by removing all but the heaviest connected component in the asymmetric unit. **For some .cifs this can produce unintended results.**
 
-```disorder``` (one of 'skip', 'ordered_sites', 'all_sites') contols handling of disordered structures. The default is to skip structures with disorder and print a warning. Disordered structures don't make sense under the periodic set model. Other arguments will not skip: 'ordered_sites' will remove atoms with disorder, and 'all_sites' will include all atoms. **Note: when disorder is missing on a site, the reader assumes there is no disorder.**
+```disorder``` (one of 'skip', 'ordered_sites', 'all_sites') controls handling of disordered structures. The default is to skip structures with disorder and print a warning. Disordered structures don't make sense under the periodic set model. Other arguments will not skip: 'ordered_sites' will remove atoms with disorder, and 'all_sites' will include all atoms. **Note: when disorder is missing on a site, the reader assumes there is no disorder there.**
 
-```dtype``` is the numpy datatype of the motif and cell returned by the reader.
+```dtype``` is the numpy data type of the motif and cell returned by the reader.
 
 ## From CSD refcode(s) <a name="Refcode"></a>
 
@@ -116,9 +116,9 @@ cell = np.identity(3)       # unit cell = identity
 cubic_pdd = pdd((motif, cell), 500)
 ```
 
-PDDs are returned as a concatenated matrix with weights in the first column.
+PDDs are returned as a numpy ndarray with row weights in the first column.
 
-Remember that amd and pdd always expect Cartesian forms of a motif and cell, with all points inside the cell. If you have unit cell parameters or fractional coodinates, then use ```amd.cellpar_to_cell``` to convert a,b,c,α,β,γ to a 3x3 Cartesian cell, then ```motif = np.matmul(frac_motif, cell)``` to get the motif in Cartesian form before passing to ```amd``` or ```pdd```.
+The functions ```amd.amd``` and ```amd.pdd``` always expect Cartesian forms of a motif and cell, with all points inside the cell. If you have unit cell parameters or fractional coodinates, then use ```amd.cellpar_to_cell``` to convert a,b,c,α,β,γ to a 3x3 Cartesian cell, then ```motif = np.matmul(frac_motif, cell)``` to get the motif in Cartesian form before passing to ```amd``` or ```pdd```.
 
 ## Comparing AMDs and PDDs <a name="Comparing"></a>
 
@@ -132,11 +132,13 @@ The comparison part of this package has several functions with several options. 
 
 ### Comparison options
 
-All comparison functions share several optional arguments: ```k=None```, ```metric='chebyshev'```, and ```ord=None```. ```k``` can be any int less than or equal to the number of columns/length of the passed invariants, or a range of k values. If ```k``` is a range, comparisons are done over a range of k making a vector of distances (for each comparison) which is collapsed to a single value using a norm specified by ```ord``` (default Euclidean; for all ```ord``` options see [numpy.linalg.norm](https://numpy.org/doc/stable/reference/generated/numpy.linalg.norm.html)).
+All comparison functions share several optional arguments: ```k=None```, ```metric='chebyshev'```, and ```ord=None```. 
 
-The ```metric``` parameter decides how invariants are acutally compared. The options for ```metric``` are the same as those for [scipy.spatial.distance.cdist](https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.cdist.html), default is Chebyshev/l-infinity. With AMDs, this refers directly to the metric used to comapre AMD vectors. For two PDDs, the rows of the PDDs are compared by this metric, creating a distance matrix on PDD rows which is passed to the earth mover's distance to get a single value.
+```k``` can be any int less than or equal to the number of columns/length of the passed invariants, or a range of k values. If ```k``` is a range, comparisons are done over a range of k making a vector of distances (for each comparison) which is collapsed to a single value using a norm specified by ```ord``` (default Euclidean; for all ```ord``` options see [numpy.linalg.norm](https://numpy.org/doc/stable/reference/generated/numpy.linalg.norm.html)).
 
-Functions that compare using PDDs have an optional ```verbose``` parameter which prints an ETA to the terminal.
+The ```metric``` parameter decides how invariants are actually compared. The options for ```metric``` are the same as those for [scipy.spatial.distance.cdist](https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.cdist.html), default is Chebyshev/l-infinity. With AMDs, this refers directly to the metric used to comapre AMD vectors. For two PDDs, the rows of the PDDs are compared by this metric, creating a distance matrix on PDD rows which is passed to the earth mover's distance to get a single value.
+
+Functions that compare using PDDs can be expensive so they have an optional ```verbose``` parameter which prints an ETA to the terminal.
 
 To compare a collection pairwise by PDD:
 

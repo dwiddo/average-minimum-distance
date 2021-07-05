@@ -2,7 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.0] - 18/06/2021
+## [1.1.1] - 18/06/2021
+
+### Added
+
+- PeriodicSet object now impliments __getattr__ to search tags for the attribute, e.g. if atomic types are in the set's tags under the name 'types' it can now be accesed by set.types.
+
+- neighbours_from_distance_matrix(n, dm) takes an integer and a distance matrix and returns nearest neighbours.
+
+### Changed
+
+- Readers no longer 'normalise' the output by rounding and lexicographically sorting. Sorting the motif means the list of types must be sorted as well, so it's now left in the order it appears in the .cif (sans symops).
+
+- Fixed bug reading .cifs whose symmetric operators don't start with the identitiy
+
+### Removed
+
+## [1.1.0] - 01/07/2021
 
 ### Added
 

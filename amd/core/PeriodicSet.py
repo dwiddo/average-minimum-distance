@@ -12,6 +12,13 @@ class PeriodicSet:
         self.name  = name
         self.tags = kwargs
 
+    # only called for attrs that don't exist
+    def __getattr__(self, attr):
+        if attr in self.tags:
+            return self.tags[attr]
+        else:
+            raise AttributeError(f"{self.__class__.__name__} object has no attribute or tag {attr}")
+
     def __str__(self):
         m, dims = self.motif.shape
         return f"PeriodicSet({self.name}: {m} motif points in {dims} dimensions)"

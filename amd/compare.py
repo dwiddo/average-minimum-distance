@@ -275,29 +275,40 @@ def pdd_cdist(pdds, pdds_,
             pdd = pdds[i]
             for j in range(m):
                 dm[i, j] = emd(pdd[:,:t], pdds_[j][:,:t], metric=metric, **kwargs) 
-                
                 if verbose: eta.update()
 
 
     else:
         
-        dms = []
+        dms = np.empty((len(k), n, m))
         if verbose: eta = _ETA(n * m * len(k))
         
-        for k_ in k:
-            
-            dm = np.empty( (n, m) )
-            
+        for k_ind, k_ in enumerate(k):
             for i in range(n):
                 pdd = pdds[i]
                 for j in range(m):
-                    dm[i, j] = emd(pdd[:,:k_+1], pdds_[j][:,:k_+1], metric=metric, **kwargs)
-                    
+                    dms[k_ind, i, j] = emd(pdd[:,:k_+1], pdds_[j][:,:k_+1], metric=metric, **kwargs)
                     if verbose: eta.update()
+        
+        # dms = []
+        # if verbose: eta = _ETA(n * m * len(k))
+        
+        # for k_ in k:
             
-            dms.append(dm)
+        #     dm = np.empty( (n, m) )
             
-        dms = np.stack(dms)
+        #     for i in range(n):
+        #         pdd = pdds[i]
+        #         for j in range(m):
+        #             dm[i, j] = emd(pdd[:,:k_+1], pdds_[j][:,:k_+1], metric=metric, **kwargs)
+                    
+        #             if verbose: eta.update()
+            
+        #     dms.append(dm)
+            
+        # dms = np.stack(dms)
+        
+        
         dm = np.linalg.norm(dms, ord=ord, axis=0)
 
     return dm
@@ -362,24 +373,40 @@ def pdd_pdist(pdds,
                 
     else:
     
-        dms = []
+        dms = np.empty((len(k), (m * (m - 1)) // 2))
         if verbose: eta = _ETA(((m * (m - 1)) // 2) * len(k))
-        for k_ in k:
-            
-            dm = np.empty((m * (m - 1)) // 2, dtype=np.double)
-            
-            inds = [(i,j) for i in range(0, m - 1) for j in range(i + 1, m)]
         
+        for k_ind, k_ in enumerate(k):
+            inds = [(i,j) for i in range(0, m - 1) for j in range(i + 1, m)]
             for r, (i, j) in enumerate(inds):
-                dm[r] = emd(pdds[i][:,:k_], pdds[j][:,:k_], metric=metric, **kwargs)
-                
+                dms[k_ind, r] = emd(pdds[i][:,:k_], pdds[j][:,:k_], metric=metric, **kwargs)
                 if verbose: eta.update()
-                    
-            dms.append(dm)
+    
+
+        # dms = []
+        # if verbose: eta = _ETA(((m * (m - 1)) // 2) * len(k))
+    
+        # for k_ in k:
             
-        cdm = np.linalg.norm(np.stack(dms), ord=ord, axis=0)
+        #     dm = np.empty((m * (m - 1)) // 2, dtype=np.double)
+            
+        #     inds = [(i,j) for i in range(0, m - 1) for j in range(i + 1, m)]
+        
+        #     for r, (i, j) in enumerate(inds):
+        #         dm[r] = emd(pdds[i][:,:k_], pdds[j][:,:k_], metric=metric, **kwargs)
+                
+        #         if verbose: eta.update()
+                    
+        #     dms.append(dm)
+        # dms = np.stack(dms)
+        
+        
+        cdm = np.linalg.norm(dms, ord=ord, axis=0)
+        
+        print(k, dms.shape)
     
     return cdm
+
 
 
 def filter(n, pdds, pdds_=None,
@@ -489,21 +516,27 @@ def filter(n, pdds, pdds_=None,
 
     else:
     
-        dms = []
+        dms = np.empty((len(k),) + inds.shape)
         if verbose: eta = _ETA(inds.shape[0] * inds.shape[1] * len(k))
         
-        for k_ in k:
-            dm = np.zeros_like(inds)
-            
+        for k_ind, k_ in enumerate(k):
             for i, row in enumerate(inds):
                 for i_, j in enumerate(row):
-                    dm[i, i_] = emd(pdds[i][:,:k_+1], pdds_[j][:,:k_+1], **metric_kwargs)
-                    
+                    dms[k_ind, i, i_] = emd(pdds[i][:,:k_+1], pdds_[j][:,:k_+1], **metric_kwargs)
                     if verbose: eta.update()
-                
-            dms.append(dm)
+        
+        # for k_ in k:
+        #     dm = np.zeros_like(inds)
             
-        dms = np.stack(dms)
+        #     for i, row in enumerate(inds):
+        #         for i_, j in enumerate(row):
+        #             dm[i, i_] = emd(pdds[i][:,:k_+1], pdds_[j][:,:k_+1], **metric_kwargs)
+                    
+        #             if verbose: eta.update()
+                
+        #     dms.append(dm)
+            
+        # dms = np.stack(dms)
         
         dm = np.linalg.norm(dms, ord=ord, axis=0)
             
@@ -619,10 +652,10 @@ def pdd_mst(pdds,
         dists, inds = filter(amd_filter_cutoff, pdds, **kwargs)
         
         # make neighbourhood graph then take mst
-        dm = np.zeros((m, m))
+        dm = np.empty((m, m))
         for i, row in enumerate(inds):
             for i_, j in enumerate(row):
-                dm[i][j] = dists[i][i_]
+                dm[i, j] = dists[i][i_]
     
     else:
         
@@ -642,6 +675,34 @@ def pdd_mst(pdds,
         
     return edge_list
 
+
+def neighbours_from_distance_matrix(n, dm):
+    
+    # 2D distance matrix
+    if len(dm.shape) == 2:
+        
+        inds = np.array([np.argpartition(row, n)[:n] for row in dm])
+    
+    # 1D condensed distance vector
+    elif len(dm.shape) == 1:
+        dm = squareform(dm)
+        inds = []
+        for i, row in enumerate(dm):
+            inds_row = np.argpartition(row, n+1)[:n+1]
+            inds_row = inds_row[inds_row != i][:n]
+            inds.append(inds_row)
+        inds = np.array(inds)
+    
+    else:
+        ValueError('Input must be an ndarray of either a 2D distance matrix or condensed distance matrix')
+
+    # inds are the indexes of nns: inds[i,j] is the j-th nn to point i
+    nn_dm = np.take_along_axis(dm, inds, axis=-1)
+    sorted_inds = np.argsort(nn_dm, axis=-1)
+    inds = np.take_along_axis(inds, sorted_inds, axis=-1)
+    nn_dm = np.take_along_axis(nn_dm, sorted_inds, axis=-1)
+    
+    return nn_dm, inds
 
 if __name__ == '__main__':
     pass
