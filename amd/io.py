@@ -173,7 +173,6 @@ class _Reader:
                     symbols.append(asym_symbols[i])
                 else:
                     warnings.warn(f'{block.name} has overlapping sites')
-                    print(rot, trans, site, site_, frac_motif)
         
         frac_motif = np.array(frac_motif)
         
