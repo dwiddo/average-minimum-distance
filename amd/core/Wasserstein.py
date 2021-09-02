@@ -203,7 +203,7 @@ def network_simplex(source_demands, sink_demands, network_costs):
         flow_cost += flow * edge_costs[arc_ind]
 
     # Divide by the fp_multiplier twice to account for this correction
-    final = flow_cost / fp_multiplier ** 2
+    final = flow_cost / fp_multiplier
     
     # Multiply by the scaling factor of the distance matrix to get final value
     final = final * dm_scaling_factor

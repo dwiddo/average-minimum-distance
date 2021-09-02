@@ -1,4 +1,3 @@
-from collections import namedtuple
 import numpy as np
 
 class PeriodicSet:
@@ -12,7 +11,6 @@ class PeriodicSet:
         self.name  = name
         self.tags = kwargs
 
-    # only called for attrs that don't exist
     def __getattr__(self, attr):
         if attr in self.tags:
             return self.tags[attr]
@@ -26,17 +24,36 @@ class PeriodicSet:
     def __repr__(self):
         return f"PeriodicSet(name: {self.name}, cell: {self.cell}, motif: {self.motif}, tags: {self.tags})"
     
-    # actually, this doesn't make complete sense. Used for debugging.
+    # used for debugging. Checks if the motif/cell agree point for point
+    # (disregarding order), NOT up to isometry.
+    # Also, this function is unfinished. It'll get confused by structures 
+    # with overlapping sites --- but it's good enough for now.
     def __eq__(self, other):
-        return self.cell.shape == other.cell.shape and \
-               self.motif.shape == other.motif.shape and \
-               np.allclose(self.cell, other.cell) and \
-               np.allclose(self.motif, other.motif)
+        motif = self.motif
+        motif_ = other.motif
+        cell = self.cell
+        cell_ = other.cell
+
+        if not (cell.shape == cell_.shape and motif.shape == motif_.shape):
+            return False
+
+        if not np.allclose(cell, cell_):
+            return False
+
+        # this is the part that'd be confused by overlapping sites
+        # just checks every motif point in either have a neighbour in the other
+        diffs = np.amax(np.abs(motif[:, None] - motif), axis=-1)
+        
+        if not np.all((np.amin(diffs, axis=0) <= 1e-6) & (np.amin(diffs, axis=-1) <= 1e-6)):
+            return False
+        else:
+            return True
     
     def __ne__(self, other):
         return not self.__eq__(other)
     
     def astype(self, dtype):
-        return PeriodicSet(name=self.name, 
-                           motif=self.motif.astype(dtype),
-                           cell=self.cell.astype(dtype))
+        return PeriodicSet(self.motif.astype(dtype), 
+                           self.cell.astype(dtype),
+                           name=self.name,
+                           **self.tags)

@@ -1,22 +1,9 @@
+import warnings
 import numpy as np
 from .core.nearest_neighbours import nearest_neighbours
 from .core.PeriodicSet import PeriodicSet
 
-def _raw_pdd_from_pset(periodic_set, k):
-    """
-    Takes a PeriodicSet or a tuple (motif, cell) 
-    making the below able to take either.
-    """
-    if isinstance(periodic_set, PeriodicSet):
-        motif, cell = periodic_set.motif, periodic_set.cell
-    else:
-        motif, cell = periodic_set[0], periodic_set[1]
-        
-    pdd, _, _ = nearest_neighbours(motif, cell, k)
-        
-    return pdd
-    
-def amd(periodic_set, k):
+def AMD(periodic_set, k):
     """
     Computes an AMD vector up to k from a periodic set.
     
@@ -35,11 +22,31 @@ def amd(periodic_set, k):
         AMD of periodic_set up to k. 
     """
     
-    pdd = _raw_pdd_from_pset(periodic_set, k)
+    asymmetric_unit, multiplicities = None, None
 
-    return np.average(pdd, axis=0)
+    if isinstance(periodic_set, PeriodicSet):
+        
+        motif, cell = periodic_set.motif, periodic_set.cell
+        
+        if 'asymmetric_unit' in periodic_set.tags and 'wyckoff_multiplicities' in periodic_set.tags:
+            
+            asymmetric_unit = periodic_set.asymmetric_unit
+            multiplicities = periodic_set.wyckoff_multiplicities
+            
+    else:
+        motif, cell = periodic_set[0], periodic_set[1]
+        
+    pdd, _, _ = nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
+    
+    return np.average(pdd, axis=0, weights=multiplicities)
 
-def pdd(periodic_set, k, order=True, collapse=True):
+
+def amd(*args, **kwargs):
+    warnings.warn("amd.amd() and amd.pdd() are deprecated; use amd.AMD() and amd.PDD() instead.", DeprecationWarning)
+    return AMD(*args, **kwargs)
+
+
+def PDD(periodic_set, k, order=True, collapse=True, collapse_tol=1e-4):
     """
     Computes a PDD up to k from a periodic set.
     
@@ -54,7 +61,10 @@ def pdd(periodic_set, k, order=True, collapse=True):
     order : bool, optional
         Whether or not to lexicographically order the rows. Default True.
     collapse: bool, optional
-        Whether or not to collapse identical rows. Default True.
+        Whether or not to collapse identical rows (within a tolerance). Default True.
+    collapse_tol: float
+        If two rows have all entries closer than collapse_tol, they get collapsed.
+        Default 0.0001.
 
     Returns
     -------
@@ -62,28 +72,63 @@ def pdd(periodic_set, k, order=True, collapse=True):
         PDD of periodic_set up to k. 
     """
     
-    pdd = _raw_pdd_from_pset(periodic_set, k)
+    asymmetric_unit, multiplicities = None, None
+    
+    if isinstance(periodic_set, PeriodicSet):
         
-    m = pdd.shape[0]
+        motif, cell = periodic_set.motif, periodic_set.cell
+        
+        if 'asymmetric_unit' in periodic_set.tags and 'wyckoff_multiplicities' in periodic_set.tags:
+
+            asymmetric_unit = periodic_set.asymmetric_unit
+            multiplicities = periodic_set.wyckoff_multiplicities
+            
+    else:
+        
+        motif, cell = periodic_set[0], periodic_set[1]
+        
+    dists, _, _ = nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
+    
+    if multiplicities is None:
+        multiplicities = np.ones((motif.shape[0], ))
+        
+    m = np.sum(multiplicities)
+    weights = multiplicities / m
     
     if collapse:
-        dists, weights = np.unique(pdd, axis=0, return_counts=True)
-        pdd = np.hstack((weights[:, np.newaxis] / m, dists))
-    else:
-        dists = pdd
-        pdd = np.hstack((np.full((m,1), 1/m), dists))
+        
+        diffs = np.abs(dists[:, None] - dists)
+        overlapping = np.triu(np.all(diffs <= collapse_tol, axis=-1), 1)
+        
+        if overlapping.any():
+            keep = ~overlapping.any(0)
+            dists = dists[keep]
+            np.fill_diagonal(overlapping, True)
+            ind_groups, mul_inds = np.argwhere(overlapping[keep]).T
+
+            weights_ = []
+            for i in range(len(dists)):
+                weights_.append(np.sum(weights[mul_inds[ind_groups == i]]))
+            weights = np.array(weights_)
+    
+    pdd = np.hstack((weights[:, None], dists))
     
     if order:
-        inds = np.lexsort(np.rot90(dists))
-        pdd = pdd[inds]
-
+        pdd = pdd[np.lexsort(np.rot90(dists))]
+    
     return pdd
 
-def pdd_to_amd(pdd):
-    """Calculates AMD from a PDD."""
-    return np.average(pdd[:,1:], weights=pdd[:,0], axis=0)
 
-def ppc(periodic_set):
+def pdd(*args, **kwargs):
+    warnings.warn("amd.amd() and amd.pdd() are deprecated; use amd.AMD() and amd.PDD() instead.", DeprecationWarning)
+    return PDD(*args, **kwargs)
+
+def PDD_to_AMD(pdd):
+    """Calculates AMD from a PDD."""
+    return np.average(pdd[:, 1:], weights=pdd[:, 0], axis=0)
+
+def PPC(periodic_set):
+    
     """
     Calculate the point packing coefficient (ppc) of periodic_set.
     The ppc is a constant of any periodic set determining the 
@@ -96,8 +141,14 @@ def ppc(periodic_set):
         ppc = nth_root(Vol[U] / (m * V_n))
     where V_n is the volume of a unit sphere in n dimensions.
     """
-    m, n = periodic_set[0].shape
-    det = np.linalg.det(periodic_set[1])
+    
+    if isinstance(periodic_set, PeriodicSet):
+        motif, cell = periodic_set.motif, periodic_set.cell
+    else:
+        motif, cell = periodic_set[0], periodic_set[1]
+
+    m, n = motif.shape
+    det = np.linalg.det(cell)
     t = (n - n % 2) / 2
     if n % 2 == 0:
         V = (np.pi ** t) / np.math.factorial(t)
@@ -105,15 +156,28 @@ def ppc(periodic_set):
         V = (2 * np.math.factorial(t) * (4 * np.pi) ** t) / np.math.factorial(n)
     return (det / (m * V)) ** (1./n)
 
-def amd_estimate(periodic_set, k):
+def ppc(*args, **kwargs):
+    warnings.warn("amd.ppc() is deprecated; use amd.PPC() instead.", DeprecationWarning)
+    return PPC(*args, **kwargs)
+
+def AMD_estimate(periodic_set, k):
     """
     Calculates an estimate of AMD_k (or PDD) based on the 
     point packing coefficient (ppc), which determines the
     asymptotic behaviour. 
     """
-    n = periodic_set[0].shape[1]
-    c = ppc(periodic_set[0], periodic_set[1])
-    return np.array([(x ** (1. / n)) * c for x in range(1, k+1)])
+    if isinstance(periodic_set, PeriodicSet):
+        motif, cell = periodic_set.motif, periodic_set.cell
+    else:
+        motif, cell = periodic_set[0], periodic_set[1]
+        
+    n = motif.shape[1]
+    c = PPC(motif, cell)
+    return np.array([(x ** (1. / n)) * c for x in range(1, k + 1)])
+
+def amd_estimate(*args, **kwargs):
+    warnings.warn("amd.amd_estimate() is deprecated; use amd.AMD_estimate() instead.", DeprecationWarning)
+    return AMD_estimate(*args, **kwargs)
 
 
 if __name__ == "__main__":

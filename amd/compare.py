@@ -1,68 +1,10 @@
 import warnings
-import time
-from datetime import timedelta
 import numpy as np
 from scipy.spatial.distance import cdist, pdist, squareform
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import minimum_spanning_tree
 from .core.Wasserstein import wasserstein
-
-# verbose
-class _ETA:
-    """Pass total amount to do on construction,
-    then call .update() on every loop."""
-    
-    _update_rate = 500  # set by experiment; ~ 1 update every 5 seconds.
-    _moving_average_factor = 0.3    # epochtime_{n+1} = factor * epochtime + (1-factor) * epochtime_{n}
-    
-    def __init__(self, to_do):
-        self.to_do = to_do
-        self.counter = 0
-        self.start_time = time.time()
-        self.tic = self.start_time
-        self.time_per_epoch = None
-        self.done = False
-    
-    def _end_epoch(self):
-        toc = time.time()
-        epoch_time = toc - self.tic
-        if self.time_per_epoch is None:
-            self.time_per_epoch = epoch_time
-        else:
-            self.time_per_epoch = _ETA._moving_average_factor * epoch_time + \
-                                  (1 - _ETA._moving_average_factor) * self.time_per_epoch
-            
-        percent = round(100 * self.counter / self.to_do, 2)
-        remaining = int(((self.to_do - self.counter) / _ETA._update_rate) * self.time_per_epoch)
-        eta = str(timedelta(seconds=remaining))
-        self.tic = toc
-        return f'{percent}%, ETA {eta}' + ' ' * 30
-    
-    def update(self):
-        
-        self.counter += 1
-        
-        if self.counter == self.to_do:
-            msg = self.finished()
-            print(msg, end='\r\n')
-            self.done = True
-            return
-        
-        elif self.counter > self.to_do:
-            return
-        
-        if not self.counter % _ETA._update_rate:
-            msg = self._end_epoch()
-            print(msg, end='\r')
-                
-
-    def finished(self):
-        end_time = time.time()
-        total = end_time - self.start_time
-        msg = f'Total time: {round(total,2)}s, ' \
-              f'no_comparisons: {self.to_do} ' \
-              f'({round(self.to_do/total,2)} comparisons/second)'
-        return msg
+from .core.eta import _ETA
 
 def linf(v, v_):
     """l-infinity distance between vectors (AMDs)."""
@@ -117,7 +59,7 @@ nearest neighbours.
 """
 
 
-def amd_cdist(amds, amds_, 
+def AMD_cdist(amds, amds_, 
               k=None,
               metric='chebyshev',
               ord=None,
@@ -169,7 +111,7 @@ def amd_cdist(amds, amds_,
 
     return dm
 
-def amd_pdist(amds,
+def AMD_pdist(amds,
               k=None,
               metric='chebyshev',
               ord=None,
@@ -215,7 +157,7 @@ def amd_pdist(amds,
     
     return cdm
 
-def pdd_cdist(pdds, pdds_, 
+def PDD_cdist(pdds, pdds_, 
               k=None,
               metric='chebyshev',
               ord=None,
@@ -313,7 +255,7 @@ def pdd_cdist(pdds, pdds_,
 
     return dm
 
-def pdd_pdist(pdds,
+def PDD_pdist(pdds,
               k=None,
               metric='chebyshev',
               ord=None,
@@ -364,7 +306,7 @@ def pdd_pdist(pdds,
         
         if verbose: eta = _ETA((m * (m - 1)) // 2)
             
-        inds = [(i,j) for i in range(0, m - 1) for j in range(i + 1, m)]
+        inds = ((i,j) for i in range(0, m - 1) for j in range(i + 1, m))
 
         for r, (i, j) in enumerate(inds):
             cdm[r] = emd(pdds[i][:,:t], pdds[j][:,:t], metric=metric, **kwargs)
@@ -377,7 +319,7 @@ def pdd_pdist(pdds,
         if verbose: eta = _ETA(((m * (m - 1)) // 2) * len(k))
         
         for k_ind, k_ in enumerate(k):
-            inds = [(i,j) for i in range(0, m - 1) for j in range(i + 1, m)]
+            inds = ((i,j) for i in range(0, m - 1) for j in range(i + 1, m))
             for r, (i, j) in enumerate(inds):
                 dms[k_ind, r] = emd(pdds[i][:,:k_], pdds[j][:,:k_], metric=metric, **kwargs)
                 if verbose: eta.update()
@@ -402,12 +344,8 @@ def pdd_pdist(pdds,
         
         
         cdm = np.linalg.norm(dms, ord=ord, axis=0)
-        
-        print(k, dms.shape)
     
     return cdm
-
-
 
 def filter(n, pdds, pdds_=None,
            k=None,
@@ -468,10 +406,10 @@ def filter(n, pdds, pdds_=None,
     
     if n >= comparison_set_size:
         if pdds_ is None:
-            pdd_cdm = pdd_pdist(pdds, verbose=verbose, **kwargs)
+            pdd_cdm = PDD_pdist(pdds, verbose=verbose, **kwargs)
             dm = squareform(pdd_cdm)
         else:
-            dm = pdd_cdist(pdds, pdds_, verbose=verbose, **kwargs)
+            dm = PDD_cdist(pdds, pdds_, verbose=verbose, **kwargs)
         
         inds = np.argsort(dm, axis=-1)
         dm = np.take_along_axis(dm, inds, axis=-1)
@@ -483,7 +421,7 @@ def filter(n, pdds, pdds_=None,
     # one set, pairwise
     if pdds_ is None:
         
-        amd_cdm = amd_pdist(amds, **kwargs)
+        amd_cdm = AMD_pdist(amds, **kwargs)
         # kinda annoying I use squareform here. The alternative was so much worse...
         amd_dm = squareform(amd_cdm)
         inds = []
@@ -499,7 +437,7 @@ def filter(n, pdds, pdds_=None,
     else:
         
         amds_ = np.array([np.average(pdd[:,1:], weights=pdd[:,0], axis=0) for pdd in pdds_])
-        amd_dm = amd_cdist(amds, amds_, **kwargs)
+        amd_dm = AMD_cdist(amds, amds_, **kwargs)
     
         inds = np.array([np.argpartition(row, n)[:n] for row in amd_dm])
         
@@ -547,7 +485,7 @@ def filter(n, pdds, pdds_=None,
     return dm, inds
 
 
-def amd_mst(amds,
+def AMD_mst(amds,
             k=None,
             metric='chebyshev',
             ord=None,
@@ -583,7 +521,7 @@ def amd_mst(amds,
     amds = np.asarray(amds)
     
     m = len(amds)
-    cdm = amd_pdist(amds, k=k, metric=metric, ord=ord, **kwargs)
+    cdm = AMD_pdist(amds, k=k, metric=metric, ord=ord, **kwargs)
     dm = squareform(cdm)
     lt_inds = np.tril_indices(m)
     dm[lt_inds] = 0
@@ -598,7 +536,7 @@ def amd_mst(amds,
         
     return edge_list
 
-def pdd_mst(pdds,
+def PDD_mst(pdds,
             amd_filter_cutoff=None,
             k=None,
             metric='chebyshev',
@@ -659,7 +597,7 @@ def pdd_mst(pdds,
     
     else:
         
-        cdm = pdd_pdist(pdds, **kwargs)
+        cdm = PDD_pdist(pdds, **kwargs)
         
         dm = squareform(cdm)
         lt_inds = np.tril_indices(m)
@@ -675,6 +613,29 @@ def pdd_mst(pdds,
         
     return edge_list
 
+def amd_cdist(*args, **kwargs):
+    warnings.warn("amd.amd_cdist() is deprecated; use amd.AMD_cdist() instead.", DeprecationWarning)
+    return AMD_cdist(*args, **kwargs)
+
+def amd_pdist(*args, **kwargs):
+    warnings.warn("amd.amd_pdist() is deprecated; use amd.AMD_pdist() instead.", DeprecationWarning)
+    return AMD_pdist(*args, **kwargs)
+
+def pdd_cdist(*args, **kwargs):
+    warnings.warn("amd.pdd_cdist() is deprecated; use amd.PDD_cdist() instead.", DeprecationWarning)
+    return PDD_cdist(*args, **kwargs)
+
+def pdd_pdist(*args, **kwargs):
+    warnings.warn("amd.pdd_pdist() is deprecated; use amd.PDD_pdist() instead.", DeprecationWarning)
+    return PDD_pdist(*args, **kwargs)
+
+def amd_mst(*args, **kwargs):
+    warnings.warn("amd.amd_mst() is deprecated; use amd.AMD_mst() instead.", DeprecationWarning)
+    return AMD_mst(*args, **kwargs)
+
+def pdd_mst(*args, **kwargs):
+    warnings.warn("amd.pdd_mst() is deprecated; use amd.PDD_mst() instead.", DeprecationWarning)
+    return PDD_mst(*args, **kwargs)
 
 def neighbours_from_distance_matrix(n, dm):
     

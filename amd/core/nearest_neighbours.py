@@ -5,8 +5,6 @@ from collections import defaultdict
 import numpy as np
 from scipy.spatial import cKDTree
 
-import numba
-
 def _dist(p):
     return sum(x**2 for x in p)
 
@@ -85,13 +83,14 @@ def generate_concentric_cloud(motif, cell):
         Yields arrays of points from the periodic set.
     """
     
-    lattice_generator = generate_integer_lattice(motif.shape[1])
+    int_lattice_generator = generate_integer_lattice(cell.shape[0])
+    
     while True:
-        lattice = next(lattice_generator) @ cell
-        yield np.concatenate([motif + translation for translation in lattice])
+        int_lattice = next(int_lattice_generator) @ cell
+        yield np.concatenate([motif + translation for translation in int_lattice])
 
 
-def nearest_neighbours(motif, cell, k):
+def nearest_neighbours(motif, cell, k, asymmetric_unit=None):
     """
     Given a periodic set represented by (motif, cell) and an integer k, find 
     the k nearest neighbours of the motif points in the periodic set.
@@ -101,12 +100,14 @@ def nearest_neighbours(motif, cell, k):
     Parameters
     ----------
     motif : ndarray
-        Cartesian representation of the motif, shape (no points, dims).
+        Cartesian coords of the full motif, shape (no points, dims).
     cell : ndarray
-        Cartesian representation of the unit cell, shape (dims, dims).
+        Cartesian coords of the unit cell, shape (dims, dims).
     k : int
         Number of nearest neighbours to find for each motif point.
-        
+    asymmetric_unit : ndarray, optional
+        Indices pointing to an asymmetric unit in motif.
+    
     Returns
     -------
     pdd : ndarray
@@ -123,8 +124,13 @@ def nearest_neighbours(motif, cell, k):
         the m-th motif point is cloud[inds[m][n]].
     """
     
-    cloud_generator = generate_concentric_cloud(motif, cell)
+    if asymmetric_unit is not None:
+        asym_unit = motif[asymmetric_unit]
+    else:
+        asym_unit = motif
     
+    cloud_generator = generate_concentric_cloud(motif, cell)
+
     n_points = 0
     cloud = []
     while n_points <= k:
@@ -135,14 +141,14 @@ def nearest_neighbours(motif, cell, k):
     cloud = np.concatenate(cloud)
 
     tree = cKDTree(cloud, compact_nodes=False, balanced_tree=False)
-    pdd_, inds = tree.query(motif, k=k+1, workers=-1)
+    pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
     pdd = np.zeros_like(pdd_)
 
     while not np.array_equal(pdd, pdd_):
         pdd = np.copy(pdd_)
         cloud = np.append(cloud, next(cloud_generator), axis=0)
         tree = cKDTree(cloud, compact_nodes=False, balanced_tree=False)
-        pdd_, inds = tree.query(motif, k=k+1, workers=-1)
+        pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
 
     return pdd_[:, 1:], cloud, inds[:, 1:]
 
