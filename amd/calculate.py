@@ -2,6 +2,7 @@ import warnings
 import numpy as np
 from .core.nearest_neighbours import nearest_neighbours
 from .core.PeriodicSet import PeriodicSet
+from collections import defaultdict
 
 def AMD(periodic_set, k):
     """
@@ -64,7 +65,7 @@ def PDD(periodic_set, k, order=True, collapse=True, collapse_tol=1e-4):
         Whether or not to collapse identical rows (within a tolerance). Default True.
     collapse_tol: float
         If two rows have all entries closer than collapse_tol, they get collapsed.
-        Default 0.0001.
+        Default 1e-4.
 
     Returns
     -------
@@ -98,18 +99,34 @@ def PDD(periodic_set, k, order=True, collapse=True, collapse_tol=1e-4):
     if collapse:
         
         diffs = np.abs(dists[:, None] - dists)
-        overlapping = np.triu(np.all(diffs <= collapse_tol, axis=-1), 1)
+        overlapping = np.all(diffs <= collapse_tol, axis=-1)
         
-        if overlapping.any():
-            keep = ~overlapping.any(0)
-            dists = dists[keep]
-            np.fill_diagonal(overlapping, True)
-            ind_groups, mul_inds = np.argwhere(overlapping[keep]).T
+        # I hate this solution, it's a hotfix.
+        # But I can't seem to make anything cleverer work.
+        
+        if np.triu(overlapping, 1).any():
+            groups = {}
+            group = 0
+            for i, row in enumerate(overlapping):
+                
+                if i not in groups:
+                    groups[i] = group
+                    group += 1
+                
+                for j in np.argwhere(row).T[0]:
+                    groups[j] = groups[i]
+
+            groupings = defaultdict(list)
+            for key, val in sorted(groups.items()):
+                groupings[val].append(key)
 
             weights_ = []
-            for i in range(len(dists)):
-                weights_.append(np.sum(weights[mul_inds[ind_groups == i]]))
+            keep = []
+            for inds in groupings.values():
+                keep.append(inds[0])
+                weights_.append(np.sum(weights[inds]))
             weights = np.array(weights_)
+            dists = dists[keep]
     
     pdd = np.hstack((weights[:, None], dists))
     
