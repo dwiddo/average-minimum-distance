@@ -17,16 +17,20 @@ warnings.formatwarning = _warning
 # self._map(func, iterable) with an iterable
 
 class CSDReader(_Reader):
-    """Given CSD refcodes, reads PeriodicSets with ccdc."""
+    """
+    Reads PeriodicSets from the CSD with ccdc.
+    If refcodes is a list of strings, 
     
-    def __init__(self, refcodes, families=False, **kwargs):
+    """
+    
+    def __init__(self, refcodes=None, families=False, **kwargs):
 
         if not _CCDC_ENABLED:
             raise ImportError(f"Failed to import ccdc. Either it is not installed or is not licensed.")
 
         super().__init__(**kwargs)
 
-        if refcodes is None: 
+        if refcodes is None or refcodes == 'CSD':
             families = False
         else:
             refcodes = list(refcodes)
@@ -45,20 +49,26 @@ class CSDReader(_Reader):
             seen_add = seen.add
             refcodes = [refcode for refcode in all_refcodes if not (refcode in seen or seen_add(refcode))]
 
+        self._entry_reader = EntryReader('CSD')
+    
         self._generator = self._map(self._Entry_to_PeriodicSet, self._init_ccdc_reader(refcodes))
     
     def _init_ccdc_reader(self, refcodes):
         """Generates ccdc Entries from CSD refcodes"""
-
-        reader = EntryReader('CSD')
         
         if refcodes is None:
-            for entry in reader:
+            for entry in self._entry_reader:
                 yield entry
         else: 
             for refcode in refcodes:
                 try:
-                    entry = reader.entry(refcode)
+                    entry = self._entry_reader.entry(refcode)
                     yield entry
                 except RuntimeError:
                     warnings.warn(f'Identifier {refcode} not found in database')
+
+    def entry(self, refcode):
+        entry = self._entry_reader.entry(refcode)
+        periodic_set = self._Entry_to_PeriodicSet(entry)
+        return periodic_set
+    

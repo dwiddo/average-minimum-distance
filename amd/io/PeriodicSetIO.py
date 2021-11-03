@@ -15,14 +15,20 @@ class SetWriter:
         
         self.file = h5py.File(filename, 'w', track_order=True)
         
-    def write(self, periodic_set):
+    def write(self, periodic_set, name=None):
+        
+        if not isinstance(periodic_set, PeriodicSet):
+            raise ValueError(f'Object type {periodic_set.__class__.__name__} cannot be written with SetWriter')
         
         # need a name to store or you can't access items by key
-        if periodic_set.name is None:
-            raise ImportError('Periodic set must have a name to save to .hdf5.')
+        if periodic_set.name is None and name is None:
+            raise ValueError('Periodic set must have a name to be written. Either set the name attribute of the PeriodicSet or pass a name to SetWriter.write()')
+        
+        if name is None:
+            name = periodic_set.name
         
         # this group is the PeriodicSet
-        group = self.file.create_group(periodic_set.name)
+        group = self.file.create_group(name)
         
         # datasets in the group for motif and cell
         group.create_dataset('motif', data=periodic_set.motif)
@@ -74,7 +80,8 @@ class SetWriter:
         self.file.close()
 
 class SetReader:
-    """Read PeriodicSets from a .hdf5 file written with SetWriter."""
+    """Read PeriodicSets from a .hdf5 file written with SetWriter.
+    Acts like a read-only dict that can be iterated over (preserves write order)."""
     
     def __init__(self, filename):
         
@@ -101,26 +108,39 @@ class SetReader:
 
         return periodic_set
     
+    def close(self):
+        self.file.close()
+    
+    def family(self, family):
+        for name in self.keys():
+            if name.startswith(family):
+                yield self._get_set(name)
+    
     def __getitem__(self, name):
         # index by name. Not found exc?
         return self._get_set(name)
-
+    
+    def __len__(self):
+        return len(self.keys())
+    
     def __iter__(self):
         # interface to loop over the SetReader
         # does not close the SetReader when done
-        for name in self.file['/'].keys():
+        for name in self.keys():
             yield self._get_set(name)
 
-    def close(self):
-        self.file.close()
+    def __contains__(self, item):
+        if item in self.keys():
+            return True
+        else:
+            return False
         
+    def keys(self):
+        return self.file['/'].keys()
+    
     def __enter__(self):
         return self
 
     # handle exceptions?
     def __exit__(self, exc_type, exc_value, tb):
         self.file.close()
-
-
-if __name__ == '__main__':
-    pass

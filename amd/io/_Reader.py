@@ -84,17 +84,19 @@ class _Reader:
                  remove_hydrogens=False,      
                  disorder='skip',
                  heaviest_component=False,
-                 dtype=np.float64, 
+                 dtype=np.float64,
                  types=False,
+                 molecular_centres=False,
                 ):
         
         # settings
-        self.remove_hydrogens = remove_hydrogens
         if disorder not in _Reader.disorder_options:
             raise ValueError(f'disorder parameter {disorder} must be one of {_Reader.disorder_options}')
+        self.remove_hydrogens = remove_hydrogens
         self.disorder = disorder
         self.dtype = dtype
         self.heaviest_component = heaviest_component
+        self.molecular_centres = molecular_centres
 
         if types:
             warnings.warn("types=True as an argument to a reader is deprecated. Atomic types are now always read regardless.", category=DeprecationWarning)
@@ -122,7 +124,7 @@ class _Reader:
         for site in asym_frac_motif:
             
             # equivalent sites
-            sites = np.array([np.mod(np.dot(rot, site) + trans, 1) 
+            sites = np.array([np.mod(np.dot(rot, site) + trans, 1)
                               for rot, trans in zip(rotations, translations)])
             
             # find overlapping sites (asym unit site invariant under symop) and keep unique sites
@@ -247,27 +249,43 @@ class _Reader:
             'wyckoff_multiplicities': multiplicities,
             'types': types
         }
-
-        periodic_set = PeriodicSet(motif, cell, **kwargs)
         
-        return periodic_set
+        return PeriodicSet(motif, cell, **kwargs)
     
     
     def _Entry_to_PeriodicSet(self, entry):
         """ccdc.entry.Entry --> PeriodicSet. Returns None for a "bad" set."""
         
         # basic checks first. Some exclude the structure from consideration
+        if not entry.has_3d_structure:
+            warnings.warn(f'Skipping {entry.identifier}: has no 3D structure')
+            return None
+        
+        # at least one entry raises RuntimeError when reading its crystal
         try:
             crystal = entry.crystal
         except RuntimeError as e:
             warnings.warn(f'Skipping {entry.identifier}: {e}')
             return None
+        
+        # first disorder check, if skipping. If occ == 1 for all atoms but the entry
+        # or crystal is listed as having disorder, skip (can't know where disorder is).
+        # If occ != 1 for any atoms, we wait to see if we remove them before skipping.
+        may_have_disorder = False
+        if self.disorder == 'skip':
+            for a in crystal.molecule.atoms:
+                occ = a.occupancy
+                if isinstance(occ, (int, float)) and occ < 1:
+                    may_have_disorder = True
+                    break
             
-        if not entry.has_3d_structure:
-            warnings.warn(f'Skipping {entry.identifier}: has no 3D structure')
-            return None
+            if not may_have_disorder:
+                if crystal.has_disorder or entry.has_disorder:
+                    warnings.warn(f'Skipping {entry.identifier} as structure is disordered')
+                    return None
         
         # heaviest component (removes all but the heaviest component of the asym unit)
+        # intended for removing solvents
         if self.heaviest_component:
             if len(crystal.molecule.components) > 1:
                 component_weights = []
@@ -287,10 +305,21 @@ class _Reader:
             mol.remove_atoms(a for a in mol.atoms if a.atomic_symbol in 'HD')
             crystal.molecule = mol
         
+        # at this point all atoms to be removed have been removed.
+        # If disorder == 'skip' and there were atom(s) with occ < 1 found 
+        # eariler, we check if all such atoms were removed. If not, skip.
+        if self.disorder == 'skip':
+            if may_have_disorder:
+                for a in crystal.molecule.atoms:
+                    occ = a.occupancy
+                    if isinstance(occ, (int, float)) and occ < 1:
+                        warnings.warn(f'Skipping {entry.identifier} as structure is disordered')
+                        return None
+        
         # check all atoms have coords
-        # if not crystal.molecule.all_atoms_have_sites:
-        #     warnings.warn(f'Skipping {entry.identifier} as some atoms do not have sites')
-        #     return None
+        if not crystal.molecule.all_atoms_have_sites:
+            warnings.warn(f'Skipping {entry.identifier} as some atoms do not have sites')
+            return None
         
         # above check doesn't catch everything?
         # mol = crystal.molecule
@@ -304,8 +333,10 @@ class _Reader:
                 # warnings.warn(f'Skipping {entry.identifier} as some atoms do not have sites')
                 # return None
         
+        
         # disorder. if 'all_sites', get indices of disordered atoms
         # otherwise, look for disorder and remove if 'ordered_sites' or skip if 'skip'
+        
         if self.disorder != 'all_sites':
             
             mol = crystal.molecule
@@ -338,6 +369,8 @@ class _Reader:
         for atom in mol.atoms:
             if atom.fractional_coordinates is None:
                 remove.append(atom)
+        if remove:
+            warnings.warn(f'{entry.identifier} has sites with no coordinates')
         mol.remove_atoms(remove)
         crystal.molecule = mol
         
@@ -399,3 +432,6 @@ class _Reader:
     
     def __iter__(self):
         yield from self._generator
+
+    def read_one(self):
+        return next(iter(self._generator()))

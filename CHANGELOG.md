@@ -2,7 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.3] - ?
+## [1.1.5] - 13/09/2021
+
+### Added
+
+- SetReader has additional convinient functions .keys() and .family().
+
+- CSDReader has function .entry(refcode) which returns a PeriodicSet given a ccdc refocde. This can be any refcode, not just those given when the reader is initialised.
+
+### Changed
+
+- EMD has updated internals which is 2-3x faster.
+
+### Removed
+
+## [1.1.4] - 13/09/2021
 
 ### Added
 
