@@ -39,9 +39,8 @@ class SetWriter:
             # a subgroup contains tags that are lists or ndarrays
             tags_group = group.create_group('tags')
             for tag in periodic_set.tags:
-                
                 data = periodic_set.tags[tag]
-                
+
                 # scalars (nums and strs) stored as attrs
                 if np.isscalar(data):
                     tags_group.attrs[tag] = data
@@ -103,8 +102,8 @@ class SetReader:
                 else:
                     periodic_set.tags[tag] = data
         
-        for attr in group.attrs:
-            periodic_set.tags[tag] = group.attrs[attr]
+        for attr in group['tags'].attrs:
+            periodic_set.tags[attr] = group['tags'].attrs[attr]
 
         return periodic_set
     
@@ -144,3 +143,57 @@ class SetReader:
     # handle exceptions?
     def __exit__(self, exc_type, exc_value, tb):
         self.file.close()
+    
+    def to_dict(self):
+        """
+        Return dict with scalar/string data in the tags/attrs of items in SetReader.
+        Dict is in format easily passable to pd.DataFrame, as in
+        >>> reader = amd.SetReader('periodic_sets.hdf5')
+        >>> data = reader.data_to_dict()
+        >>> df = pd.DataFrame(data, index=reader.keys(), columns=data.keys())
+        
+        Format of returned dict is:
+        {
+            'density': [1.231, 2.532, ...],
+            'family':  ['CBMZPN', 'SEMFAU', ...],
+            ...
+        }
+        where the inner lists have the same order as the items in the SetReader.
+        """
+        
+        names = list(self.keys())
+        data = []
+        columns = []
+        
+        for name in names:
+            
+            row = {}
+            group = self.file[name]
+            
+            for tag in group['tags']:
+                value = group['tags'][tag][:]
+                if np.isscalar(value):
+                    if tag not in columns:
+                        columns.append(tag)
+                    row[tag] = value
+            
+            for attr in group['tags'].attrs:
+                value = group['tags'].attrs[attr]
+                if np.isscalar(value):
+                    if attr not in columns:
+                        columns.append(attr)
+                    row[attr] = value
+            
+            data.append(row)
+            
+        data_ = {}
+        for col_name in columns:
+            column_data = []
+            for row in data:
+                if col_name in row:
+                    column_data.append(row[col_name])
+                else:
+                    column_data.append(None)
+            data_[col_name] = column_data
+
+        return data_

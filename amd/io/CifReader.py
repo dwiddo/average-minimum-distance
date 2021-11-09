@@ -8,8 +8,7 @@ except ImportError:
     _CCDC_ENABLED = False
 
 import warnings
-def _warning(message, category, filename, lineno, file=None, line=None):
-    return f'{filename}:{lineno}: {category.__name__}: {message}\n'
+from ..utils import _warning
 warnings.formatwarning = _warning
 
 class CifReader(_Reader):
@@ -24,8 +23,9 @@ class CifReader(_Reader):
         if reader not in CifReader.READERS:
             raise ValueError(f'Invalid reader {reader}. Reader must be one of {CifReader.READERS}')
 
-        if self.heaviest_component and reader != 'ccdc':
-            raise NotImplementedError(f'Parameter heaviest_component not implimented for {reader}, only ccdc.')
+        if reader != 'ccdc':
+            if self.heaviest_component:
+                raise NotImplementedError(f'Parameter heaviest_component not implimented for {reader}, only ccdc.')
         
         # function _map from parent _Reader sets up self._generator which yields PeriodicSet objects
 

@@ -1,3 +1,4 @@
+from numpy import isin
 from ._Reader import _Reader
 
 try:
@@ -8,8 +9,7 @@ except ImportError:
     _CCDC_ENABLED = False
 
 import warnings
-def _warning(message, category, filename, lineno, file=None, line=None):
-    return f'{filename}:{lineno}: {category.__name__}: {message}\n'
+from ..utils import _warning
 warnings.formatwarning = _warning
 
 # Subclasses of _Reader read from different sources (CSD, .cif).
@@ -20,7 +20,6 @@ class CSDReader(_Reader):
     """
     Reads PeriodicSets from the CSD with ccdc.
     If refcodes is a list of strings, 
-    
     """
     
     def __init__(self, refcodes=None, families=False, **kwargs):
@@ -30,10 +29,16 @@ class CSDReader(_Reader):
 
         super().__init__(**kwargs)
 
-        if refcodes is None or refcodes == 'CSD':
+        if isinstance(refcodes, str) and refcodes.lower() == 'csd':
+            refcodes = None
+            
+        if refcodes is None:
             families = False
         else:
-            refcodes = list(refcodes)
+            if isinstance(refcodes, str):
+                refcodes = [refcodes]
+            else:
+                refcodes = list(refcodes)
         
         if families:
             

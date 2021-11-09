@@ -1,4 +1,3 @@
-import warnings
 import numpy as np
 from .core.nearest_neighbours import nearest_neighbours
 from .core.PeriodicSet import PeriodicSet
@@ -40,12 +39,6 @@ def AMD(periodic_set, k):
     pdd, _, _ = nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
     
     return np.average(pdd, axis=0, weights=multiplicities)
-
-
-def amd(*args, **kwargs):
-    warnings.warn("amd.amd() and amd.pdd() are deprecated; use amd.AMD() and amd.PDD() instead.", DeprecationWarning)
-    return AMD(*args, **kwargs)
-
 
 def PDD(periodic_set, k, order=True, collapse=True, collapse_tol=1e-4):
     """
@@ -135,11 +128,6 @@ def PDD(periodic_set, k, order=True, collapse=True, collapse_tol=1e-4):
     
     return pdd
 
-
-def pdd(*args, **kwargs):
-    warnings.warn("amd.amd() and amd.pdd() are deprecated; use amd.AMD() and amd.PDD() instead.", DeprecationWarning)
-    return PDD(*args, **kwargs)
-
 def PDD_to_AMD(pdd):
     """Calculates AMD from a PDD."""
     return np.average(pdd[:, 1:], weights=pdd[:, 0], axis=0)
@@ -173,10 +161,6 @@ def PPC(periodic_set):
         V = (2 * np.math.factorial(t) * (4 * np.pi) ** t) / np.math.factorial(n)
     return (det / (m * V)) ** (1./n)
 
-def ppc(*args, **kwargs):
-    warnings.warn("amd.ppc() is deprecated; use amd.PPC() instead.", DeprecationWarning)
-    return PPC(*args, **kwargs)
-
 def AMD_estimate(periodic_set, k):
     """
     Calculates an estimate of AMD_k (or PDD) based on the 
@@ -191,11 +175,6 @@ def AMD_estimate(periodic_set, k):
     n = motif.shape[1]
     c = PPC(motif, cell)
     return np.array([(x ** (1. / n)) * c for x in range(1, k + 1)])
-
-def amd_estimate(*args, **kwargs):
-    warnings.warn("amd.amd_estimate() is deprecated; use amd.AMD_estimate() instead.", DeprecationWarning)
-    return AMD_estimate(*args, **kwargs)
-
 
 if __name__ == "__main__":
     pass

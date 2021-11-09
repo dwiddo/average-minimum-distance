@@ -15,45 +15,14 @@ invaild structures.)
 import itertools
 import numpy as np
 from ase.io.cif import NoStructureData
-from ase.spacegroup.spacegroup import parse_sitesym  # string symop -> rot, trans
+from ase.spacegroup.spacegroup import parse_sitesym # string symop -> rot, trans
 
 from ..core.PeriodicSet import PeriodicSet
+from ..utils import cellpar_to_cell
 
 import warnings
-def _warning(message, category, filename, lineno, file=None, line=None):
-    return f'{filename}:{lineno}: {category.__name__}: {message}\n'
+from ..utils import _warning
 warnings.formatwarning = _warning
-
-
-def cellpar_to_cell(a, b, c, alpha, beta, gamma):
-    """Simplified version of function from ase.geometry.
-    
-    Unit cell params a,b,c,α,β,γ --> cell as 3x3 ndarray.
-    """
-
-    # Handle orthorhombic cells separately to avoid rounding errors
-    eps = 2 * np.spacing(90.0, dtype=np.float64)  # around 1.4e-14
-    
-    cos_alpha = 0. if abs(abs(alpha) - 90.) < eps else np.cos(alpha * np.pi / 180.)
-    cos_beta  = 0. if abs(abs(beta)  - 90.) < eps else np.cos(beta * np.pi / 180.)
-    cos_gamma = 0. if abs(abs(gamma) - 90.) < eps else np.cos(gamma * np.pi / 180.)
-    
-    if abs(gamma - 90) < eps:
-        sin_gamma = 1.
-    elif abs(gamma + 90) < eps:
-        sin_gamma = -1.
-    else:
-        sin_gamma = np.sin(gamma * np.pi / 180.)
-
-    cy = (cos_alpha - cos_beta * cos_gamma) / sin_gamma
-    cz_sqr = 1. - cos_beta ** 2 - cy ** 2
-    assert cz_sqr >= 0
-    
-    return np.array([
-            [a,           0,           0], 
-            [b*cos_gamma, b*sin_gamma, 0],
-            [c*cos_beta,  c*cy,        c*np.sqrt(cz_sqr)]])
-
 
 class _Reader:
     """Base Reader class. Contains parsers for converting ase CifBlock 
@@ -84,22 +53,33 @@ class _Reader:
                  remove_hydrogens=False,      
                  disorder='skip',
                  heaviest_component=False,
+                 extract_data=None,
+                 include_if=None,
                  dtype=np.float64,
-                 types=False,
-                 molecular_centres=False,
                 ):
         
         # settings
         if disorder not in _Reader.disorder_options:
             raise ValueError(f'disorder parameter {disorder} must be one of {_Reader.disorder_options}')
+        
+        if extract_data is not None:
+            if not isinstance(extract_data, dict):
+                raise ValueError('extract_data must be a dict with callable values')
+            for key in extract_data:
+                if not callable(extract_data[key]):
+                    raise ValueError('extract_data must be a dict with callable values')
+                
+        if include_if is not None:
+            for f in extract_data:
+                if not callable(f):
+                    raise ValueError('include_if must be a list of callables')
+                
         self.remove_hydrogens = remove_hydrogens
         self.disorder = disorder
-        self.dtype = dtype
         self.heaviest_component = heaviest_component
-        self.molecular_centres = molecular_centres
-
-        if types:
-            warnings.warn("types=True as an argument to a reader is deprecated. Atomic types are now always read regardless.", category=DeprecationWarning)
+        self.extract_data = extract_data
+        self.include_if = include_if
+        self.dtype = dtype
 
     # basically the builtin map, but skips items if the function returned None
     def _map(self, func, iterable):
@@ -142,11 +122,14 @@ class _Reader:
         
         return frac_motif, asym_unit, multiplicities, inverses
    
-
-    ### Parsers. Intended to be passed to _read ###
+    ### Parsers. Intended to be passed to _map ###
     
     def _CIFBlock_to_PeriodicSet(self, block):
         """ase.io.cif.CIFBlock --> PeriodicSet. Returns None for a "bad" set."""
+        
+        if self.include_if is not None:
+            if not all(check(block) for check in self.include_if):
+                return None
         
         # could replace with get_cellpar + cell_to_cellpar. Is there any point?
         cell = block.get_cell().array
@@ -241,24 +224,32 @@ class _Reader:
         frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym)
         motif = frac_motif @ cell
         motif, cell = motif.astype(self.dtype), cell.astype(self.dtype)
-        types = [asym_symbols[i] for i in inverses]
-    
+
         kwargs = {
             'name': block.name, 
             'asymmetric_unit': asym_unit,
             'wyckoff_multiplicities': multiplicities,
-            'types': types
+            'types': [asym_symbols[i] for i in inverses]
         }
         
-        return PeriodicSet(motif, cell, **kwargs)
-    
+        if self.extract_data is not None:
+            for key in self.extract_data:
+                kwargs[key] = self.extract_data[key](block)
+                
+        periodic_set = PeriodicSet(motif, cell, **kwargs)
+        
+        return periodic_set
     
     def _Entry_to_PeriodicSet(self, entry):
         """ccdc.entry.Entry --> PeriodicSet. Returns None for a "bad" set."""
         
+        if self.include_if is not None:
+            if not all(check(entry) for check in self.include_if):
+                return None
+        
         # basic checks first. Some exclude the structure from consideration
         if not entry.has_3d_structure:
-            warnings.warn(f'Skipping {entry.identifier}: has no 3D structure')
+            warnings.warn(f'Skipping {entry.identifier} as entry has no 3D structure')
             return None
         
         # at least one entry raises RuntimeError when reading its crystal
@@ -362,7 +353,6 @@ class _Reader:
             for atom in crystal.asymmetric_unit_molecule.atoms:
                 val = True if (isinstance(atom.occupancy, (float, int)) and atom.occupancy < 1) else False
                 asym_is_disordered.append(val)
-            
         
         mol = crystal.molecule
         remove = []
@@ -374,6 +364,7 @@ class _Reader:
         mol.remove_atoms(remove)
         crystal.molecule = mol
         
+        cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
         
         # asymmetric unit fractional coordinates
         asym_frac_motif = np.array([[
@@ -412,7 +403,6 @@ class _Reader:
         
         frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym)
         
-        cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
         motif = frac_motif @ cell
         motif, cell = motif.astype(self.dtype), cell.astype(self.dtype)
         
@@ -422,6 +412,11 @@ class _Reader:
             'wyckoff_multiplicities': multiplicities,
             'types': [asym_symbols[i] for i in inverses]
         }
+
+        if self.extract_data is not None:
+            entry.crystal.molecule = crystal.molecule
+            for key in self.extract_data:
+                kwargs[key] = self.extract_data[key](entry)
 
         periodic_set = PeriodicSet(motif, cell, **kwargs)
         

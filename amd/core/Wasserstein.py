@@ -31,22 +31,6 @@ __maintainer__ = "Cameron Hargreaves"
 import numpy as np
 from numba import njit
 
-def wasserstein(source_demands, sink_demands, network_costs):
-
-    network_costs = network_costs.ravel()
-
-    return network_simplex(source_demands, sink_demands, network_costs)
-
-'''
-This is an implementation of the network simplex algorithm for computing the
-minimal flow atomic similarity distance between two compounds
-
-Copyright (C) 2019  Cameron Hargreaves
-ported from networkx to numba/numpy, Copyright (C) 2010 Loïc Séguin-C.
-All rights reserved.
-BSD license.
-'''
-
 @njit(cache=True)
 def reduced_cost(i, costs, potentials, tails, heads, flows):
     """Return the reduced cost of an edge i.
@@ -157,7 +141,6 @@ def trace_path(p, w, edge, parent):
 def find_cycle(i, p, q, size, edge, parent):
     """Return the nodes and edges on the cycle containing edge i == (p, q)
     when the latter is added to the spanning tree.
-
     The cycle is oriented in the direction from p to q.
     """
     w = find_apex(p, q, size, parent)
@@ -353,11 +336,9 @@ def network_simplex(source_demands, sink_demands, network_costs):
     '''
     This is a port of the network simplex algorithm implented by Loïc Séguin-C
     for the networkx package to allow acceleration via the numba package
-
     Copyright (C) 2010 Loïc Séguin-C. <loicseguin@gmail.com>
     All rights reserved.
     BSD license.
-
     References
     ----------
     .. [1] Z. Kiraly, P. Kovacs.
@@ -387,6 +368,7 @@ def network_simplex(source_demands, sink_demands, network_costs):
     # FP conversion error correction
     source_sum = np.sum(source_d_int)
     sink_sum = np.sum(sink_d_int)
+    
     if  source_sum < sink_sum:
         source_ind = np.argmax(source_d_int)
         source_d_int[source_ind] += sink_sum - source_sum
@@ -399,8 +381,8 @@ def network_simplex(source_demands, sink_demands, network_costs):
     demands = np.concatenate((-source_d_int, sink_d_int)).astype(np.int64)
 
     # Create fully connected arcs between all sources and sinks
-    conn_tails = np.array([i for i in range(sources.shape[0]) for _ in range(sinks.shape[0])], dtype=np.int64)
-    conn_heads = np.array([j + sources.shape[0] for _ in range(sources.shape[0]) for j in range(sinks.shape[0])], dtype=np.int64)
+    conn_tails = np.array([i for i, x in enumerate(sources) for j, y in enumerate(sinks)], dtype=np.int64)
+    conn_heads = np.array([j + sources.shape[0] for i, x in enumerate(sources) for j, y in enumerate(sinks)], dtype=np.int64)
 
     # Add arcs to and from the dummy node
     dummy_tails = []
@@ -419,9 +401,9 @@ def network_simplex(source_demands, sink_demands, network_costs):
     heads = np.concatenate((conn_heads, np.array(dummy_heads).T)).astype(np.int64)  # edge targets
 
     # Create costs and capacities for the arcs between nodes
+    network_costs = network_costs * fp_multiplier
     network_capac = np.array([np.array([source_demands[i], sink_demands[j]]).min() for i, x in np.ndenumerate(sources) for j, y in np.ndenumerate(sinks)], dtype=np.float64) * fp_multiplier
 
-    
     # TODO finish?
     # If there is only one node on either side we can return capacity and costs
     # if sources.shape[0] == 1 or sinks.shape[0] == 1:
@@ -431,9 +413,9 @@ def network_simplex(source_demands, sink_demands, network_costs):
     # inf_arr = (np.sum(network_capac.astype(np.int64)), np.sum(np.absolute(network_costs)), np.max(np.absolute(demands)))
 
     # Set a suitably high integer for infinity
-    faux_inf = 3 * np.max(np.array((np.sum(network_capac.astype(np.int64)), 
-                                    np.sum(np.absolute(network_costs)), 
-                                    np.max(np.absolute(demands))), dtype=np.int64))
+    faux_inf = 3 * np.max(np.array((np.sum(network_capac.astype(np.int64)), np.sum(np.absolute(network_costs)), np.max(np.absolute(demands))), dtype=np.int64))
+
+    # network_costs = network_costs * fp_multiplier
 
     # Add the costs and capacities to the dummy nodes
     costs = np.concatenate((network_costs, np.ones(nodes.shape[0]) * faux_inf)).astype(np.int64)
@@ -490,24 +472,17 @@ def network_simplex(source_demands, sink_demands, network_costs):
     edge_costs = costs[:e].astype(np.float64)
 
     # dot product is returning wrong values for some reason...
-    
     for arc_ind, flow in np.ndenumerate(final_flows):
         flow_cost += flow * edge_costs[arc_ind]
 
     final = flow_cost / fp_multiplier 
+    final = final.astype(np.float64)
     final = final / fp_multiplier 
 
     return final[0]
 
-if __name__ == '__main__':
+def wasserstein(source_demands, sink_demands, network_costs):
     
-    x = np.array([0.2, 0.4, 0.3, 0.1])
-    y = np.array([0.5, 0.25, 0.25])
-
-    dm = np.array([[ 200.,  800.,  800.],
-                    [ 200.,  500., 1100.],
-                    [ 200., 1100.,  500.],
-                    [1000., 1000., 1000.]])
-
-    distance = wasserstein(x, y, dm)
-    print(distance)
+    network_costs = network_costs.ravel()
+    
+    return network_simplex(source_demands, sink_demands, network_costs)
