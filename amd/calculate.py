@@ -1,25 +1,29 @@
+"""Functions to calculate AMDs and PDDs.
+"""
+
+from typing import Union, Tuple
 import numpy as np
-from .core.nearest_neighbours import nearest_neighbours
-from .core.PeriodicSet import PeriodicSet
+from ._nearest_neighbours import nearest_neighbours
+from .PeriodicSet import PeriodicSet
 from collections import defaultdict
 
-def AMD(periodic_set, k):
-    """
-    Computes an AMD vector up to k from a periodic set.
+PeriodicSet_ = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
+
+def AMD(periodic_set: PeriodicSet_, k: int) -> np.ndarray:
+    """Computes an AMD vector up to `k` from a periodic set.
     
     Parameters
     ----------
-    periodic_set : amd.PeriodicSet or tuple of ndarrays (motif, cell)
-        Representation of the periodic set, in Cartesian coordinates.
-        amd.CifReader yields PeriodicSets which can be given here. 
-        Otherwise pass a tuple of arrays (motif, cell) in Cartesian form. 
+    periodic_set : :class:`.PeriodicSet.PeriodicSet` or tuple of ndarrays
+        A periodic set represented by a :class:`.PeriodicSet.PeriodicSet` object or 
+        by a tuple (motif, cell) with coordinates in Cartesian form.
     k : int
-        A :math:`m_b` by k PDD matrix (with weights in the first column).
+        Length of AMD returned.
         
     Returns
     -------
     ndarray
-        AMD of periodic_set up to k. 
+        An ndarray of shape (k,), the AMD of ``periodic_set`` up to `k`.
     """
     
     asymmetric_unit, multiplicities = None, None
@@ -40,30 +44,29 @@ def AMD(periodic_set, k):
     
     return np.average(pdd, axis=0, weights=multiplicities)
 
-def PDD(periodic_set, k, order=True, collapse=True, collapse_tol=1e-4):
-    """
-    Computes a PDD up to k from a periodic set.
+def PDD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]], k: int, 
+        order: bool = True, collapse: bool =True, collapse_tol: float = 1e-4) -> np.ndarray:
+    """Computes a PDD up to k from a periodic set.
     
     Parameters
     ----------
-    periodic_set : amd.PeriodicSet or tuple of ndarrays (motif, cell)
-        Representation of the periodic set, in Cartesian coordinates.
-        amd.CifReader yields PeriodicSets which can be given here. 
-        Otherwise pass a tuple of arrays (motif, cell) in Cartesian form. 
+    periodic_set : :class:`.PeriodicSet.PeriodicSet` or tuple of ndarrays
+        A periodic set represented by a :class:`.PeriodicSet.PeriodicSet` object or 
+        by a tuple (motif, cell) with coordinates in Cartesian form.
     k : int
-        A :math:`m_b` by k PDD matrix (with weights in the first column).
+        Number of columns in the PDD, plus one for the first column of weights.
     order : bool, optional
         Whether or not to lexicographically order the rows. Default True.
     collapse: bool, optional
         Whether or not to collapse identical rows (within a tolerance). Default True.
     collapse_tol: float
         If two rows have all entries closer than collapse_tol, they get collapsed.
-        Default 1e-4.
+        Default is 1e-4.
 
     Returns
     -------
     ndarray
-        PDD of periodic_set up to k. 
+        An ndarray with k+1 columns, the PDD of ``periodic_set`` up to `k`. 
     """
     
     asymmetric_unit, multiplicities = None, None
@@ -128,23 +131,47 @@ def PDD(periodic_set, k, order=True, collapse=True, collapse_tol=1e-4):
     
     return pdd
 
-def PDD_to_AMD(pdd):
-    """Calculates AMD from a PDD."""
+def PDD_to_AMD(pdd: np.ndarray) -> np.ndarray:
+    """Calculates AMD from a PDD. Faster than computing both from scratch.
+    
+    Parameters
+    ----------
+    pdd : np.ndarray
+        The PDD of a periodic set. 
+
+    Returns
+    -------
+    ndarray
+        The AMD of the periodic set.
+    """
     return np.average(pdd[:, 1:], weights=pdd[:, 0], axis=0)
 
-def PPC(periodic_set):
+def PPC(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]) -> float:
+    r"""Calculate the point packing coefficient (PPC) of ``periodic_set``.
     
-    """
-    Calculate the point packing coefficient (ppc) of periodic_set.
-    The ppc is a constant of any periodic set determining the 
-    asymptotic behaviour of its AMD/PDD as k -> infinity. 
+    The PPC is a constant of any periodic set determining the 
+    asymptotic behaviour of its AMD or PDD as :math:`k \rightarrow \infty`. 
     
-    As k -> infinity, the ratio AMD_k / (n-th root of k) approaches
-    the ppc (as does any row of a PDD). 
+    As :math:`k \rightarrow \infty`, the ratio :math:`\text{AMD}_k / \sqrt[n]{k}`
+    approaches the PPC (as does any row of its PDD). 
     
-    For a unit cell U and m motif points in n dimensions,
-        ppc = nth_root(Vol[U] / (m * V_n))
-    where V_n is the volume of a unit sphere in n dimensions.
+    For a unit cell :math:`U` and :math:`m` motif points in :math:`n` dimensions,
+    
+    .. math::
+    
+        \text{PPC} = \sqrt[n]{\frac{\text{Vol}[U]}{m V_n}}
+        
+    where :math:`V_n` is the volume of a unit sphere in :math:`n` dimensions.
+    
+    Parameters
+    ----------
+    periodic_set : :class:`.PeriodicSet.PeriodicSet` or tuple of 
+        ndarrays (motif, cell) representing the periodic set in Cartesian form.
+
+    Returns
+    -------
+    float
+        The PPC of ``periodic_set``.
     """
     
     if isinstance(periodic_set, PeriodicSet):
@@ -161,12 +188,17 @@ def PPC(periodic_set):
         V = (2 * np.math.factorial(t) * (4 * np.pi) ** t) / np.math.factorial(n)
     return (det / (m * V)) ** (1./n)
 
-def AMD_estimate(periodic_set, k):
+def AMD_estimate(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]], k: int) -> np.ndarray:
+    r"""Calculates an estimate of AMD based on the PPC, using the fact that
+    
+    .. math::
+    
+        \lim_{k\rightarrow\infty}\frac{\text{AMD}_k}{\sqrt[n]{k}} = \sqrt[n]{\frac{\text{Vol}[U]}{m V_n}}
+    
+    where :math:`U` is the unit cell, :math:`m` is the number of motif points and
+    :math:`V_n` is the volume of a unit sphere in :math:`n`-dimensional space.
     """
-    Calculates an estimate of AMD_k (or PDD) based on the 
-    point packing coefficient (ppc), which determines the
-    asymptotic behaviour. 
-    """
+    
     if isinstance(periodic_set, PeriodicSet):
         motif, cell = periodic_set.motif, periodic_set.cell
     else:

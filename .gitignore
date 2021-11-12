@@ -1,5 +1,7 @@
 build/
 dist/
+tests/
+docs/
 *.egg-info/
 *.egg
 *.py[cod]
@@ -8,5 +10,4 @@ __pycache__/
 *.cfg
 *.toml
 *~
-test.py
 nns.py

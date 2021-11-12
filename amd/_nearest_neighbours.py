@@ -1,5 +1,6 @@
-# Contains core functions for AMD/PDD calculations.
+"""Implements core function nearest_neighbours used for AMD and PDD calculations."""
 
+from typing import Iterable, Optional
 from itertools import product, combinations
 from collections import defaultdict
 import numpy as np
@@ -8,9 +9,8 @@ from scipy.spatial import cKDTree
 def _dist(p):
     return sum(x**2 for x in p)
 
-def generate_integer_lattice(dims):
-    """
-    Generates batches of integer lattice points.
+def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
+    """Generates batches of integer lattice points.
     
     Each yield gives all points (that have not already been yielded) 
     inside a sphere centered at the origin with radius d. d starts at 0 
@@ -61,7 +61,7 @@ def generate_integer_lattice(dims):
         yield np.array(int_lattice)
         d += 1
 
-def generate_concentric_cloud(motif, cell):
+def generate_concentric_cloud(motif: np.ndarray, cell: np.ndarray) -> Iterable[np.ndarray]:
     """
     Generates batches of points from a periodic set given by (motif, cell)
     which are roughly successively further away from the origin.
@@ -90,7 +90,10 @@ def generate_concentric_cloud(motif, cell):
         yield np.concatenate([motif + translation for translation in int_lattice])
 
 
-def nearest_neighbours(motif, cell, k, asymmetric_unit=None):
+def nearest_neighbours(motif: np.ndarray, 
+                       cell: np.ndarray, 
+                       k: int, 
+                       asymmetric_unit: Optional[np.ndarray] = None):
     """
     Given a periodic set represented by (motif, cell) and an integer k, find 
     the k nearest neighbours of the motif points in the periodic set.

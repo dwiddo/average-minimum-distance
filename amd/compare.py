@@ -1,91 +1,77 @@
+"""Functions for comparing AMDs or PDDs, finding nearest neighbours 
+and minimum spanning trees.
+"""
+
+from typing import List, Tuple, Optional, Union
 import warnings
 import numpy as np
+import numpy.typing as npt
 from scipy.spatial.distance import cdist, pdist, squareform
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import minimum_spanning_tree
-from .core.Wasserstein import wasserstein
+from ._Wasserstein import network_simplex
 from .utils import ETA
 
-def linf(v, v_):
-    """l-infinity distance between vectors (AMDs)."""
-    return np.amax(np.abs(v-v_))
-
 def emd(pdd, pdd_, metric='chebyshev', **kwargs):
-    """
-    Earth mover's distance between two PDDs.
+    """Earth mover's distance between two PDDs.
     
     Parameters
     ----------
     pdd : ndarray
-        A :math:`m_a` by k PDD matrix (with weights in the first column).
-    pdd_ : ndarray
-        A :math:`m_b` by k PDD matrix (with weights in the first column).
+        A PDD given by :func:`.calculate.PDD`.
+    pdd\_ : ndarray
+        A PDD given by :func:`.calculate.PDD`.
     metric : str or callable, optional
         Usually rows are compared with the Chebyshev/l-infinity distance.
-        Can take any metric + kwargs accepted by scipy.spatial.distance.cdist.
+        Can take any metric + kwargs accepted by ``scipy.spatial.distance.cdist``.
         
     Returns
     -------
     float
         Earth mover's distance between PDDs, where rows of the PDDs are
-        compared with metric.
+        compared with ``metric``.
 
     Raises
     ------
     ValueError
         Thrown if reference and comparison do not have 
         the same number of columns.
-    
     """
     
     dm = cdist(pdd[:, 1:], pdd_[:, 1:], metric=metric, **kwargs)
     
-    return wasserstein(pdd[:, 0], pdd_[:, 0], dm)
+    return network_simplex(pdd[:, 0], pdd_[:, 0], dm)
 
-"""
-Main interface for comparisons. May change around in the future.
-
-Functions AMD_* are for AMD comparisons, PDD_* for PDD comparisons.
-Functions *_cdist are for comparing one set against another, *_pdist
-are for comparing everything in one set pairwise.
-The filter function takes PDDs but uses both AMDs and PDDs to find 
-nearest neighbours.
-*_mst is for creating minimum spanning trees. 
-"""
-
-
-def AMD_cdist(amds, amds_, 
-              k=None,
-              low_memory=False,
-              metric='chebyshev',
-              **kwargs):
-    
-    """
-    Compare two sets of AMDs with each other. Returns a distance matrix.
+def AMD_cdist(amds: Union[np.ndarray, List[np.ndarray]], 
+              amds_: Union[np.ndarray, List[np.ndarray]],
+              k: Optional[int] = None,
+              low_memory: bool = False,
+              metric: str = 'chebyshev',
+              **kwargs) -> np.ndarray:
+    """Compare two sets of AMDs with each other, returning a distance matrix.
     
     Parameters
     ----------
-    amds : ndarray or list of ndarrays
-        An :math:`m_a` by n array (of :math:`m_a` vectors/AMDs).
-    amds_ : ndarray or list of ndarrays
-        An :math:`m_b` by n array (of :math:`m_b` vectors/AMDs).
+    amds : array_like
+        An array/list of AMDs.
+    amds\_ : array_like
+        An array/list of AMDs.
     k : int, optional
-        If None, compare whole AMDs (largest k). Set k to an int to compare 
-        for a specific k (less than the maximum).
+        If :const:`None`, compare entire AMDs. Set ``k`` to an int to compare 
+        for a specific ``k`` (less than the maximum).
     low_memory : bool, optional
-        Optionally use a slightly slower but more memory efficient method for
+        Optionally use a slower but more memory efficient method for
         large collections of AMDs (Chebyshev/l-inf distance only).
     metric : str or callable, optional
         Usually AMDs are compared with the Chebyshev/l-infinity distance.
-        Can take any metric + kwargs accepted by scipy.spatial.distance.cdist.
+        Can take any metric + kwargs accepted by ``scipy.spatial.distance.cdist``.
         
     Returns
     -------
     ndarray
-        Returns a :math:`m_a` by :math:`m_b` distance matrix.
-        The :math:`ij` th entry is the distance between amds[i]
-        and amds_[j] given by the metric.
-
+        Returns a distance matrix shape ``(len(amds), len(amds_))``. 
+        The :math:`ij` th entry is the distance between ``amds[i]``
+        and ``amds[j]`` given by the ``metric``.
     """
     
     amds = np.asarray(amds)
@@ -108,35 +94,33 @@ def AMD_cdist(amds, amds_,
 
     return dm
 
-def AMD_pdist(amds,
-              k=None,
-              low_memory=False,
-              metric='chebyshev',
-              **kwargs):
-    
-    """
-    Do a pairwise comparison on one set of AMDs.
+def AMD_pdist(amds: Union[np.ndarray, List[np.ndarray]],
+              k: Optional[int] = None,
+              low_memory: bool = False,
+              metric: str = 'chebyshev',
+              **kwargs) -> np.ndarray:
+    """Compare a set of AMDs pairwise, returning a condensed distance matrix.
     
     Parameters
     ----------
-    amds : ndarray or list of ndarrays
-        An :math:`m_a` by n array (of :math:`m_a` vectors/AMDs).
+    amds : array_like
+        An array/list of AMDs.
     k : int, optional
-        If None, compare whole AMDs (largest k). Set k to an int to compare 
-        for a specific k (less than the maximum). 
+        If :const:`None`, compare whole AMDs (largest ``k``). Set ``k`` 
+        to an int to compare for a specific ``k`` (less than the maximum). 
     low_memory : bool, optional
         Optionally use a slightly slower but more memory efficient method for
         large collections of AMDs (Chebyshev/l-inf distance only).
     metric : str or callable, optional
         Usually AMDs are compared with the Chebyshev/l-infinity distance.
-        Can take any metric + kwargs accepted by scipy.spatial.distance.cdist.
+        Can take any metric + kwargs accepted by ``scipy.spatial.distance.cdist``.
         
     Returns
     -------
     ndarray
-        Returns a condensed distance matrix. Collapses a square 
-        distance matrix into a vector just keeping the upper traingle.
-        scipy's squareform will convert to a square distance matrix.
+        Returns a condensed distance matrix. Collapses a square distance 
+        matrix into a vector just keeping the upper half. Use
+        ``scipy.spatial.distance.squareform`` to convert to a square distance matrix.
     """
     
     amds = np.asarray(amds)
@@ -161,38 +145,34 @@ def AMD_pdist(amds,
     
     return cdm
 
-def PDD_cdist(pdds, pdds_, 
-              k=None,
-              metric='chebyshev',
-              verbose=False,
-              **kwargs):
-    
-    """
-    Compare two sets of PDDs with each other. Returns a distance matrix.
+def PDD_cdist(pdds: List[np.ndarray], pdds_: List[np.ndarray], 
+              k: Optional[int] = None,
+              metric: str = 'chebyshev',
+              verbose: bool = False,
+              **kwargs) -> np.ndarray:
+    """Compare two sets of PDDs with each other, returning a distance matrix.
     
     Parameters
     ----------
     pdds : list of ndarrays
-        A list of PDDs (ndarrays whose last/second dimension agree). If a 2D 
-        array, is interpreted as one PDD.
-    pdds_ : ndarray or list of ndarrays
-        A list of PDDs (ndarrays whose last/second dimension agree). If a 2D 
-        array, is interpreted as one PDD.
+        A list of PDDs.
+    pdds\_ : list of ndarrays
+        A list of PDDs. 
     k : int, optional
-        If None, compare whole PDDs (largest k). Set k to an int to compare 
-        for a specific k (less than the maximum). 
+        If :const:`None`, compare whole PDDs (largest ``k``). Set ``k`` to an int to 
+        compare for a specific ``k`` (less than the maximum). 
     metric : str or callable, optional
         Usually PDD rows are compared with the Chebyshev/l-infinity distance.
-        Can take any metric + kwargs accepted by scipy.spatial.distance.cdist.
+        Can take any metric + kwargs accepted by ``scipy.spatial.distance.cdist``.
     verbose : bool, optional
-        Optionally print progress as for large sets this can be long.
+        Optionally print an ETA to terminal as large collections can take some time.
         
     Returns
     -------
     ndarray
-        Returns a :math:`m_a` by :math:`m_b` distance matrix.
-        The :math:`ij` th entry is the distance between pdds[i]
-        and pdds_[j] given by earth mover's distance.
+        Returns a distance matrix shape ``(len(pdds), len(pdds_))``.
+        The :math:`ij` th entry is the distance between ``pdds[i]``
+        and ``pdds_[j]`` given by Earth mover's distance.
     """
     
     if isinstance(pdds, np.ndarray):
@@ -218,34 +198,32 @@ def PDD_cdist(pdds, pdds_,
 
     return dm
 
-def PDD_pdist(pdds,
-              k=None,
-              metric='chebyshev',
-              verbose=False,
-              **kwargs):
-    """
-    Do a pairwise comparison on one set of PDDs.
+def PDD_pdist(pdds: List[np.ndarray],
+              k: Optional[int] = None,
+              metric: str = 'chebyshev',
+              verbose: bool = False,
+              **kwargs) -> np.ndarray:
+    """Compare a set of PDDs pairwise, returning a condensed distance matrix.
     
     Parameters
     ----------
     pdds : list of ndarrays
-        A list of PDDs (ndarrays whose last/second dimension agree). If a 2D 
-        array, is interpreted as one PDD.
+        A list of PDDs.
     k : int, optional
-        If None, compare whole PDDs (largest k). Set k to an int to compare 
-        for a specific k (less than the maximum). 
+        If :const:`None`, compare whole PDDs (largest ``k``). Set ``k`` to an int 
+        to compare for a specific ``k`` (less than the maximum). 
     metric : str or callable, optional
         Usually PDD rows are compared with the Chebyshev/l-infinity distance.
-        Can take any metric + kwargs accepted by scipy.spatial.distance.cdist.
+        Can take any metric + kwargs accepted by ``scipy.spatial.distance.cdist``.
     verbose : bool, optional
-        Optionally print progress as for large sets this can be long.
+        Optionally print an ETA to terminal as large collections can take some time.
     
     Returns
     -------
     ndarray
         Returns a condensed distance matrix. Collapses a square 
-        distance matrix into a vector just keeping the upper traingle.
-        scipy's squareform will convert to a square distance matrix.
+        distance matrix into a vector just keeping the upper half. Use
+        ``scipy.spatial.distance.squareform`` to convert to a square distance matrix.
 
     """
     
@@ -271,54 +249,46 @@ def PDD_pdist(pdds,
     
     return cdm
 
-def filter(n, pdds, pdds_=None,
-           k=None,
-           low_memory=False,
-           metric='chebyshev',
-           verbose=False,
-           **kwargs):
-    
-    """
-    For each item in pdds, get the n nearest items in pdds_ by AMD,
+def filter(n: int, pdds: List[np.ndarray], pdds_: Optional[List[np.ndarray]] = None,
+           k: Optional[int] = None,
+           low_memory: bool = False,
+           metric: str = 'chebyshev',
+           verbose: bool = False,
+           **kwargs) -> Tuple[np.ndarray, np.ndarray]:
+    """For each item in ``pdds``, get the ``n`` nearest items in ``pdds_`` by AMD,
     then compare references to these nearest items with PDDs.
     Tries to comprimise between the speed of AMDs and the accuracy of PDDs.
     
-    If pdds_ is None, essentially sets pdds_ = pdds, i.e. do an
+    If ``pdds_`` is :const:`None`, this essentially sets ``pdds_ = pdds``, i.e. do an
     'AMD neighbourhood graph' for one set whose weights are PDD distances.
-    
-    If n is smaller than the comparison set (pdds_ if it is not None and pdds
-    if pdds_ is None), the AMD filter doesn't happen, this is essentially the
-    same behaviour as pdd_cdist or pdd_pdist.
     
     Parameters
     ----------
     n : int 
         Number of nearest neighbours to find.
-    pdds : ndarray or list of ndarrays
-        A list of PDDs (ndarrays whose last/second dimension agree). If a 2D 
-        array, is interpreted as one PDD.
-    pdds_ : ndarray or list of ndarrays
-        A list of PDDs (ndarrays whose last/second dimension agree). If a 2D 
-        array, is interpreted as one PDD.
+    pdds : ndarray/list of ndarrays
+        A list of PDDs.
+    pdds\_ : ndarray or list of ndarrays
+        A list of PDDs.
     k : int, optional
-        If None, compare whole PDDs (largest k). Set k to an int to compare 
-        for a specific k (less than the maximum). 
+        If :const:`None`, compare entire PDDs. Set ``k`` to an int 
+        to compare for a specific ``k`` (less than the maximum). 
     low_memory : bool, optional
         Optionally use a slightly slower but more memory efficient method for
         large collections of AMDs (Chebyshev/l-inf distance only).
     metric : str or callable, optional
         Usually PDD rows are compared with the Chebyshev/l-infinity distance.
-        Can take any metric + kwargs accepted by scipy.spatial.distance.cdist.
+        Can take any metric + kwargs accepted by ``scipy.spatial.distance.cdist``.
     verbose : bool, optional
-        Optionally print progress as for large sets this can be long.
+        Optionally print an ETA to terminal as large collections can take some time.
         
     Returns
     -------
     tuple of ndarrays (distance_matrix, indices)
-        For the i-th item in reference and some j < n, distance_matrix[i][j] is 
-        the distance from reference i to its j-th nearest neighbour in comparison
-        (after the AMD filter). indices[i][j] is the index of said neighbour in
-        comparison. 
+        For the :math:`i` th item in reference and some :math:`j<n`, ``distance_matrix[i][j]`` 
+        is the distance from reference i to its j-th nearest neighbour in comparison
+        (after the AMD filter). ``indices[i][j]`` is the index of said neighbour in
+        ``pdds_``. 
     """
     
     metric_kwargs = {'metric': metric, **kwargs}
@@ -378,32 +348,29 @@ def filter(n, pdds, pdds_=None,
     
     return dm, inds
 
-def AMD_mst(amds,
-            k=None,
-            low_memory=False,
-            metric='chebyshev',
-            **kwargs):
-    
-    """
-    Return list of edges in a minimum spanning tree based on AMDs.
+def AMD_mst(amds: npt.ArrayLike,
+            k: Optional[int] = None,
+            low_memory: bool = False,
+            metric: str = 'chebyshev',
+            **kwargs) -> List[Tuple[int, int, float]]:
+    """Return list of edges in a minimum spanning tree based on AMDs.
     
     Parameters
     ----------
     amds : ndarray or list of ndarrays
-        An :math:`m_a` by n array (of :math:`m_a` vectors/AMDs).
+        An array/list of AMDs.
     k : int, optional
-        If None, compare whole PDDs (largest k). Set k to an int to compare 
-        for a specific k (less than the maximum). 
+        If :const:`None`, compare whole PDDs (largest ``k``). Set ``k`` to an int 
+        to compare for a specific ``k`` (less than the maximum). 
     metric : str or callable, optional
         Usually PDD rows are compared with the Chebyshev/l-infinity distance.
-        Can take any metric + kwargs accepted by scipy.spatial.distance.cdist.
+        Can take any metric + kwargs accepted by ``scipy.spatial.distance.cdist``.
         
     Returns
     -------
     list of tuples
-        Each tuple (i,j,w) is an edge in the mimimum spanning tree, where
-        i and j are the indices of nodes and w is the weight on the edge
-        connecting them.
+        Each tuple ``(i,j,w)`` is an edge in the mimimum spanning tree, where
+        ``i`` and ``j`` are the indices of nodes and ``w`` is the AMD distance.
     """
     
     amds = np.asarray(amds)
@@ -424,39 +391,36 @@ def AMD_mst(amds,
         
     return edge_list
 
-def PDD_mst(pdds,
-            amd_filter_cutoff=None,
-            k=None,
-            metric='chebyshev',
-            verbose=False,
-            **kwargs):
-    """
-    Return list of edges in a minimum spanning tree based on PDDs.
+def PDD_mst(pdds: List[np.ndarray],
+            amd_filter_cutoff: Optional[int] = None,
+            k: Optional[int] = None,
+            metric: str = 'chebyshev',
+            verbose: bool = False,
+            **kwargs) -> List[Tuple[int, int, float]]:
+    """Return list of edges in a minimum spanning tree based on PDDs.
     
     Parameters
     ----------
     pdds : ndarray or list of ndarrays
-        A list of PDDs (ndarrays whose last/second dimension agree). If a 2D 
-        array, is interpreted as one PDD.
+        A list of PDDs.
     amd_filter_cutoff : int, optional
-        If specified, apply the AMD filter behaviour of the filter() function.
-        The int specified is the n passed to filter(), the number of neighbours
+        If specified, apply the AMD filter behaviour of :func:`filter`.
+        This is the ``n`` passed to :func:`filter`, the number of neighbours
         to connect in the neighbourhood graph.
     k : int, optional
-        If None, compare whole PDDs (largest k). Set k to an int to compare 
-        for a specific k (less than the maximum).
+        If :const:`None`, compare whole PDDs (largest ``k``). Set ``k`` to an int 
+        to compare for a specific ``k`` (less than the maximum). 
     metric : str or callable, optional
         Usually PDD rows are compared with the Chebyshev/l-infinity distance.
-        Can take any metric + kwargs accepted by scipy.spatial.distance.cdist.
+        Can take any metric + kwargs accepted by ``scipy.spatial.distance.cdist``.
     verbose : bool, optional
-        Optionally print progress as for large sets this can be long.
+        Optionally print an ETA to terminal as large collections can take some time.
     
     Returns
     -------
     list of tuples
-        Each tuple (i,j,w) is an edge in the mimimum spanning tree, where
-        i and j are the indices of nodes and w is the weight on the edge
-        connecting them.
+        Each tuple ``(i,j,w)`` is an edge in the mimimum spanning tree, where
+        ``i`` and ``j`` are the indices of nodes and ``w`` is the PDD distance.
     """
     
     if isinstance(pdds, np.ndarray):
@@ -490,7 +454,24 @@ def PDD_mst(pdds,
         
     return edge_list
 
-def neighbours_from_distance_matrix(n, dm):
+def neighbours_from_distance_matrix(n: int, dm: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+
+    """Given a distance matrix, find the ``n`` nearest neighbours of each item.
+    
+    Parameters
+    ----------
+    n : int
+        Number of nearest neighbours to find for each item.
+    dm : ndarray
+        2D distance matrix or 1D condensed distance matrix.
+   
+    Returns
+    -------
+    tuple of ndarrays (nn_dm, inds)
+        For item ``i``, ``nn_dm[i][j]`` is the distance from item ``i`` to its ``j+1`` st 
+        nearest neighbour, and ``inds[i][j]`` is the index of this neighbour (``j+1`` since
+        index 0 is the first nearest neighbour).
+    """
     
     # 2D distance matrix
     if len(dm.shape) == 2:

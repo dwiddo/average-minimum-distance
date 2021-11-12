@@ -1,9 +1,17 @@
+"""General utility functions and classes."""
+
+import inspect
 import numpy as np
 import time
 from datetime import timedelta
 
-def _warning(message, category, filename, lineno, file=None, line=None):
-    return f'{filename}:{lineno}: {category.__name__}: {message}\n'
+def _extend_signature(base):
+    def decorator(func):
+        func_params = list(inspect.signature(func).parameters.values())[:-1]
+        base_params = list(inspect.signature(base).parameters.values())[1:]
+        func.__signature__ = inspect.Signature(func_params + base_params)
+        return func
+    return decorator
 
 def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     """Simplified version of function from ase.geometry.
@@ -33,8 +41,8 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
                      [c*cos_beta,  c*cy,        c*np.sqrt(cz_sqr)]])
 
 class ETA:
-    """Pass total amount to do on construction,
-    then call .update() on every loop."""
+    """Pass total amount to do on construction, then call .update() on every 
+    loop. ETA will estimate an ETA and print it to the terminal."""
     
     _moving_average_factor = 0.3    # epochtime_{n+1} = factor * epochtime + (1-factor) * epochtime_{n}
     
@@ -62,12 +70,20 @@ class ETA:
         self.tic = toc
         return f'{percent}%, ETA {eta}' + ' ' * 30
     
+    def _finished(self):
+        total = time.time() - self.start_time
+        msg = f'Total time: {round(total,2)}s, ' \
+              f'n passes: {self.counter} ' \
+              f'({round(self.to_do/total,2)} passes/second)'
+        return msg
+    
     def update(self):
+        """Call when one item is finished."""
         
         self.counter += 1
         
         if self.counter == self.to_do:
-            msg = self.finished()
+            msg = self._finished()
             print(msg, end='\r\n')
             self.done = True
             return
@@ -78,12 +94,3 @@ class ETA:
         if not self.counter % self.update_rate:
             msg = self._end_epoch()
             print(msg, end='\r')
-                
-
-    def finished(self):
-        total = time.time() - self.start_time
-        msg = f'Total time: {round(total,2)}s, ' \
-              f'n passes: {self.counter} ' \
-              f'({round(self.to_do/total,2)} passes/second)'
-        return msg
-    

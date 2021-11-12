@@ -1,32 +1,8 @@
-'''
-The Element Movers Distance is an application of the Wasserstein metric between
-two compositional vectors
+"""An implementation of the Wasserstein metric between two compositional vectors.
 
-Copyright (C) 2020 Cameron Hargreaves
-This file is part of The Element Movers Distance
-<https://github.com/lrcfmd/ElMD>
-
-The Element Movers Distance is free software: you can redistribute it and/or 
-modify it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-The Element Movers Distance is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with dogtag.  If not, see <http://www.gnu.org/licenses/>.
-
-__author__ = "Cameron Hargreaves"
-__copyright__ = "2019, Cameron Hargreaves"
-__credits__ = ["https://github.com/Zapaan", "Loïc Séguin-C. <loicseguin@gmail.com>", "https://github.com/Bowserinator/"]
-__license__ = "GPL"
-__version__ = "0.4.11"
-__maintainer__ = "Cameron Hargreaves"
-
-'''
+Copyright (C) 2020 Cameron Hargreaves. This file is part of the Element Movers 
+Distance project https://github.com/lrcfmd/ElMD.
+"""
 
 import numpy as np
 from numba import njit
@@ -333,10 +309,10 @@ def update_potentials(i, p, q, heads, potentials, costs, last, next):
 
 @njit(cache=True)
 def network_simplex(source_demands, sink_demands, network_costs):
-    '''
+    """
     This is a port of the network simplex algorithm implented by Loïc Séguin-C
-    for the networkx package to allow acceleration via the numba package
-    Copyright (C) 2010 Loïc Séguin-C. <loicseguin@gmail.com>
+    for the networkx package to allow acceleration via the numba package.
+    Copyright (C) 2010 Loïc Séguin-C. loicseguin@gmail.com
     All rights reserved.
     BSD license.
     References
@@ -348,7 +324,10 @@ def network_simplex(source_demands, sink_demands, network_costs):
            Enhancement of spanning tree labeling procedures for network
            optimization.
            INFOR 17(1):16--34. 1979.
-    '''
+    """
+    
+    network_costs = network_costs.ravel()
+    
     # Constant used throughout for conversions from floating point to integer
     fp_multiplier = np.array([1000000], dtype=np.int64)
 
@@ -480,9 +459,3 @@ def network_simplex(source_demands, sink_demands, network_costs):
     final = final / fp_multiplier 
 
     return final[0]
-
-def wasserstein(source_demands, sink_demands, network_costs):
-    
-    network_costs = network_costs.ravel()
-    
-    return network_simplex(source_demands, sink_demands, network_costs)
