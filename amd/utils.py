@@ -5,6 +5,53 @@ import numpy as np
 import time
 from datetime import timedelta
 
+def extract_tags(periodic_sets) -> dict:
+    """Return ``dict`` with scalar data in the tags of PeriodicSets in the passed list.
+    
+    Dict is in format easily passable to ``pandas.DataFrame``, as in::
+    
+        periodic_sets = list(amd.SetReader('periodic_sets.hdf5'))
+        names = [s.name for s in periodic_sets]
+        data = amd.utils.extract_tags(periodic_sets)
+        df = pd.DataFrame(data, index=names, columns=data.keys())
+    
+    Format of returned dict is for example:: 
+    
+        {
+            'density': [1.231, 2.532, ...],
+            'family':  ['CBMZPN', 'SEMFAU', ...], 
+            ...
+        }
+        
+    where the inner lists have the same order as the items in ``periodic_sets``.
+    """
+    
+    data = []
+    columns = []
+    
+    for p_set in periodic_sets:
+        
+        row = {}
+        for tag in p_set.tags:
+            value = p_set.tags[tag]
+            if np.isscalar(value):
+                if tag not in columns:
+                    columns.append(tag)
+                row[tag] = value
+        data.append(row)
+        
+    data_ = {}
+    for col_name in columns:
+        column_data = []
+        for row in data:
+            if col_name in row:
+                column_data.append(row[col_name])
+            else:
+                column_data.append(None)
+        data_[col_name] = column_data
+
+    return data_
+
 def _extend_signature(base):
     def decorator(func):
         func_params = list(inspect.signature(func).parameters.values())[:-1]
@@ -46,17 +93,17 @@ class ETA:
     
     _moving_average_factor = 0.3    # epochtime_{n+1} = factor * epochtime + (1-factor) * epochtime_{n}
     
-    def __init__(self, to_do, update_rate=100):
+    def __init__(self, to_do, update_rate=1000):
         self.to_do = to_do
         self.update_rate = update_rate
         self.counter = 0
-        self.start_time = time.time()
+        self.start_time = time.perf_counter()
         self.tic = self.start_time
         self.time_per_epoch = None
         self.done = False
     
     def _end_epoch(self):
-        toc = time.time()
+        toc = time.perf_counter()
         epoch_time = toc - self.tic
         if self.time_per_epoch is None:
             self.time_per_epoch = epoch_time
@@ -71,7 +118,7 @@ class ETA:
         return f'{percent}%, ETA {eta}' + ' ' * 30
     
     def _finished(self):
-        total = time.time() - self.start_time
+        total = time.perf_counter() - self.start_time
         msg = f'Total time: {round(total,2)}s, ' \
               f'n passes: {self.counter} ' \
               f'({round(self.to_do/total,2)} passes/second)'

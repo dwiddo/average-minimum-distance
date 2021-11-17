@@ -9,11 +9,11 @@ import numpy.typing as npt
 from scipy.spatial.distance import cdist, pdist, squareform
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import minimum_spanning_tree
-from ._Wasserstein import network_simplex
+from ._network_simplex import network_simplex
 from .utils import ETA
 
 def emd(pdd, pdd_, metric='chebyshev', **kwargs):
-    """Earth mover's distance between two PDDs.
+    r"""Earth mover's distance between two PDDs.
     
     Parameters
     ----------
@@ -45,10 +45,10 @@ def emd(pdd, pdd_, metric='chebyshev', **kwargs):
 def AMD_cdist(amds: Union[np.ndarray, List[np.ndarray]], 
               amds_: Union[np.ndarray, List[np.ndarray]],
               k: Optional[int] = None,
-              low_memory: bool = False,
               metric: str = 'chebyshev',
+              low_memory: bool = False,
               **kwargs) -> np.ndarray:
-    """Compare two sets of AMDs with each other, returning a distance matrix.
+    r"""Compare two sets of AMDs with each other, returning a distance matrix.
     
     Parameters
     ----------
@@ -150,7 +150,7 @@ def PDD_cdist(pdds: List[np.ndarray], pdds_: List[np.ndarray],
               metric: str = 'chebyshev',
               verbose: bool = False,
               **kwargs) -> np.ndarray:
-    """Compare two sets of PDDs with each other, returning a distance matrix.
+    r"""Compare two sets of PDDs with each other, returning a distance matrix.
     
     Parameters
     ----------
@@ -255,7 +255,7 @@ def filter(n: int, pdds: List[np.ndarray], pdds_: Optional[List[np.ndarray]] = N
            metric: str = 'chebyshev',
            verbose: bool = False,
            **kwargs) -> Tuple[np.ndarray, np.ndarray]:
-    """For each item in ``pdds``, get the ``n`` nearest items in ``pdds_`` by AMD,
+    r"""For each item in ``pdds``, get the ``n`` nearest items in ``pdds_`` by AMD,
     then compare references to these nearest items with PDDs.
     Tries to comprimise between the speed of AMDs and the accuracy of PDDs.
     
@@ -266,9 +266,9 @@ def filter(n: int, pdds: List[np.ndarray], pdds_: Optional[List[np.ndarray]] = N
     ----------
     n : int 
         Number of nearest neighbours to find.
-    pdds : ndarray/list of ndarrays
+    pdds : list of ndarrays
         A list of PDDs.
-    pdds\_ : ndarray or list of ndarrays
+    pdds\_ : list of ndarrays, optional
         A list of PDDs.
     k : int, optional
         If :const:`None`, compare entire PDDs. Set ``k`` to an int 
@@ -336,9 +336,11 @@ def filter(n: int, pdds: List[np.ndarray], pdds_: Optional[List[np.ndarray]] = N
     
     if verbose: eta = ETA(inds.shape[0] * inds.shape[1])
     
+    t = None if k is None else k + 1
+    
     for i, row in enumerate(inds):
         for i_, j in enumerate(row):
-            dm[i, i_] = emd(pdds[i][:,:k+1], pdds_[j][:,:k+1], **metric_kwargs)
+            dm[i, i_] = emd(pdds[i][:,:t], pdds_[j][:,:t], **metric_kwargs)
             
             if verbose: eta.update()
 
@@ -401,7 +403,7 @@ def PDD_mst(pdds: List[np.ndarray],
     
     Parameters
     ----------
-    pdds : ndarray or list of ndarrays
+    pdds : list of ndarrays
         A list of PDDs.
     amd_filter_cutoff : int, optional
         If specified, apply the AMD filter behaviour of :func:`filter`.

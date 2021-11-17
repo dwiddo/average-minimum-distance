@@ -7,7 +7,7 @@ from .utils import cellpar_to_cell
 
 def density(entry):
     """Calculated density of the crystal."""
-    return entry.calculated_density
+    return entry.crystal.calculated_density
 
 def chemical_name(entry):
     """The chemical name of the entry."""
@@ -24,7 +24,7 @@ def refcode_family(entry):
 def formula(entry):
     """The published chemical formula in an entry. 
     If no published chemical formula is available it will be calculated from the molecule."""
-    return entry.formula
+    return entry.crystal.formula
 
 def is_organic(entry):
     """Whether the structure is organic."""

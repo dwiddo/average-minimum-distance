@@ -1,11 +1,164 @@
 """An implementation of the Wasserstein metric between two compositional vectors.
 
-Copyright (C) 2020 Cameron Hargreaves. This file is part of the Element Movers 
+Copyright (C) 2020 Cameron Hargreaves. This code is part of the Element Movers 
 Distance project https://github.com/lrcfmd/ElMD.
 """
 
 import numpy as np
 from numba import njit
+
+@njit(cache=True)
+def network_simplex(source_demands, sink_demands, network_costs):
+    """
+    This is a port of the network simplex algorithm implented by Loïc Séguin-C
+    for the networkx package to allow acceleration via the numba package.
+    Copyright (C) 2010 Loïc Séguin-C. loicseguin@gmail.com
+    All rights reserved.
+    BSD license.
+    References
+    ----------
+    .. [1] Z. Kiraly, P. Kovacs.
+           Efficient implementation of minimum-cost flow algorithms.
+           Acta Universitatis Sapientiae, Informatica 4(1):67--118. 2012.
+    .. [2] R. Barr, F. Glover, D. Klingman.
+           Enhancement of spanning tree labeling procedures for network
+           optimization.
+           INFOR 17(1):16--34. 1979.
+    """
+    
+    network_costs = network_costs.ravel()
+    
+    # Constant used throughout for conversions from floating point to integer
+    fp_multiplier = np.array([1000000], dtype=np.int64)
+
+    # Using numerical ordering is nice for indexing
+    sources = np.arange(source_demands.shape[0]).astype(np.int64)
+    sinks = np.arange(sink_demands.shape[0]).astype(np.int64) + source_demands.shape[0]
+
+    # Add one additional node for a dummy source and sink
+    nodes = np.arange(source_demands.shape[0] + sink_demands.shape[0]).astype(np.int64)
+
+    # Multiply by a large number and cast to int to remove floating points
+    source_d_fp = source_demands * fp_multiplier.astype(np.int64)
+    source_d_int = source_d_fp.astype(np.int64)
+    sink_d_fp = sink_demands * fp_multiplier.astype(np.int64)
+    sink_d_int = sink_d_fp.astype(np.int64)
+
+    # FP conversion error correction
+    source_sum = np.sum(source_d_int)
+    sink_sum = np.sum(sink_d_int)
+    
+    if  source_sum < sink_sum:
+        source_ind = np.argmax(source_d_int)
+        source_d_int[source_ind] += sink_sum - source_sum
+
+    elif sink_sum < source_sum:
+        sink_ind = np.argmax(sink_d_int)
+        sink_d_int[sink_ind] += source_sum - sink_sum
+
+    # Create demands array
+    demands = np.concatenate((-source_d_int, sink_d_int)).astype(np.int64)
+
+    # Create fully connected arcs between all sources and sinks
+    conn_tails = np.array([i for i, x in enumerate(sources) for j, y in enumerate(sinks)], dtype=np.int64)
+    conn_heads = np.array([j + sources.shape[0] for i, x in enumerate(sources) for j, y in enumerate(sinks)], dtype=np.int64)
+
+    # Add arcs to and from the dummy node
+    dummy_tails = []
+    dummy_heads = []
+
+    for node, demand in np.ndenumerate(demands):
+        if demand > 0:
+            dummy_tails.append(node[0])
+            dummy_heads.append(-1)
+        else:
+            dummy_tails.append(-1)
+            dummy_heads.append(node[0])
+
+    # Concatenate these all together
+    tails = np.concatenate((conn_tails, np.array(dummy_heads).T)).astype(np.int64)
+    heads = np.concatenate((conn_heads, np.array(dummy_heads).T)).astype(np.int64)  # edge targets
+
+    # Create costs and capacities for the arcs between nodes
+    network_costs = network_costs * fp_multiplier
+    network_capac = np.array([np.array([source_demands[i], sink_demands[j]]).min() for i, x in np.ndenumerate(sources) for j, y in np.ndenumerate(sinks)], dtype=np.float64) * fp_multiplier
+
+    # TODO finish?
+    # If there is only one node on either side we can return capacity and costs
+    # if sources.shape[0] == 1 or sinks.shape[0] == 1:
+    #     tot_costs = np.array([cost * network_capac[i_ret] for i_ret, cost in np.ndenumerate(network_costs)], dtype=np.float64)
+    #     return np.float64(np.sum(tot_costs))
+
+    # inf_arr = (np.sum(network_capac.astype(np.int64)), np.sum(np.absolute(network_costs)), np.max(np.absolute(demands)))
+
+    # Set a suitably high integer for infinity
+    faux_inf = 3 * np.max(np.array((np.sum(network_capac.astype(np.int64)), np.sum(np.absolute(network_costs)), np.max(np.absolute(demands))), dtype=np.int64))
+
+    # network_costs = network_costs * fp_multiplier
+
+    # Add the costs and capacities to the dummy nodes
+    costs = np.concatenate((network_costs, np.ones(nodes.shape[0]) * faux_inf)).astype(np.int64)
+    capac = np.concatenate((network_capac, np.ones(nodes.shape[0]) * fp_multiplier)).astype(np.int64)
+
+    # Construct the initial spanning tree.
+    e = conn_tails.shape[0]
+    n = nodes.shape[0]
+
+    # Initialise zero flow in the connected arcs, and full flow to the dummy
+    flows = np.concatenate((np.zeros(e), np.array([abs(d) for d in demands]))).astype(np.int64)
+
+    # General arrays for the spanning tree
+    potentials = np.array([faux_inf if d <= 0 else -faux_inf for d in demands]).T
+    parent = np.concatenate((np.ones(n) * -1, np.array([-2]))).astype(np.int64)
+    edge = np.arange(e, e+n).astype(np.int64)
+    size = np.concatenate((np.ones(n), np.array([n + 1]))).astype(np.int64)
+    next = np.concatenate((np.arange(1, n), np.array([-1, 0]))).astype(np.int64)
+    prev = np.arange(-1, n)          # previous nodes in depth-first thread
+    last = np.concatenate((np.arange(n), np.array([n - 1]))).astype(np.int64)     # last descendants in depth-first thread
+
+    ###########################################################################
+    # Main Pivot loop
+    ###########################################################################
+
+    f = 0
+
+    while True:
+        i, p, q, f = find_entering_edges(e, f, tails, heads, costs, potentials, flows)
+        if p == -1: # If no entering edges then the optimal score is found
+            break
+
+        cycle_nodes, cycle_edges = find_cycle(i, p, q, size, edge, parent)
+        j, s, t = find_leaving_edge(cycle_nodes, cycle_edges, capac, flows, tails, heads)
+        augment_flow(cycle_nodes, cycle_edges, residual_capacity(j, s, capac, flows, tails), tails, flows)
+
+        if i != j:  # Do nothing more if the entering edge is the same as the
+                    # the leaving edge.
+            if parent[t] != s:
+                # Ensure that s is the parent of t.
+                s, t = t, s
+
+            if np.where(cycle_edges == i)[0][0] > np.where(cycle_edges == j)[0][0]:
+                # Ensure that q is in the subtree rooted at t.
+                p, q = q, p
+
+            remove_edge(s, t, size, prev, last, next, parent, edge)
+            make_root(q, parent, size, last, prev, next, edge)
+            add_edge(i, p, q, next, prev, last, size, parent, edge)
+            update_potentials(i, p, q, heads, potentials, costs, last, next)
+
+    flow_cost = 0
+    final_flows = flows[:e].astype(np.float64)
+    edge_costs = costs[:e].astype(np.float64)
+
+    # dot product is returning wrong values for some reason...
+    for arc_ind, flow in np.ndenumerate(final_flows):
+        flow_cost += flow * edge_costs[arc_ind]
+
+    final = flow_cost / fp_multiplier 
+    final = final.astype(np.float64)
+    final = final / fp_multiplier 
+
+    return final[0]
 
 @njit(cache=True)
 def reduced_cost(i, costs, potentials, tails, heads, flows):
@@ -306,156 +459,3 @@ def update_potentials(i, p, q, heads, potentials, costs, last, next):
     tree = trace_subtree(q, last, next)
     for q in tree:
         potentials[q] += d
-
-@njit(cache=True)
-def network_simplex(source_demands, sink_demands, network_costs):
-    """
-    This is a port of the network simplex algorithm implented by Loïc Séguin-C
-    for the networkx package to allow acceleration via the numba package.
-    Copyright (C) 2010 Loïc Séguin-C. loicseguin@gmail.com
-    All rights reserved.
-    BSD license.
-    References
-    ----------
-    .. [1] Z. Kiraly, P. Kovacs.
-           Efficient implementation of minimum-cost flow algorithms.
-           Acta Universitatis Sapientiae, Informatica 4(1):67--118. 2012.
-    .. [2] R. Barr, F. Glover, D. Klingman.
-           Enhancement of spanning tree labeling procedures for network
-           optimization.
-           INFOR 17(1):16--34. 1979.
-    """
-    
-    network_costs = network_costs.ravel()
-    
-    # Constant used throughout for conversions from floating point to integer
-    fp_multiplier = np.array([1000000], dtype=np.int64)
-
-    # Using numerical ordering is nice for indexing
-    sources = np.arange(source_demands.shape[0]).astype(np.int64)
-    sinks = np.arange(sink_demands.shape[0]).astype(np.int64) + source_demands.shape[0]
-
-    # Add one additional node for a dummy source and sink
-    nodes = np.arange(source_demands.shape[0] + sink_demands.shape[0]).astype(np.int64)
-
-    # Multiply by a large number and cast to int to remove floating points
-    source_d_fp = source_demands * fp_multiplier.astype(np.int64)
-    source_d_int = source_d_fp.astype(np.int64)
-    sink_d_fp = sink_demands * fp_multiplier.astype(np.int64)
-    sink_d_int = sink_d_fp.astype(np.int64)
-
-    # FP conversion error correction
-    source_sum = np.sum(source_d_int)
-    sink_sum = np.sum(sink_d_int)
-    
-    if  source_sum < sink_sum:
-        source_ind = np.argmax(source_d_int)
-        source_d_int[source_ind] += sink_sum - source_sum
-
-    elif sink_sum < source_sum:
-        sink_ind = np.argmax(sink_d_int)
-        sink_d_int[sink_ind] += source_sum - sink_sum
-
-    # Create demands array
-    demands = np.concatenate((-source_d_int, sink_d_int)).astype(np.int64)
-
-    # Create fully connected arcs between all sources and sinks
-    conn_tails = np.array([i for i, x in enumerate(sources) for j, y in enumerate(sinks)], dtype=np.int64)
-    conn_heads = np.array([j + sources.shape[0] for i, x in enumerate(sources) for j, y in enumerate(sinks)], dtype=np.int64)
-
-    # Add arcs to and from the dummy node
-    dummy_tails = []
-    dummy_heads = []
-
-    for node, demand in np.ndenumerate(demands):
-        if demand > 0:
-            dummy_tails.append(node[0])
-            dummy_heads.append(-1)
-        else:
-            dummy_tails.append(-1)
-            dummy_heads.append(node[0])
-
-    # Concatenate these all together
-    tails = np.concatenate((conn_tails, np.array(dummy_heads).T)).astype(np.int64)
-    heads = np.concatenate((conn_heads, np.array(dummy_heads).T)).astype(np.int64)  # edge targets
-
-    # Create costs and capacities for the arcs between nodes
-    network_costs = network_costs * fp_multiplier
-    network_capac = np.array([np.array([source_demands[i], sink_demands[j]]).min() for i, x in np.ndenumerate(sources) for j, y in np.ndenumerate(sinks)], dtype=np.float64) * fp_multiplier
-
-    # TODO finish?
-    # If there is only one node on either side we can return capacity and costs
-    # if sources.shape[0] == 1 or sinks.shape[0] == 1:
-    #     tot_costs = np.array([cost * network_capac[i_ret] for i_ret, cost in np.ndenumerate(network_costs)], dtype=np.float64)
-    #     return np.float64(np.sum(tot_costs))
-
-    # inf_arr = (np.sum(network_capac.astype(np.int64)), np.sum(np.absolute(network_costs)), np.max(np.absolute(demands)))
-
-    # Set a suitably high integer for infinity
-    faux_inf = 3 * np.max(np.array((np.sum(network_capac.astype(np.int64)), np.sum(np.absolute(network_costs)), np.max(np.absolute(demands))), dtype=np.int64))
-
-    # network_costs = network_costs * fp_multiplier
-
-    # Add the costs and capacities to the dummy nodes
-    costs = np.concatenate((network_costs, np.ones(nodes.shape[0]) * faux_inf)).astype(np.int64)
-    capac = np.concatenate((network_capac, np.ones(nodes.shape[0]) * fp_multiplier)).astype(np.int64)
-
-    # Construct the initial spanning tree.
-    e = conn_tails.shape[0]
-    n = nodes.shape[0]
-
-    # Initialise zero flow in the connected arcs, and full flow to the dummy
-    flows = np.concatenate((np.zeros(e), np.array([abs(d) for d in demands]))).astype(np.int64)
-
-    # General arrays for the spanning tree
-    potentials = np.array([faux_inf if d <= 0 else -faux_inf for d in demands]).T
-    parent = np.concatenate((np.ones(n) * -1, np.array([-2]))).astype(np.int64)
-    edge = np.arange(e, e+n).astype(np.int64)
-    size = np.concatenate((np.ones(n), np.array([n + 1]))).astype(np.int64)
-    next = np.concatenate((np.arange(1, n), np.array([-1, 0]))).astype(np.int64)
-    prev = np.arange(-1, n)          # previous nodes in depth-first thread
-    last = np.concatenate((np.arange(n), np.array([n - 1]))).astype(np.int64)     # last descendants in depth-first thread
-
-    ###########################################################################
-    # Main Pivot loop
-    ###########################################################################
-
-    f = 0
-
-    while True:
-        i, p, q, f = find_entering_edges(e, f, tails, heads, costs, potentials, flows)
-        if p == -1: # If no entering edges then the optimal score is found
-            break
-
-        cycle_nodes, cycle_edges = find_cycle(i, p, q, size, edge, parent)
-        j, s, t = find_leaving_edge(cycle_nodes, cycle_edges, capac, flows, tails, heads)
-        augment_flow(cycle_nodes, cycle_edges, residual_capacity(j, s, capac, flows, tails), tails, flows)
-
-        if i != j:  # Do nothing more if the entering edge is the same as the
-                    # the leaving edge.
-            if parent[t] != s:
-                # Ensure that s is the parent of t.
-                s, t = t, s
-
-            if np.where(cycle_edges == i)[0][0] > np.where(cycle_edges == j)[0][0]:
-                # Ensure that q is in the subtree rooted at t.
-                p, q = q, p
-
-            remove_edge(s, t, size, prev, last, next, parent, edge)
-            make_root(q, parent, size, last, prev, next, edge)
-            add_edge(i, p, q, next, prev, last, size, parent, edge)
-            update_potentials(i, p, q, heads, potentials, costs, last, next)
-
-    flow_cost = 0
-    final_flows = flows[:e].astype(np.float64)
-    edge_costs = costs[:e].astype(np.float64)
-
-    # dot product is returning wrong values for some reason...
-    for arc_ind, flow in np.ndenumerate(final_flows):
-        flow_cost += flow * edge_costs[arc_ind]
-
-    final = flow_cost / fp_multiplier 
-    final = final.astype(np.float64)
-    final = final / fp_multiplier 
-
-    return final[0]

@@ -34,7 +34,7 @@ amds = [amd.AMD(crystal, k) for crystal in reader]
 
 Each AMD is a 1D numpy array, whereas PDDs are 2D arrays. The ```crystal``` given by the CifReader describes the crystal, and has attributes including ```motif```, ```cell``` and ```name``` which are not directly needed here; we can just pass it to ```amd.AMD()```. See below for an example where the names of crystals are extracted so they can be printed.
 
-The package includes functions to compare sets of AMDs or PDDs for you. They behave like scipy's function ```scipy.distance.spatial.pdist```. This function takes a set of points and compares them pairwise, returning a *condensed distance matrix*, a 1D vector containing the distances. This vector is the upper half of the 2D distance matrix in one list, since for pairwise comparisons the matrix is symmetric. The function ```amd.AMD_pdist``` similarly takes a list of AMDs and compares them, returning the condensed distance matrix:
+The package includes functions to compare sets of AMDs or PDDs for you. They behave like scipy's function ```scipy.distance.spatial.pdist```. This function takes a set of points and compares them pairwise, returning a *condensed distance matrix*, a 1D vector containing the distances. This vector is the upper half of the 2D distance matrix in one list, since for pairwise comparisons the matrix is symmetric. The function ```amd.AMD_pdist``` similarly takes a list of AMDs and compares them pairwise, returning the condensed distance matrix:
 
 ```py
 cdm = amd.AMD_pdist(amds, metric='chebyshev')

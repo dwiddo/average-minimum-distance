@@ -2,11 +2,11 @@
 (``csd-python-api`` only) to extract periodic set representations 
 of crystals which can be passed to :func:`.calculate.AMD` and :func:`.calculate.PDD`.
 
-The :class:`CifReader` and :class:`CSDReader` return :class:`.PeriodicSet.PeriodicSet`
+The :class:`CifReader` and :class:`CSDReader` return :class:`.periodicset.PeriodicSet`
 objects, which can be given to :func:`.calculate.AMD` and :func:`.calculate.PDD` to 
 calculate the AMD/PDD of a crystal. 
 
-These intermediate :class:`.PeriodicSet.PeriodicSet` representations can be written 
+These intermediate :class:`.periodicset.PeriodicSet` representations can be written 
 to a .hdf5 file with :class:`SetWriter` (along with their metadata), which can be 
 read back with :class:`SetReader`. This is much faster than rereading a .CIF or
 recomputing invariants.
@@ -19,7 +19,7 @@ from ase.io.cif import NoStructureData, CIFBlock, parse_cif
 from ase.spacegroup.spacegroup import parse_sitesym # string symop -> rot, trans
 import h5py
 
-from .PeriodicSet import PeriodicSet
+from .periodicset import PeriodicSet
 from .utils import _extend_signature, cellpar_to_cell
 
 import warnings
@@ -58,6 +58,7 @@ class _Reader:
     """
 
     disorder_options = {'skip', 'ordered_sites', 'all_sites'}
+    reserved_tags = {'motif', 'cell', 'name', 'asymmetric_unit', 'wyckoff_multiplicities', 'types'}
     
     def __init__(self, 
                  remove_hydrogens=False,      
@@ -65,7 +66,6 @@ class _Reader:
                  heaviest_component=False,
                  extract_data=None,
                  include_if=None,
-                 dtype=np.float64,
                 ):
         
         # settings
@@ -78,6 +78,8 @@ class _Reader:
             for key in extract_data:
                 if not callable(extract_data[key]):
                     raise ValueError('extract_data must be a dict with callable values')
+                if key in _Reader.reserved_tags:
+                    raise ValueError(f'extract_data includes reserved key {key}; change {key} to a different value to resolve')
                 
         if include_if is not None:
             for f in extract_data:
@@ -89,7 +91,6 @@ class _Reader:
         self.heaviest_component = heaviest_component
         self.extract_data = extract_data
         self.include_if = include_if
-        self.dtype = dtype
 
     # basically the builtin map, but skips items if the function returned None.
     # The object returned by this function (Iterable of PeriodicSets) is set to
@@ -235,7 +236,6 @@ class _Reader:
         
         frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym)
         motif = frac_motif @ cell
-        motif, cell = motif.astype(self.dtype), cell.astype(self.dtype)
 
         kwargs = {
             'name': block.name, 
@@ -416,7 +416,6 @@ class _Reader:
         frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym)
         
         motif = frac_motif @ cell
-        motif, cell = motif.astype(self.dtype), cell.astype(self.dtype)
         
         kwargs = {
             'name': crystal.identifier, 
@@ -444,9 +443,9 @@ class _Reader:
 
 class CifReader(_Reader):
     """Read all structures in a .CIF with ``ase`` or ``ccdc``, yielding  
-    :class:`.PeriodicSet.PeriodicSet` objects.
+    :class:`.periodicset.PeriodicSet` objects.
     
-    The :class:`CifReader` returns :class:`.PeriodicSet.PeriodicSet` objects which can be passed
+    The :class:`CifReader` returns :class:`.periodicset.PeriodicSet` objects which can be passed
     to :func:`.calculate.AMD` or :func:`.calculate.PDD`.
     
     Examples:
@@ -503,9 +502,9 @@ class CifReader(_Reader):
             self._generator = self._map(self._Entry_to_PeriodicSet, EntryReader(filename))
 
 class CSDReader(_Reader):
-    """Read Entries from the CSD, yielding :class:`.PeriodicSet.PeriodicSet` objects.
+    """Read Entries from the CSD, yielding :class:`.periodicset.PeriodicSet` objects.
     
-    The CSDReader returns :class:`.PeriodicSet.PeriodicSet` objects which can be passed
+    The CSDReader returns :class:`.periodicset.PeriodicSet` objects which can be passed
     to :func:`.calculate.AMD` or :func:`.calculate.PDD`.
     
     Examples:
@@ -595,7 +594,7 @@ class CSDReader(_Reader):
         return periodic_set
 
 class SetWriter:
-    """Write several :class:`.PeriodicSet.PeriodicSet` objects to a .hdf5 file. 
+    """Write several :class:`.periodicset.PeriodicSet` objects to a .hdf5 file. 
     Reading the .hdf5 is much faster than parsing a .CIF file.
     """
 
@@ -656,7 +655,7 @@ class SetWriter:
                     raise ValueError(f'Cannot store object {data} of type {type(data)} in hdf5')
     
     def iwrite(self, periodic_sets: Iterable[PeriodicSet]):
-        """Write :class:`.PeriodicSet.PeriodicSet` objects from an iterable to file."""
+        """Write :class:`.periodicset.PeriodicSet` objects from an iterable to file."""
         for periodic_set in periodic_sets:
             self.write(periodic_set)
         
@@ -672,7 +671,7 @@ class SetWriter:
         self.file.close()
 
 class SetReader:
-    """Read :class:`.PeriodicSet.PeriodicSet` objects from a .hdf5 file written
+    """Read :class:`.periodicset.PeriodicSet` objects from a .hdf5 file written
     with :class:`SetWriter`. Acts like a read-only dict that can be iterated 
     over (preserves write order)."""
     
@@ -706,7 +705,7 @@ class SetReader:
         self.file.close()
     
     def family(self, refcode: str) -> Iterable[PeriodicSet]:
-        """Yield any :class:`.PeriodicSet.PeriodicSet` whose name 
+        """Yield any :class:`.periodicset.PeriodicSet` whose name 
         starts with input refcode."""
         
         for name in self.keys():
@@ -743,13 +742,13 @@ class SetReader:
     def __exit__(self, exc_type, exc_value, tb):
         self.file.close()
     
-    def to_dict(self) -> dict:
+    def extract_tags(self) -> dict:
         """Return ``dict`` with scalar data in the tags of items in :class:`SetReader`.
         
         Dict is in format easily passable to ``pandas.DataFrame``, as in::
         
             reader = amd.SetReader('periodic_sets.hdf5')
-            data = reader.data_to_dict()
+            data = reader.extract_tags()
             df = pd.DataFrame(data, index=reader.keys(), columns=data.keys())
         
         Format of returned dict is for example:: 

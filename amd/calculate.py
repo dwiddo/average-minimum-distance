@@ -4,18 +4,16 @@
 from typing import Union, Tuple
 import numpy as np
 from ._nearest_neighbours import nearest_neighbours
-from .PeriodicSet import PeriodicSet
+from .periodicset import PeriodicSet
 from collections import defaultdict
 
-PeriodicSet_ = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
-
-def AMD(periodic_set: PeriodicSet_, k: int) -> np.ndarray:
+def AMD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]], k: int) -> np.ndarray:
     """Computes an AMD vector up to `k` from a periodic set.
     
     Parameters
     ----------
-    periodic_set : :class:`.PeriodicSet.PeriodicSet` or tuple of ndarrays
-        A periodic set represented by a :class:`.PeriodicSet.PeriodicSet` object or 
+    periodic_set : :class:`.periodicset.PeriodicSet` or tuple of ndarrays
+        A periodic set represented by a :class:`.periodicset.PeriodicSet` object or 
         by a tuple (motif, cell) with coordinates in Cartesian form.
     k : int
         Length of AMD returned.
@@ -24,6 +22,27 @@ def AMD(periodic_set: PeriodicSet_, k: int) -> np.ndarray:
     -------
     ndarray
         An ndarray of shape (k,), the AMD of ``periodic_set`` up to `k`.
+        
+    Examples
+    --------
+    Make list of AMDs with ``k=100`` for crystals in mycif.cif::
+
+        amds = []
+        for periodic_set in amd.CifReader('mycif.cif'):
+            amds.append(amd.AMD(periodic_set, 100))
+            
+    Make list of AMDs with ``k=10`` for crystals in these CSD refcode families::
+    
+        amds = []
+        for periodic_set in amd.CSDReader(['HXACAN', 'ACSALA'], families=True):
+            amds.append(amd.AMD(periodic_set, 10))
+            
+    Manually pass a periodic set as a tuple (motif, cell)::
+
+        # simple cubic lattice
+        motif = np.array([[0,0,0]])
+        cell = np.array([[1,0,0], [0,1,0], [0,0,1]])
+        cubic_amd = amd.AMD((motif, cell), 100)
     """
     
     asymmetric_unit, multiplicities = None, None
@@ -50,8 +69,8 @@ def PDD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]], k: int,
     
     Parameters
     ----------
-    periodic_set : :class:`.PeriodicSet.PeriodicSet` or tuple of ndarrays
-        A periodic set represented by a :class:`.PeriodicSet.PeriodicSet` object or 
+    periodic_set : :class:`.periodicset.PeriodicSet` or tuple of ndarrays
+        A periodic set represented by a :class:`.periodicset.PeriodicSet` object or 
         by a tuple (motif, cell) with coordinates in Cartesian form.
     k : int
         Number of columns in the PDD, plus one for the first column of weights.
@@ -66,7 +85,28 @@ def PDD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]], k: int,
     Returns
     -------
     ndarray
-        An ndarray with k+1 columns, the PDD of ``periodic_set`` up to `k`. 
+        An ndarray with k+1 columns, the PDD of ``periodic_set`` up to `k`.
+        
+    Examples
+    --------
+    Make list of PDDs with ``k=100`` for crystals in mycif.cif::
+
+        pdds = []
+        for periodic_set in amd.CifReader('mycif.cif'):
+            pdds.append(amd.PDD(periodic_set, 100, order=False))    # do not lexicographically order rows
+            
+    Make list of PDDs with ``k=10`` for crystals in these CSD refcode families::
+    
+        pdds = []
+        for periodic_set in amd.CSDReader(['HXACAN', 'ACSALA'], families=True):
+            pdds.append(amd.PDD(periodic_set, 10, collapse=False))  # do not collapse rows
+            
+    Manually pass a periodic set as a tuple (motif, cell)::
+
+        # simple cubic lattice
+        motif = np.array([[0,0,0]])
+        cell = np.array([[1,0,0], [0,1,0], [0,0,1]])
+        cubic_amd = amd.PDD((motif, cell), 100)
     """
     
     asymmetric_unit, multiplicities = None, None
@@ -165,7 +205,7 @@ def PPC(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]) -> floa
     
     Parameters
     ----------
-    periodic_set : :class:`.PeriodicSet.PeriodicSet` or tuple of 
+    periodic_set : :class:`.periodicset.PeriodicSet` or tuple of 
         ndarrays (motif, cell) representing the periodic set in Cartesian form.
 
     Returns
