@@ -13,7 +13,6 @@ recomputing invariants.
 """
 
 from typing import Callable, Iterable, Sequence, Tuple, Optional
-import itertools
 import numpy as np
 from ase.io.cif import NoStructureData, CIFBlock, parse_cif
 from ase.spacegroup.spacegroup import parse_sitesym # string symop -> rot, trans
@@ -110,28 +109,50 @@ class _Reader:
         -->
         frac_motif, asym_unit, multiplicities, inverses
         """
-        
+
         rotations, translations = parse_sitesym(sitesym)
         
         all_sites = []
-        for site in asym_frac_motif:
-            
-            # equivalent sites
-            sites = np.array([np.mod(np.dot(rot, site) + trans, 1)
-                              for rot, trans in zip(rotations, translations)])
-            
-            # find overlapping sites (asym unit site invariant under symop) and keep unique sites
-            site_diffs = np.abs(sites[:, None] - sites)
-            reduced_sites = sites[~np.triu(np.all(np.logical_or(site_diffs <= 1e-3, np.abs(site_diffs - 1) <= 1e-3), axis=-1), 1).any(0)]
-            
-            all_sites.append(reduced_sites)
-            
-        # Wyckoff multiplicites = unique sites generated for each point in asym unit
-        multiplicities = np.array([sites.shape[0] for sites in all_sites])
-        inverses = list(itertools.chain.from_iterable([itertools.repeat(i, m) for i, m in enumerate(multiplicities)]))
-        asym_unit = np.array([0] + list(itertools.accumulate(multiplicities[:-1])))
+        asym_unit = [0]
+        multiplicities = []
+        inverses = []
         
-        frac_motif = np.concatenate(all_sites)
+        for inv, site in enumerate(asym_frac_motif):
+            
+            multiplicity = 0
+            
+            for rot, trans in zip(rotations, translations):
+                site_ = np.mod(np.dot(rot, site) + trans, 1)
+                
+                if not all_sites:
+                    all_sites.append(site_)
+                    inverses.append(inv)
+                    multiplicity += 1
+                    continue
+                
+                diffs = np.abs(site_ - all_sites)
+                mask = np.all(np.logical_or(diffs <= 1e-3, np.abs(diffs - 1) <= 1e-3), axis=-1)
+                
+                if np.any(mask):
+                    where_equal = np.argwhere(mask).flatten()
+                    for ind in where_equal:
+                        if inverses[ind] == inv:
+                            pass
+                        else:
+                            warnings.warn(f'positions {inverses[ind]} and {inv} are equivalent')
+
+                else:
+                    all_sites.append(site_)
+                    inverses.append(inv)
+                    multiplicity += 1
+
+            if multiplicity > 0:
+                multiplicities.append(multiplicity)
+                asym_unit.append(len(all_sites))
+        
+        frac_motif = np.array(all_sites)
+        asym_unit = np.array(asym_unit[:-1])
+        multiplicities = np.array(multiplicities)
         
         return frac_motif, asym_unit, multiplicities, inverses
    
@@ -200,7 +221,7 @@ class _Reader:
         asym_frac_motif = np.mod(np.delete(asym_frac_motif, remove, axis=0), 1)
         asym_symbols = [s for i, s in enumerate(asym_symbols) if i not in remove]
         asym_is_disordered = [v for i, v in enumerate(asym_is_disordered) if i not in remove]
-
+        
         site_diffs = np.abs(asym_frac_motif[:, None] - asym_frac_motif)
         overlapping = np.triu(np.all((site_diffs <= 1e-3) | (np.abs(site_diffs - 1) <= 1e-3), axis=-1), 1)
         
@@ -230,7 +251,7 @@ class _Reader:
             if tag in block:
                 sitesym = block[tag]
                 break
-
+            
         if isinstance(sitesym, str):
             sitesym = [sitesym]
         
@@ -333,10 +354,6 @@ class _Reader:
         # mol.remove_atoms(remove)
         # crystal.molecule = mol
         
-                # warnings.warn(f'Skipping {entry.identifier} as some atoms do not have sites')
-                # return None
-        
-        
         # disorder. if 'all_sites', get indices of disordered atoms
         # otherwise, look for disorder and remove if 'ordered_sites' or skip if 'skip'
         
@@ -414,7 +431,6 @@ class _Reader:
         if not sitesym: sitesym = ('x,y,z',)
         
         frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym)
-        
         motif = frac_motif @ cell
         
         kwargs = {
@@ -439,7 +455,7 @@ class _Reader:
         yield from self._generator
 
     def read_one(self):
-        return next(iter(self._generator()))
+        return next(iter(self._generator))
 
 class CifReader(_Reader):
     """Read all structures in a .CIF with ``ase`` or ``ccdc``, yielding  

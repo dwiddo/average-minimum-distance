@@ -14,11 +14,11 @@ All notable changes to this project will be documented in this file.
 
 - `CifReader` and `CSDReader` accept `include_if` parameter, which can be `None` or a list of callables. This can be used to discard structures with specific properties. If `include_if` is a list, the Entry/CifBlock is passed to each callable and is skipped if any do not return `True`.
 
-- Documentation for this average-minimum-distance is now available.
-
 ### Changed
 
 - The main README has been simplified; the old one read more like documentation than an introduction to the package. Details in the old README have moved to dedicated documentation.
+
+- Bug fixes: infinite recursion in PeriodicSet.__getattr__; undetected equivalent sites with ase reader.
 
 ### Removed
 

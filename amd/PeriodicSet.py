@@ -24,6 +24,10 @@ class PeriodicSet:
         self.tags = kwargs
 
     def __getattr__(self, attr):
+        if 'tags' not in self.__dict__:
+            self.tags = {}
+        # if attr not in self.__dict__:
+        #     raise AttributeError(f"{self.__class__.__name__} object has no attribute or tag {attr}")
         if attr in self.tags:
             return self.tags[attr]
         else:
@@ -73,7 +77,6 @@ class PeriodicSet:
                         return False
                         
         return True
-            
     
     def __ne__(self, other):
         return not self.__eq__(other)

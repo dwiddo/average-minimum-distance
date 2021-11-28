@@ -6,6 +6,7 @@ docs/
 *.egg
 *.py[cod]
 __pycache__/
+.pytest_cache/
 *.so
 *.cfg
 *.toml
