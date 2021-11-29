@@ -1,7 +1,6 @@
 build/
 dist/
 tests/
-docs/
 *.egg-info/
 *.egg
 *.py[cod]

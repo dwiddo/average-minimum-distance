@@ -1,7 +1,9 @@
+import warnings
 import csv
 import numpy as np
 from .io import CifReader, CSDReader, SetWriter
 from .calculate import PDD, AMD, PDD_to_AMD
+
 
 def analyse(cifs_or_refcodes,
             reader_kwargs=None,
@@ -9,9 +11,38 @@ def analyse(cifs_or_refcodes,
             calc_kwargs=None,
             hdf5_path=None,
             csv_path=None):
+    """
+    Read cifs/CSD refcodes (auto-detected), optionally do any of the following:
+    compute invariants, store periodic sets with invariants in .hdf5, write scalar
+    data to a .csv.
+    
+    Parameters
+    ----------
+    cifs_or_refcodes : list or list of str
+        Path to .cif(s) or refcode(s). Can be mixed.
+    reader_kwargs : dict or None
+        Keyword arguments to pass to the readers. (FIX-Must be shared between readers unless reader='ccdc'.)
+    invariants : str or list of str or None
+        'AMD' or 'PDD' or list with both. Calculates the chosen invariants. If None, calculate neither.
+    calc_kwargs : dict or None
+        Keyword arguments to pass to PDD (and AMD if 'k' is given). If None, k=100 is default. 
+    hdf5_path : str or None
+        If given, store the periodic sets to a .hdf5 file.
+    csv_path : str or None
+        If given, store all scalar data attached to the periodic sets to a .csv file.
+    """
     
     if invariants is not None:
-        if calc_kwargs is not None:
+        
+        if hdf5_path is None:
+            warnings.warn('Invariants are computed but not used, so they will be skipped. '
+                          'To calculate and store invariants, specify the .hdf5 path with parameter hdf5_path.')
+            invariants = None
+        
+        if isinstance(invariants, str):
+            invariants = [invariants]
+        
+        if calc_kwargs is not None and 'k' in calc_kwargs:
             k = calc_kwargs['k']
             del calc_kwargs['k']
         else:
