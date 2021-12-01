@@ -34,9 +34,9 @@ extensions = [
     'sphinx.ext.coverage', 
     'sphinx.ext.napoleon',
     # 'sphinx.ext.autosummary',
-    'rinoh.frontend.sphinx',
-    'sphinx_rtd_dark_mode',
-    'm2r2',
+    # 'rinoh.frontend.sphinx',
+    # 'sphinx_rtd_dark_mode',
+    # 'm2r2',
 ]
 
 # autodoc_typehints = "description"

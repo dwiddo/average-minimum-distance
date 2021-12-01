@@ -2,7 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.6] - 14/11/2021
+## [1.1.7] - 30/11/2021
+
+### Added
+
+- AMD and PDD functions for finite point sets, `amd.finite_AMD()` and `amd.finite_PDD()`.
+
+### Changed
+
+- 
+
+### Removed
+
+- 
+
+## [1.1.6] - 29/11/2021
 
 ### Added
 
