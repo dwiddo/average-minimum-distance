@@ -36,7 +36,7 @@ extensions = [
     # 'sphinx.ext.autosummary',
     # 'rinoh.frontend.sphinx',
     # 'sphinx_rtd_dark_mode',
-    # 'm2r2',
+    'm2r2',
 ]
 
 # autodoc_typehints = "description"
