@@ -252,7 +252,7 @@ def PDD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]], k: int,
 #     return arr
 
 def finite_AMD(motif):
-    """Computes the AMD of a finite point set (up to maximum k = `len(motif) - 1`).
+    """Computes the AMD of a finite point set (up to k = `len(motif) - 1`).
     
     Parameters
     ----------
@@ -283,7 +283,7 @@ def finite_AMD(motif):
 
 def finite_PDD(motif: np.ndarray, 
                order: bool = True, collapse: bool = True, collapse_tol: float = 1e-4):
-    """Computes the PDD of a finite point set (up to maximum k = `len(motif) - 1`).
+    """Computes the PDD of a finite point set (up to k = `len(motif) - 1`).
     
     Parameters
     ----------

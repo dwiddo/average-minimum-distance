@@ -13,17 +13,22 @@
 import os
 import sys
 # sys.path.insert(0, os.path.abspath(r'.'))
-sys.path.insert(0, os.path.abspath(r'..'))
+# sys.path.insert(0, os.path.abspath(r'..'))
 sys.path.insert(0, os.path.abspath(r'../..'))
-sys.path.insert(0, os.path.abspath(r'../amd'))
-sys.path.insert(0, os.path.abspath(r'../../amd'))
+# sys.path.insert(0, os.path.abspath(r'../amd'))
+# sys.path.insert(0, os.path.abspath(r'../../amd'))
 
 import mock
  
-MOCK_MODULES = ['numpy', 
-                'scipy', 
+MOCK_MODULES = ['numpy',
+                'numpy.typing',
                 'numba',
-                'ase', 
+                'scipy',
+                'scipy.spatial',
+                'scipy.spatial.distance'
+                'scipy.sparse',
+                'scipy.sparse.csgraph',
+                'ase',
                 'ase.io.cif',
                 'ase.spacegroup.spacegroup',
                 'h5py', 
