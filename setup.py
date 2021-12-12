@@ -10,7 +10,7 @@ classifiers = [
 
 install_requires = [
 	'numpy>=1.20.1',
-	'scipy>=1.6.1',
+	'scipy==1.6.1',
 	'ase>=3.22.0',
 	'numba>=0.53.1',
 	'h5py>=3.3.0',
