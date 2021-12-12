@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.abspath(r'../..'))
 
 import mock
  
-MOCK_MODULES = ['numpy', 'scipy', 'ase', 'numba', 'h5py', 'ccdc']
+MOCK_MODULES = ['numpy', 'scipy', 'ase', 'ase.io', 'numba', 'h5py', 'ccdc']
 for mod_name in MOCK_MODULES:
     sys.modules[mod_name] = mock.Mock()
 

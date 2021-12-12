@@ -181,75 +181,75 @@ def PDD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]], k: int,
     
     return pdd
 
-def PDD2(periodic_set, k, h, order):
+# def PDD2(periodic_set, k, h, order):
     
-    motif, cell, asymmetric_unit, multiplicities = _extract_motif_cell(periodic_set)
+#     motif, cell, asymmetric_unit, multiplicities = _extract_motif_cell(periodic_set)
     
-    dists, cloud, inds = nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
+#     dists, cloud, inds = nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
     
-    if multiplicities is None:
-        multiplicities = np.ones((motif.shape[0], ))
+#     if multiplicities is None:
+#         multiplicities = np.ones((motif.shape[0], ))
         
-    m = np.sum(multiplicities)
-    weights = multiplicities / m
+#     m = np.sum(multiplicities)
+#     weights = multiplicities / m
     
-    m = motif.shape[0]	# no of motif points
-    pdd = []
-    dist = []   # second 'dist' column, the distance between two considered points when h=2
-    for points in combinations(range(m), 2):
+#     m = motif.shape[0]	# no of motif points
+#     pdd = []
+#     dist = []   # second 'dist' column, the distance between two considered points when h=2
+#     for points in combinations(range(m), 2):
 
-        # init done with points in this unordered set and pointers to 0
-        done = set(points)
-        pointers = [0,0]
+#         # init done with points in this unordered set and pointers to 0
+#         done = set(points)
+#         pointers = [0,0]
         
-        row = []
-        for _ in range(k):
+#         row = []
+#         for _ in range(k):
         
-            # pointer update
-            for i in range(2):
-                while int(inds[points[i]][pointers[i]]) in done:
-                    pointers[i] += 1
+#             # pointer update
+#             for i in range(2):
+#                 while int(inds[points[i]][pointers[i]]) in done:
+#                     pointers[i] += 1
                     
-            # getting which point has the closest nearest neighbour
-            _, closest_i = min(((dists[points[i]][pointers[i]], i) for i in range(2)), key=lambda x: x[0])
+#             # getting which point has the closest nearest neighbour
+#             _, closest_i = min(((dists[points[i]][pointers[i]], i) for i in range(2)), key=lambda x: x[0])
             
-            # index of this nearest neighbour, to be used in the tuple
-            point = inds[points[closest_i]][pointers[closest_i]]
+#             # index of this nearest neighbour, to be used in the tuple
+#             point = inds[points[closest_i]][pointers[closest_i]]
             
-            # finds ordered distances from points to point, add to the row
-            row.append(sorted(np.linalg.norm(motif[points[i]] - cloud[point]) for i in range(2)))
+#             # finds ordered distances from points to point, add to the row
+#             row.append(sorted(np.linalg.norm(motif[points[i]] - cloud[point]) for i in range(2)))
             
-            # add this point to done and increment pointer
-            done.add(int(point))
-            pointers[closest_i] += 1
+#             # add this point to done and increment pointer
+#             done.add(int(point))
+#             pointers[closest_i] += 1
             
-        pdd.append(row)
-        if h == 2:
-            dist.append(np.linalg.norm(motif[points[0]] - motif[points[1]]))
-        else:
-            dist.append(_finite_PDD1(motif[points]))
+#         pdd.append(row)
+#         if h == 2:
+#             dist.append(np.linalg.norm(motif[points[0]] - motif[points[1]]))
+#         else:
+#             dist.append(_finite_PDD1(motif[points]))
 
-    n_rows = len(pdd)
+#     n_rows = len(pdd)
 
-    if h == 2:
-        n_rows = len(pdd)
-        counter = Counter([(d, *map(tuple, row)) for d, row in zip(dist, pdd)])
-        # rows, counts = np.unique(np.array(pdd), axis=0, return_counts=True)
-        # arr = [(count / n_rows, row[0], np.array(row[1:])) for row, count in zip(rows, counts)]
+#     if h == 2:
+#         n_rows = len(pdd)
+#         counter = Counter([(d, *map(tuple, row)) for d, row in zip(dist, pdd)])
+#         # rows, counts = np.unique(np.array(pdd), axis=0, return_counts=True)
+#         # arr = [(count / n_rows, row[0], np.array(row[1:])) for row, count in zip(rows, counts)]
 
-        arr = [(total / n_rows, row[0], np.array(row[1:])) for row, total in counter.items()]
-        arr = np.array(arr, dtype=PDD2_DTYPE)
-        if order:
-            # not yet implemented: secondary lexsort for h = 2
-            sorted_args = np.argsort(arr['dist'])
-            arr = arr[sorted_args]
+#         arr = [(total / n_rows, row[0], np.array(row[1:])) for row, total in counter.items()]
+#         arr = np.array(arr, dtype=PDD2_DTYPE)
+#         if order:
+#             # not yet implemented: secondary lexsort for h = 2
+#             sorted_args = np.argsort(arr['dist'])
+#             arr = arr[sorted_args]
 
-    else:
-        # not yet implemented: collapsing, weights and lexsort for h > 2.
-        arr = [(1 / n_rows, d, row) for d, row in zip(dist, pdd)]
-        arr = np.array(arr, dtype=PDDh_DTYPE)
+#     else:
+#         # not yet implemented: collapsing, weights and lexsort for h > 2.
+#         arr = [(1 / n_rows, d, row) for d, row in zip(dist, pdd)]
+#         arr = np.array(arr, dtype=PDDh_DTYPE)
     
-    return arr
+#     return arr
 
 def finite_AMD(motif):
     """Computes the AMD of a finite point set (up to maximum k = `len(motif) - 1`).

@@ -158,7 +158,9 @@ def network_simplex(source_demands, sink_demands, network_costs):
     final = final.astype(np.float64)
     final = final / fp_multiplier 
 
-    return final[0]
+    final_flows = final_flows / fp_multiplier
+
+    return final[0], final_flows
 
 @njit(cache=True)
 def reduced_cost(i, costs, potentials, tails, heads, flows):

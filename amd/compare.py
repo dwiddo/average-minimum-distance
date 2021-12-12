@@ -12,7 +12,7 @@ from scipy.sparse.csgraph import minimum_spanning_tree
 from ._network_simplex import network_simplex
 from .utils import ETA
 
-def emd(pdd, pdd_, metric='chebyshev', **kwargs):
+def emd(pdd, pdd_, metric='chebyshev', return_transport=False, **kwargs):
     r"""Earth mover's distance between two PDDs.
     
     Parameters
@@ -39,8 +39,11 @@ def emd(pdd, pdd_, metric='chebyshev', **kwargs):
     """
     
     dm = cdist(pdd[:, 1:], pdd_[:, 1:], metric=metric, **kwargs)
-    
-    return network_simplex(pdd[:, 0], pdd_[:, 0], dm)
+    emd_dist, transport_plan = network_simplex(pdd[:, 0], pdd_[:, 0], dm)
+    if return_transport:
+        return emd_dist, transport_plan.reshape(dm.shape)
+    else:
+        return emd_dist
 
 def AMD_cdist(amds: Union[np.ndarray, List[np.ndarray]], 
               amds_: Union[np.ndarray, List[np.ndarray]],

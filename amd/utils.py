@@ -1,6 +1,7 @@
 """General utility functions and classes."""
 
 import inspect
+import warnings
 import numpy as np
 import time
 from datetime import timedelta
@@ -65,7 +66,6 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     
     Unit cell params a,b,c,α,β,γ --> cell as 3x3 ndarray.
     """
-
     # Handle orthorhombic cells separately to avoid rounding errors
     eps = 2 * np.spacing(90.0, dtype=np.float64)  # around 1.4e-14
     
@@ -82,7 +82,10 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
 
     cy = (cos_alpha - cos_beta * cos_gamma) / sin_gamma
     cz_sqr = 1. - cos_beta ** 2 - cy ** 2
-    
+    if cz_sqr < 0:
+        raise RuntimeError(f'Could not create unit cell from parameters ' + \
+                           f'a={a},b={b},c={c},α={alpha},β={beta},γ={gamma}')
+
     return np.array([[a,           0,           0], 
                      [b*cos_gamma, b*sin_gamma, 0],
                      [c*cos_beta,  c*cy,        c*np.sqrt(cz_sqr)]])
