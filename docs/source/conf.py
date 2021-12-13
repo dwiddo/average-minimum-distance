@@ -21,10 +21,10 @@ sys.path.insert(0, os.path.abspath(r'../..'))
 import mock
  
 MOCK_MODULES = ['numpy',
-                'numpy.typing',
+                # 'numpy.typing',
                 'numba',
                 'scipy',
-                'scipy.spatial',
+                # 'scipy.spatial',
                 'scipy.spatial.distance'
                 'scipy.sparse',
                 'scipy.sparse.csgraph',
