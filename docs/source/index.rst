@@ -1,6 +1,8 @@
 Welcome to average-minimum-distance's documentation!
 ====================================================
 
+Lumache has its documentation hosted on Read the Docs.
+
 Module list:
 
 .. toctree::
