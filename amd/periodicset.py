@@ -8,6 +8,7 @@ They can be written to a file with :class:`.io.SetWriter` which can be read with
 :class:`.io.SetReader`.
 """
 
+from typing import Optional
 import numpy as np
 
 class PeriodicSet:
@@ -16,8 +17,12 @@ class PeriodicSet:
     Has attributes motif, cell and name (which can be :const:`None`). 
     :class:`PeriodicSet` objects are returned by the readers in the :mod:`.io` module.
     """
-    
-    def __init__(self, motif, cell, name=None, **kwargs):
+
+    def __init__(self, motif: np.ndarray, 
+                       cell: np.ndarray, 
+                       name: Optional[str] = None, 
+                       **kwargs):
+        
         self.motif = motif
         self.cell  = cell
         self.name  = name

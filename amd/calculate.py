@@ -32,7 +32,7 @@ def _extract_motif_cell(periodic_set):
         
     return motif, cell, asymmetric_unit, multiplicities
 
-def collapse_rows(weights, dists, collapse_tol):
+def _collapse_rows(weights, dists, collapse_tol):
     """Given a vector `weights`, matrix `dists` and tolerance `collapse_tol`, collapse 
     the identical rows of dists (if all entries in a row are within  `collapse_tol`) 
     and collapse the same entires of `weights` (adding entries that merge).
@@ -172,7 +172,7 @@ def PDD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]], k: int,
     weights = multiplicities / m
     
     if collapse:
-        weights, dists = collapse_rows(weights, dists, collapse_tol)
+        weights, dists = _collapse_rows(weights, dists, collapse_tol)
         
     pdd = np.hstack((weights[:, None], dists))
     
@@ -321,7 +321,7 @@ def finite_PDD(motif: np.ndarray,
     weights = np.full((motif.shape[0], ), 1 / motif.shape[0])
     
     if collapse:
-        weights, dists = collapse_rows(weights, dists, collapse_tol)
+        weights, dists = _collapse_rows(weights, dists, collapse_tol)
     
     pdd = np.hstack((weights[:, None], dists))
     

@@ -16,21 +16,23 @@ sys.path.insert(0, os.path.abspath(r'../..'))
 
 import mock
  
-MOCK_MODULES = ['numpy',
-                'numpy.typing',
-                'numba',
-                'scipy',
-                'scipy.spatial',
-                'scipy.spatial.distance',
-                'scipy.sparse',
-                'scipy.sparse.csgraph',
-                'ase',
-                'ase.io.cif',
-                'ase.spacegroup.spacegroup',
-                'h5py', 
-                'ccdc',
-                'ccdc.io',
-                'ccdc.search']
+MOCK_MODULES = [
+    # 'numpy',
+    # 'numpy.typing',
+    'numba',
+    'scipy',
+    'scipy.spatial',
+    'scipy.spatial.distance',
+    'scipy.sparse',
+    'scipy.sparse.csgraph',
+    'ase',
+    'ase.io.cif',
+    'ase.spacegroup.spacegroup',
+    'h5py', 
+    'ccdc',
+    'ccdc.io',
+    'ccdc.search'
+]
 
 for mod_name in MOCK_MODULES:
     sys.modules[mod_name] = mock.Mock()
