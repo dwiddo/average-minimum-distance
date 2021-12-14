@@ -251,7 +251,7 @@ def PDD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]], k: int,
     
 #     return arr
 
-def finite_AMD(motif):
+def finite_AMD(motif: np.ndarray):
     """Computes the AMD of a finite point set (up to k = `len(motif) - 1`).
     
     Parameters
