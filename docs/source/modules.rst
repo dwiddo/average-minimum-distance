@@ -1,7 +1,13 @@
-average-minimum-distance
-========================
+Module list
+===========
 
 .. toctree::
    :maxdepth: 4
 
-   amd
+   amd.calculate
+   amd.compare
+   amd.io
+   amd.periodicset
+   amd.utils
+   amd.ccdc_utils
+   

@@ -8,13 +8,11 @@ All notable changes to this project will be documented in this file.
 
 - AMD and PDD functions for finite point sets, `amd.finite_AMD()` and `amd.finite_PDD()`.
 
+- Documentation is now available on [readthedocs](https://average-minimum-distance.readthedocs.io/en/latest/).
+
 ### Changed
 
-- 
-
-### Removed
-
-- 
+- Performance improvements and bug fixes.
 
 ## [1.1.6] - 29/11/2021
 

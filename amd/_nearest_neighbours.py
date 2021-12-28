@@ -4,10 +4,23 @@ from typing import Iterable, Optional
 from itertools import product, combinations
 from collections import defaultdict
 import numpy as np
+from numba import njit
 from scipy.spatial import cKDTree
 
-def _dist(p):
-    return sum(x**2 for x in p)
+@njit()
+def _dist(xy, z):
+    s = 0
+    for val in xy:
+        s += val ** 2
+    s += z ** 2
+    return s
+
+@njit()
+def _distkey(pt):
+    s = 0
+    for val in pt:
+        s += val ** 2
+    return s
 
 def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
     """Generates batches of integer lattice points.
@@ -36,15 +49,14 @@ def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
         positive_int_lattice = []
         while True:
             batch = []
-            for x in product(range(d+1), repeat=dims-1):
-                pt = [*x, ymax[x]]
-                if _dist(pt) <= d**2:
-                    batch.append(pt)
-                    ymax[x] += 1
+            for xy in product(range(d+1), repeat=dims-1):
+                if _dist(xy, ymax[xy]) <= d**2:
+                    batch.append((*xy, ymax[xy]))
+                    ymax[xy] += 1
             if not batch:
                 break
             positive_int_lattice += batch
-        positive_int_lattice.sort(key=_dist)
+        positive_int_lattice.sort(key=_distkey)
 
         # expand +ve integer lattice to full lattice with reflections
         int_lattice = []
@@ -145,10 +157,10 @@ def nearest_neighbours(motif: np.ndarray,
 
     tree = cKDTree(cloud, compact_nodes=False, balanced_tree=False)
     pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
-    pdd = np.zeros_like(pdd_)
+    pdd = np.empty_like(pdd_)
 
     while not np.array_equal(pdd, pdd_):
-        pdd = np.copy(pdd_)
+        pdd = pdd_
         cloud = np.append(cloud, next(cloud_generator), axis=0)
         tree = cKDTree(cloud, compact_nodes=False, balanced_tree=False)
         pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)

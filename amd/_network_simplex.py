@@ -60,8 +60,8 @@ def network_simplex(source_demands, sink_demands, network_costs):
     demands = np.concatenate((-source_d_int, sink_d_int)).astype(np.int64)
 
     # Create fully connected arcs between all sources and sinks
-    conn_tails = np.array([i for i, x in enumerate(sources) for j, y in enumerate(sinks)], dtype=np.int64)
-    conn_heads = np.array([j + sources.shape[0] for i, x in enumerate(sources) for j, y in enumerate(sinks)], dtype=np.int64)
+    conn_tails = np.array([i for i in range(len(sources)) for _ in range(len(sinks))], dtype=np.int64)
+    conn_heads = np.array([j + sources.shape[0] for _ in range(len(sources)) for j in range(len(sinks))], dtype=np.int64)
 
     # Add arcs to and from the dummy node
     dummy_tails = []
@@ -81,7 +81,7 @@ def network_simplex(source_demands, sink_demands, network_costs):
 
     # Create costs and capacities for the arcs between nodes
     network_costs = network_costs * fp_multiplier
-    network_capac = np.array([np.array([source_demands[i], sink_demands[j]]).min() for i, x in np.ndenumerate(sources) for j, y in np.ndenumerate(sinks)], dtype=np.float64) * fp_multiplier
+    network_capac = np.array([np.array([source_demands[i], sink_demands[j]]).min() for i in range(len(sources)) for j in range(len(sinks))], dtype=np.float64) * fp_multiplier
 
     # TODO finish?
     # If there is only one node on either side we can return capacity and costs
@@ -93,8 +93,6 @@ def network_simplex(source_demands, sink_demands, network_costs):
 
     # Set a suitably high integer for infinity
     faux_inf = 3 * np.max(np.array((np.sum(network_capac.astype(np.int64)), np.sum(np.absolute(network_costs)), np.max(np.absolute(demands))), dtype=np.int64))
-
-    # network_costs = network_costs * fp_multiplier
 
     # Add the costs and capacities to the dummy nodes
     costs = np.concatenate((network_costs, np.ones(nodes.shape[0]) * faux_inf)).astype(np.int64)

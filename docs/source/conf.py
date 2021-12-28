@@ -17,8 +17,6 @@ sys.path.insert(0, os.path.abspath(r'../..'))
 import mock
  
 MOCK_MODULES = [
-    # 'numpy',
-    # 'numpy.typing',
     'numba',
     'scipy',
     'scipy.spatial',
@@ -44,7 +42,7 @@ copyright = '2021, Daniel Widdowson'
 author = 'Daniel Widdowson'
 
 # The full version, including alpha/beta/rc tags
-release = '1.1.6'
+release = '1.1.7'
 
 # -- General configuration ---------------------------------------------------
 
@@ -57,7 +55,7 @@ extensions = [
     'sphinx.ext.napoleon',
     # 'sphinx.ext.autosummary',
     # 'rinoh.frontend.sphinx',
-    # 'sphinx_rtd_dark_mode',
+    'sphinx_rtd_dark_mode',
     'm2r2',
 ]
 
@@ -83,8 +81,10 @@ exclude_patterns = []
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-#
+
 html_theme = 'sphinx_rtd_theme'
+
+html_sidebars = { '**': ['globaltoc.html', 'relations.html', 'sourcelink.html', 'searchbox.html'] }
 
 # # Add any paths that contain custom static files (such as style sheets) here,
 # # relative to this directory. They are copied after the builtin static files,

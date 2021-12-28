@@ -4,9 +4,9 @@ If you use our code in your work, please cite our paper at [arxiv.org/abs/2009.0
 
 ## What's amd?
 
-A 'crystal' is an arrangement of atoms which periodically repeats according to some lattice. The atoms and lattice defining a crystal are typically recorded in a .CIF file, but this representation is ambiguous, i.e. many different .CIF files can define the same crystal. This package implements new *isometric invariants* called AMD (average minimum distance) and PDD (point-wise distance distribution) based on inter-point distances, which are guaranteed to take the same value for all equivalent representations of a crystal. They do this in a continuous way; crystals which are similar have similar AMDs and PDDs.
+A crystal is an arrangement of atoms which periodically repeats according to some lattice. The atoms and lattice defining a crystal are typically recorded in a .CIF file, but this representation is ambiguous, i.e. different .CIF files can define the same crystal. This package implements new *isometric invariants* called AMD (average minimum distance) and PDD (point-wise distance distribution) based on inter-point distances, which are guaranteed to take the same value for all equivalent representations of a crystal. They do this in a continuous way; crystals which are similar have similar AMDs and PDDs.
 
-For a technical description of AMD, [see our paper on arXiv](https://arxiv.org/abs/2009.02488).
+For a technical description of AMD, [see our paper on arXiv](https://arxiv.org/abs/2009.02488). Detailed documentation of this package is [available on readthedocs](https://average-minimum-distance.readthedocs.io/en/latest/).
 
 Use pip to install average-minimum-distance:
 
@@ -16,31 +16,36 @@ pip install average-minimum-distance
 
 Then import average-minimum-distance with ```import amd```.
 
-## Example use
+## Getting started
 
-The central functions of this package are ```amd.AMD()``` and ```amd.PDD()```, which take a crystal and a positive integer k, returning the crystal's AMD/PDD up to k as a vector/matrix (not a single value). The following example uses ```amd.CifReader``` read a list of crystals from a .CIF and compute their AMDs (k=100):
+The central functions of this package are ```amd.AMD()``` and ```amd.PDD()```, which take a crystal and a positive integer k, returning the crystal's AMD/PDD up to k. An AMD is a 1D numpy array, whereas PDDs are 2D arrays. The AMDs or PDDs can then be passed to functions to compare them.
+
+### Reading crystals
+
+The following example reads a .CIF with ```amd.CifReader``` and computes the AMDs (k=100):
 
 ```py
 import amd
 
-k = 100
-
-# read all structures in a .cif and put their amds in a list
+# read all structures in a .cif and put their amds (k=100) in a list
 reader = amd.CifReader('path/to/file.cif')
-amds = [amd.AMD(crystal, k) for crystal in reader]
+amds = [amd.AMD(crystal, 100) for crystal in reader]
 ```
 
-*Note: CifReader has many optional arguments to control reading of the .CIF, e.g. removing hydrogens, handling disorder and extracting more data. See the documentation for details.*
+*Note: CifReader accepts optional arguments, e.g. for removing hydrogen, handling disorder and extracting more data. See the documentation for details.*
 
-Each AMD is a 1D numpy array, whereas PDDs are 2D arrays. The ```crystal``` given by the CifReader describes the crystal, and has attributes including ```motif```, ```cell``` and ```name``` which are not directly needed here; we can just pass it to ```amd.AMD()```. See below for an example where the names of crystals are extracted so they can be printed.
+A crystal can also be read from the CSD using ```amd.CSDReader``` (if csd-python-api is installed), or created manually.
 
-The package includes functions to compare sets of AMDs or PDDs for you. They behave like scipy's function ```scipy.distance.spatial.pdist```. This function takes a set of points and compares them pairwise, returning a *condensed distance matrix*, a 1D vector containing the distances. This vector is the upper half of the 2D distance matrix in one list, since for pairwise comparisons the matrix is symmetric. The function ```amd.AMD_pdist``` similarly takes a list of AMDs and compares them pairwise, returning the condensed distance matrix:
+### Comparing AMDs or PDDs
+
+The package includes functions for comparing sets of AMDs or PDDs. They behave like scipy's function ```scipy.distance.spatial.pdist```,
+which takes a set of points and compares them pairwise, returning a *condensed distance matrix*, a 1D vector containing the distances. This vector is the upper half of the 2D distance matrix in one list, since for pairwise comparisons the matrix is symmetric. The function ```amd.AMD_pdist``` similarly takes a list of AMDs and compares them pairwise, returning the condensed distance matrix:
 
 ```py
-cdm = amd.AMD_pdist(amds, metric='chebyshev')
+cdm = amd.AMD_pdist(amds)
 ```
 
-The default metric for comparison is ```'chebyshev'``` (l-infinity), though it can be changed to anything accepted by scipy's ```pdist```, e.g. ```euclidean```.
+The default metric for comparison is ```chebyshev``` (l-infinity), though it can be changed to anything accepted by scipy's ```pdist```, e.g. ```euclidean```.
 
 It is preferable to store the condensed matrix, though if you want the symmetric 2D distance matrix, use scipy's ```squareform```:
 
@@ -52,9 +57,27 @@ dm = squareform(cdm)
 
 The function ```amd.AMD_pdist``` has an equivalent for PDDs, ```amd.PDD_pdist```. There are also the equivalents of ```scipy.distance.spatial.cdist```, ```amd.AMD_cdist``` and ```amd.PDD_cdist```, which take two sets and compares one vs the other, returning a 2D distance matrix.
 
-## Full example: Finding n nearest neighbours in one set from another
+## Example: PDD-based dendrogram of a family of crystals
 
-Here is an example showing how to read two sets of crystals from .CIF files ```set1.cif``` and ```set2.cif``` and find the 10 nearest PDD-neighbours in set 2 for every crystal in set 1. This can be done with the handy function ```amd.neighbours_from_distance_matrix```, which also accepts condensed distance matrices.
+This example reads crystals in the DEBXIT family, compares them by PDD and plots a single linkage dendrogram:
+
+```py
+import amd
+import matplotlib.pyplot as plt
+from scipy.cluster import hierarchy
+
+crystals = list(amd.CSDReader('DEBXIT', families=True))
+names = [crystal.name for crystal in crystals]
+pdds = [amd.PDD(crystal, 100) for crystal in crystals]
+cdm = amd.PDD_pdist(pdds)
+Z = hierarchy.linkage(cdm, 'single')
+dn = hierarchy.dendrogram(Z, labels=names)
+plt.show()
+```
+
+## Example: Finding n nearest neighbours in one set from another
+
+Here is an example showing how to read two sets of crystals from .CIFs ```set1.cif``` and ```set2.cif``` and find the 10 nearest PDD-neighbours in set 2 for every crystal in set 1. This can be done with the handy function ```amd.neighbours_from_distance_matrix```, which also accepts condensed distance matrices.
 
 ```py
 import amd

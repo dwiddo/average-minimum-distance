@@ -3,7 +3,7 @@ import csv
 import numpy as np
 from .io import CifReader, CSDReader, SetWriter
 from .calculate import PDD, AMD, PDD_to_AMD
-
+from .utils import ETA
 
 def analyse(cifs_or_refcodes,
             reader_kwargs=None,
@@ -47,9 +47,20 @@ def analyse(cifs_or_refcodes,
             del calc_kwargs['k']
         else:
             k = 100 # default
+            
+        if calc_kwargs is None:
+            calc_kwargs = {}
     
     if isinstance(cifs_or_refcodes, str):
         cifs_or_refcodes = [cifs_or_refcodes]
+    
+    if reader_kwargs is None:
+        cifreader_kwargs = csdreader_kwargs = {}
+    else:
+        cifreader_kwargs = reader_kwargs.copy()
+        cifreader_kwargs.pop('families', None)
+        csdreader_kwargs = reader_kwargs.copy()
+        csdreader_kwargs.pop('reader', None)
     
     writer = None
     if hdf5_path is not None:
@@ -59,14 +70,17 @@ def analyse(cifs_or_refcodes,
     columns = []
     names = []
     
+    from ccdc.io import EntryReader
+    l = len(EntryReader('CSD'))
+    
     for path_or_refcode in cifs_or_refcodes:
         
         if path_or_refcode.endswith('.cif'):
-            reader = CifReader(path_or_refcode, **reader_kwargs)
+            reader = CifReader(path_or_refcode, **cifreader_kwargs)
         else:
-            reader = CSDReader(path_or_refcode, **reader_kwargs)
-
-        for periodic_set in reader:
+            reader = CSDReader(path_or_refcode, **csdreader_kwargs)
+        
+        for i, periodic_set in enumerate(reader):
         
             # calc amds, pdds
             if invariants is not None:
@@ -93,6 +107,9 @@ def analyse(cifs_or_refcodes,
             
             if writer is not None:
                 writer.write(periodic_set)
+            
+            # verbose?
+            # print(f'{i+1}/{l}', end='\r')
     
     if writer is not None:
         writer.close()
@@ -122,7 +139,3 @@ def analyse(cifs_or_refcodes,
                     else:
                         row_.append('')
                 writer.writerow(row_)
-
-def analyse_hdf5():
-    pass
-

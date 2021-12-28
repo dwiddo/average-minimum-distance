@@ -58,6 +58,9 @@ class _Reader:
 
     disorder_options = {'skip', 'ordered_sites', 'all_sites'}
     reserved_tags = {'motif', 'cell', 'name', 'asymmetric_unit', 'wyckoff_multiplicities', 'types'}
+    atom_site_fract_tags = ['_atom_site_fract_x', '_atom_site_fract_y', '_atom_site_fract_z']
+    atom_site_cartn_tags = ['_atom_site_cartn_x', '_atom_site_cartn_y', '_atom_site_cartn_z']
+    symop_tags = ['_space_group_symop_operation_xyz', '_space_group_symop.operation_xyz', '_symmetry_equiv_pos_as_xyz']
     
     def __init__(self, 
                  remove_hydrogens=False,      
@@ -71,7 +74,7 @@ class _Reader:
         if disorder not in _Reader.disorder_options:
             raise ValueError(f'disorder parameter {disorder} must be one of {_Reader.disorder_options}')
         
-        if extract_data is not None:
+        if extract_data:
             if not isinstance(extract_data, dict):
                 raise ValueError('extract_data must be a dict with callable values')
             for key in extract_data:
@@ -79,9 +82,9 @@ class _Reader:
                     raise ValueError('extract_data must be a dict with callable values')
                 if key in _Reader.reserved_tags:
                     raise ValueError(f'extract_data includes reserved key {key}; change {key} to a different value to resolve')
-                
-        if include_if is not None:
-            for f in extract_data:
+        
+        if include_if:
+            for f in include_if:
                 if not callable(f):
                     raise ValueError('include_if must be a list of callables')
                 
@@ -90,20 +93,31 @@ class _Reader:
         self.heaviest_component = heaviest_component
         self.extract_data = extract_data
         self.include_if = include_if
+    
+    ### public interface ###
+    
+    def __iter__(self):
+        yield from self._generator
 
+    def read_one(self):
+        return next(iter(self._generator))
+    
     # basically the builtin map, but skips items if the function returned None.
     # The object returned by this function (Iterable of PeriodicSets) is set to
     # self._generator; then iterating over the Reader iterates over self._generator.
-    def _map(self, func: Callable, iterable: Iterable) -> Iterable[PeriodicSet]:
+    @staticmethod
+    def _map(func: Callable, iterable: Iterable) -> Iterable[PeriodicSet]:
         """Iterates over iterable, passing items through parser and
         yielding the result if it is not None.
         """
+        
         for item in iterable:
             periodic_set = func(item)
             if periodic_set is not None:
                 yield periodic_set
 
-    def _expand(self, asym_frac_motif: np.ndarray, sitesym: Sequence[str]) -> Tuple[np.ndarray, ...]:
+    @staticmethod
+    def _expand(asym_frac_motif: np.ndarray, sitesym: Sequence[str]) -> Tuple[np.ndarray, ...]:
         """
         Asymmetric unit's fractional coords + sitesyms (as strings)
         -->
@@ -161,7 +175,7 @@ class _Reader:
     def _CIFBlock_to_PeriodicSet(self, block: CIFBlock) -> PeriodicSet:
         """ase.io.cif.CIFBlock --> PeriodicSet. Returns None for a "bad" set."""
         
-        if self.include_if is not None:
+        if self.include_if:
             if not all(check(block) for check in self.include_if):
                 return None
         
@@ -169,13 +183,9 @@ class _Reader:
         cell = block.get_cell().array
         
         # get asymmetric unit's fractional motif
-        asym_frac_motif = [block.get(name) for name in ['_atom_site_fract_x',
-                                                        '_atom_site_fract_y',
-                                                        '_atom_site_fract_z']]
+        asym_frac_motif = [block.get(name) for name in _Reader.atom_site_fract_tags]
         if None in asym_frac_motif:
-            asym_motif = [block.get(name) for name in ['_atom_site_cartn_x',
-                                                       '_atom_site_cartn_y',
-                                                       '_atom_site_cartn_z']]
+            asym_motif = [block.get(name) for name in _Reader.atom_site_cartn_tags]
             if None in asym_motif:
                 warnings.warn(f'Skipping {block.name} as coordinates were not found')
                 return None
@@ -241,13 +251,9 @@ class _Reader:
         if asym_frac_motif.shape[0] == 0:
             warnings.warn(f'Skipping {block.name} with no accepted sites')
             return None
-        
-        symop_tags = ['_space_group_symop_operation_xyz',
-                      '_space_group_symop.operation_xyz',
-                      '_symmetry_equiv_pos_as_xyz']
 
         sitesym = ('x,y,z',)
-        for tag in symop_tags:
+        for tag in _Reader.symop_tags:
             if tag in block:
                 sitesym = block[tag]
                 break
@@ -276,7 +282,7 @@ class _Reader:
     def _Entry_to_PeriodicSet(self, entry) -> PeriodicSet:
         """ccdc.entry.Entry --> PeriodicSet. Returns None for a "bad" set."""
         
-        if self.include_if is not None:
+        if self.include_if:
             if not all(check(entry) for check in self.include_if):
                 return None
         
@@ -285,7 +291,7 @@ class _Reader:
             warnings.warn(f'Skipping {entry.identifier} as entry has no 3D structure')
             return None
         
-        # at least one entry raises RuntimeError when reading its crystal
+        # at least one entry raised RuntimeError when reading its crystal
         try:
             crystal = entry.crystal
         except RuntimeError as e:
@@ -341,6 +347,7 @@ class _Reader:
                         return None
         
         # check all atoms have coords
+        ### --- ! --- ###
         if not crystal.molecule.all_atoms_have_sites:
             warnings.warn(f'Skipping {entry.identifier} as some atoms do not have sites')
             return None
@@ -390,6 +397,7 @@ class _Reader:
                 remove.append(atom)
         if remove:
             warnings.warn(f'{entry.identifier} has sites with no coordinates')
+            
         mol.remove_atoms(remove)
         crystal.molecule = mol
         
@@ -449,19 +457,9 @@ class _Reader:
         
         return periodic_set
 
-    ### public interface ###
-    
-    def __iter__(self):
-        yield from self._generator
-
-    def read_one(self):
-        return next(iter(self._generator))
-
 class CifReader(_Reader):
     """Read all structures in a .CIF with ``ase`` or ``ccdc``, yielding  
-    :class:`.periodicset.PeriodicSet` objects.
-    
-    The :class:`CifReader` returns :class:`.periodicset.PeriodicSet` objects which can be passed
+    :class:`.periodicset.PeriodicSet` objects which can be passed
     to :func:`.calculate.AMD` or :func:`.calculate.PDD`.
     
     Examples:
@@ -586,7 +584,6 @@ class CSDReader(_Reader):
             refcodes = [refcode for refcode in all_refcodes if not (refcode in seen or seen_add(refcode))]
 
         self._entry_reader = EntryReader('CSD')
-    
         self._generator = self._map(self._Entry_to_PeriodicSet, self._init_ccdc_reader(refcodes))
     
     def _init_ccdc_reader(self, refcodes):
@@ -614,7 +611,7 @@ class SetWriter:
     Reading the .hdf5 is much faster than parsing a .CIF file.
     """
 
-    _str_dtype = h5py.special_dtype(vlen=str)
+    _str_dtype = h5py.vlen_dtype(str)
     
     def __init__(self, filename: str):
         
@@ -644,12 +641,17 @@ class SetWriter:
             
             # a subgroup contains tags that are lists or ndarrays
             tags_group = group.create_group('tags')
+            
             for tag in periodic_set.tags:
+                
                 data = periodic_set.tags[tag]
 
                 # scalars (nums and strs) stored as attrs
                 if np.isscalar(data):
                     tags_group.attrs[tag] = data
+                    
+                elif data is None:
+                    tags_group.attrs[tag] = '__None' # nonce to handle None
                 
                 elif isinstance(data, np.ndarray):
                     tags_group.create_dataset(tag, data=data)
@@ -663,10 +665,11 @@ class SetWriter:
                         tags_group.create_dataset(tag, data=data, 
                                                   dtype=SetWriter._str_dtype)
                         
-                    # everything else castable to ndarray
+                    # everything else must be castable to ndarray
                     else:
                         data = np.asarray(data)
                         tags_group.create_dataset(tag, data=np.array(data))
+                    
                 else:
                     raise ValueError(f'Cannot store object {data} of type {type(data)} in hdf5')
     
@@ -705,14 +708,19 @@ class SetReader:
             for tag in group['tags']:
                 # tag: data e.g. 'types': ['C', 'H', 'O',...]
                 data = group['tags'][tag][:]
-                
+                     
                 if any(isinstance(d, (bytes, bytearray)) for d in data):
                     periodic_set.tags[tag] = [d.decode() for d in data]
                 else:
                     periodic_set.tags[tag] = data
         
-        for attr in group['tags'].attrs:
-            periodic_set.tags[attr] = group['tags'].attrs[attr]
+            for attr in group['tags'].attrs:
+                data = group['tags'].attrs[attr]
+                
+                if data == '__None':
+                    periodic_set.tags[attr] = None
+                else:
+                    periodic_set.tags[attr] = data
 
         return periodic_set
     
@@ -815,3 +823,84 @@ class SetReader:
             data_[col_name] = column_data
 
         return data_
+
+
+### ccdc.crystal.Crystal --> amd.periodicset.PeriodicSet
+### ignores disorder, missing sites/coords, checks & no options
+
+def crystal_to_periodicset(crystal):
+    
+    cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
+        
+    # asymmetric unit fractional coordinates
+    asym_frac_motif = np.array([[
+                        a.fractional_coordinates.x, 
+                        a.fractional_coordinates.y, 
+                        a.fractional_coordinates.z]
+                        for a in crystal.asymmetric_unit_molecule.atoms])
+    
+    asym_frac_motif = np.mod(asym_frac_motif, 1)
+    
+    # if the above removed everything, skip this structure
+    if asym_frac_motif.shape[0] == 0:
+        raise ValueError(f'{crystal.identifier} has no coordinates')
+    
+    sitesym = crystal.symmetry_operators
+    if not sitesym: sitesym = ('x,y,z',)
+    
+    frac_motif, asym_unit, multiplicities, inverses = _Reader._expand(asym_frac_motif, sitesym)
+    motif = frac_motif @ cell
+    
+    kwargs = {
+        'name': crystal.identifier, 
+        'asymmetric_unit': asym_unit,
+        'wyckoff_multiplicities': multiplicities,
+    }
+
+    periodic_set = PeriodicSet(motif, cell, **kwargs)
+
+    return periodic_set
+
+
+### ase.io.cif.CIFBlock --> amd.periodicset.PeriodicSet
+### ignores disorder, missing sites/coords, checks & no options
+
+def cifblock_to_periodicset(block):
+    
+    cell = block.get_cell().array
+    
+    asym_frac_motif = [block.get(name) for name in _Reader.atom_site_fract_tags]
+    if None in asym_frac_motif:
+        asym_motif = [block.get(name) for name in _Reader.atom_site_cartn_tags]
+        if None in asym_motif:
+            warnings.warn(f'Skipping {block.name} as coordinates were not found')
+            return None
+            
+        asym_frac_motif = np.array(asym_motif) @ np.linalg.inv(cell)
+        
+    asym_frac_motif = np.mod(np.array(asym_frac_motif).T, 1)
+    
+    if asym_frac_motif.shape[0] == 0:
+        raise ValueError(f'{block.name} has no coordinates')
+    
+    sitesym = ('x,y,z',)
+    for tag in _Reader.symop_tags:
+        if tag in block:
+            sitesym = block[tag]
+            break
+        
+    if isinstance(sitesym, str):
+        sitesym = [sitesym]
+    
+    frac_motif, asym_unit, multiplicities, inverses = _Reader._expand(asym_frac_motif, sitesym)
+    motif = frac_motif @ cell
+
+    kwargs = {
+        'name': block.name, 
+        'asymmetric_unit': asym_unit,
+        'wyckoff_multiplicities': multiplicities
+    }
+    
+    periodic_set = PeriodicSet(motif, cell, **kwargs)
+    
+    return periodic_set

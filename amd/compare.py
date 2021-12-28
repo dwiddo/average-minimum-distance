@@ -40,6 +40,7 @@ def emd(pdd, pdd_, metric='chebyshev', return_transport=False, **kwargs):
     
     dm = cdist(pdd[:, 1:], pdd_[:, 1:], metric=metric, **kwargs)
     emd_dist, transport_plan = network_simplex(pdd[:, 0], pdd_[:, 0], dm)
+    
     if return_transport:
         return emd_dist, transport_plan.reshape(dm.shape)
     else:
@@ -92,8 +93,9 @@ def AMD_cdist(amds: Union[np.ndarray, List[np.ndarray]],
         dm = np.empty((len(amds), len(amds_)))
         for i in range(len(amds)):
             dm[i] = np.amax(np.abs(amds_ - amds[i]), axis=-1)
+            
     else:
-        dm = cdist(amds[:,:k], amds_[:,:k], metric=metric, **kwargs)
+        dm = cdist(amds[:, :k], amds_[:, :k], metric=metric, **kwargs)
 
     return dm
 
@@ -142,10 +144,10 @@ def AMD_pdist(amds: Union[np.ndarray, List[np.ndarray]],
             ind_ = ind + m - i - 1
             cdm[ind:ind_] = np.amax(np.abs(amds[i+1:] - amds[i]), axis=-1)
             ind = ind_
+            
     else:
-        cdm = pdist(amds[:,:k], metric=metric, **kwargs)
+        cdm = pdist(amds[:, :k], metric=metric, **kwargs)
 
-    
     return cdm
 
 def PDD_cdist(pdds: List[np.ndarray], pdds_: List[np.ndarray], 
@@ -187,16 +189,14 @@ def PDD_cdist(pdds: List[np.ndarray], pdds_: List[np.ndarray],
             pdds_ = [pdds_]
     
     n, m = len(pdds), len(pdds_)
-    
     t = None if k is None else k + 1
-    
     dm = np.empty((n, m))
     if verbose: eta = ETA(n * m)
     
     for i in range(n):
         pdd = pdds[i]
         for j in range(m):
-            dm[i, j] = emd(pdd[:,:t], pdds_[j][:,:t], metric=metric, **kwargs) 
+            dm[i, j] = emd(pdd[:, :t], pdds_[j][:, :t], metric=metric, **kwargs) 
             if verbose: eta.update()
 
     return dm
@@ -235,19 +235,13 @@ def PDD_pdist(pdds: List[np.ndarray],
             pdds = [pdds]
     
     m = len(pdds)
-    
     t = None if k is None else k + 1
-    
     cdm = np.empty((m * (m - 1)) // 2, dtype=np.double)
-    
     if verbose: eta = ETA((m * (m - 1)) // 2)
-        
     inds = ((i,j) for i in range(0, m - 1) for j in range(i + 1, m))
 
     for r, (i, j) in enumerate(inds):
-        
-        cdm[r] = emd(pdds[i][:,:t], pdds[j][:,:t], metric=metric, **kwargs)
-        
+        cdm[r] = emd(pdds[i][:, :t], pdds[j][:, :t], metric=metric, **kwargs)
         if verbose: eta.update()
     
     return cdm
@@ -300,6 +294,7 @@ def filter(n: int, pdds: List[np.ndarray], pdds_: Optional[List[np.ndarray]] = N
     comparison_set_size = len(pdds) if pdds_ is None else len(pdds_)
     
     if n >= comparison_set_size:
+        
         if pdds_ is None:
             pdd_cdm = PDD_pdist(pdds, verbose=verbose, **kwargs)
             dm = squareform(pdd_cdm)
@@ -314,7 +309,6 @@ def filter(n: int, pdds: List[np.ndarray], pdds_: Optional[List[np.ndarray]] = N
     
     # one set, pairwise
     if pdds_ is None:
-        
         amd_cdm = AMD_pdist(amds, low_memory=low_memory, **kwargs)
         # kinda annoying I use squareform here. The alternative was so much worse...
         amd_dm = squareform(amd_cdm)
@@ -324,27 +318,21 @@ def filter(n: int, pdds: List[np.ndarray], pdds_: Optional[List[np.ndarray]] = N
             inds_row = inds_row[inds_row != i][:n]
             inds.append(inds_row)
         inds = np.array(inds)
-        
         pdds_ = pdds
     
     # one set v another
     else:
-        
         amds_ = np.array([np.average(pdd[:,1:], weights=pdd[:,0], axis=0) for pdd in pdds_])
         amd_dm = AMD_cdist(amds, amds_, low_memory=low_memory, **kwargs)
-    
         inds = np.array([np.argpartition(row, n)[:n] for row in amd_dm])
     
     dm = np.empty(inds.shape)
-    
     if verbose: eta = ETA(inds.shape[0] * inds.shape[1])
-    
     t = None if k is None else k + 1
     
     for i, row in enumerate(inds):
         for i_, j in enumerate(row):
             dm[i, i_] = emd(pdds[i][:,:t], pdds_[j][:,:t], **metric_kwargs)
-            
             if verbose: eta.update()
 
     sorted_inds = np.argsort(dm, axis=-1)
@@ -352,6 +340,18 @@ def filter(n: int, pdds: List[np.ndarray], pdds_: Optional[List[np.ndarray]] = N
     dm = np.take_along_axis(dm, sorted_inds, axis=-1)
     
     return dm, inds
+
+def _mst_from_distance_matrix(dm):
+    
+    csr_tree = minimum_spanning_tree(csr_matrix(dm))
+    tree = csr_tree.toarray()
+    
+    edge_list = []
+    i1, i2 = np.nonzero(tree)
+    for i, j in zip(i1, i2):
+        edge_list.append((int(i), int(j), dm[i][j]))
+        
+    return edge_list
 
 def AMD_mst(amds: npt.ArrayLike,
             k: Optional[int] = None,
@@ -386,15 +386,7 @@ def AMD_mst(amds: npt.ArrayLike,
     lt_inds = np.tril_indices(m)
     dm[lt_inds] = 0
     
-    csr_tree = minimum_spanning_tree(csr_matrix(dm))
-    tree = csr_tree.toarray()
-    
-    edge_list = []
-    i1, i2 = np.nonzero(tree)
-    for i, j in zip(i1, i2):
-        edge_list.append((int(i), int(j), dm[i][j]))
-        
-    return edge_list
+    return _mst_from_distance_matrix(dm)
 
 def PDD_mst(pdds: List[np.ndarray],
             amd_filter_cutoff: Optional[int] = None,
@@ -428,13 +420,13 @@ def PDD_mst(pdds: List[np.ndarray],
         ``i`` and ``j`` are the indices of nodes and ``w`` is the PDD distance.
     """
     
+    kwargs = {'k': k, 'metric': metric, 'verbose': verbose, **kwargs}
+    
     if isinstance(pdds, np.ndarray):
         if len(pdds.shape) == 2:
             pdds = [pdds]
     
     m = len(pdds)
-    
-    kwargs = {'k': k, 'metric': metric, 'verbose': verbose, **kwargs}
     
     if amd_filter_cutoff is None:
         cdm = PDD_pdist(pdds, **kwargs)
@@ -449,18 +441,9 @@ def PDD_mst(pdds: List[np.ndarray],
             for i_, j in enumerate(row):
                 dm[i, j] = dists[i][i_]
     
-    csr_tree = minimum_spanning_tree(csr_matrix(dm))
-    tree = csr_tree.toarray()
-    
-    edge_list = []
-    i1, i2 = np.nonzero(tree)
-    for i, j in zip(i1, i2):
-        edge_list.append((int(i), int(j), dm[i][j]))
-        
-    return edge_list
+    return _mst_from_distance_matrix(dm)
 
 def neighbours_from_distance_matrix(n: int, dm: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-
     """Given a distance matrix, find the ``n`` nearest neighbours of each item.
     
     Parameters
@@ -480,7 +463,6 @@ def neighbours_from_distance_matrix(n: int, dm: np.ndarray) -> Tuple[np.ndarray,
     
     # 2D distance matrix
     if len(dm.shape) == 2:
-        
         inds = np.array([np.argpartition(row, n)[:n] for row in dm])
     
     # 1D condensed distance vector
