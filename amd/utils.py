@@ -1,9 +1,10 @@
 """General utility functions and classes."""
 
 import inspect
-import numpy as np
 import time
 from datetime import timedelta
+import random
+import numpy as np
 
 def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     """Simplified version of function from ase.geometry.
@@ -33,6 +34,23 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     return np.array([[a,           0,           0], 
                      [b*cos_gamma, b*sin_gamma, 0],
                      [c*cos_beta,  c*cy,        c*np.sqrt(cz_sqr)]])
+
+def cellpar_to_cell_2D(a, b, alpha):
+    cell = np.array([[a, 0],
+                     [b * np.cos(alpha * np.pi / 180.), b * np.sin(alpha * np.pi / 180.)]])
+    return cell
+
+def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
+    
+    lengths = [random.uniform(*length_bounds) for _ in range(dims)]
+    
+    if dims == 3:
+        angles = [random.uniform(*angle_bounds) for _ in range(dims)]
+        return cellpar_to_cell(*lengths, *angles)
+    
+    elif dims == 2:
+        alpha = random.uniform(*angle_bounds)
+        return cellpar_to_cell_2D(*lengths, alpha)
 
 class ETA:
     """Pass total amount to do on construction, then call .update() on every 

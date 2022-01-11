@@ -341,18 +341,6 @@ def filter(n: int, pdds: List[np.ndarray], pdds_: Optional[List[np.ndarray]] = N
     
     return dm, inds
 
-def _mst_from_distance_matrix(dm):
-    
-    csr_tree = minimum_spanning_tree(csr_matrix(dm))
-    tree = csr_tree.toarray()
-    
-    edge_list = []
-    i1, i2 = np.nonzero(tree)
-    for i, j in zip(i1, i2):
-        edge_list.append((int(i), int(j), dm[i][j]))
-        
-    return edge_list
-
 def AMD_mst(amds: npt.ArrayLike,
             k: Optional[int] = None,
             low_memory: bool = False,
@@ -486,5 +474,14 @@ def neighbours_from_distance_matrix(n: int, dm: np.ndarray) -> Tuple[np.ndarray,
     
     return nn_dm, inds
 
-if __name__ == '__main__':
-    pass
+def _mst_from_distance_matrix(dm):
+    
+    csr_tree = minimum_spanning_tree(csr_matrix(dm))
+    tree = csr_tree.toarray()
+    
+    edge_list = []
+    i1, i2 = np.nonzero(tree)
+    for i, j in zip(i1, i2):
+        edge_list.append((int(i), int(j), dm[i][j]))
+        
+    return edge_list

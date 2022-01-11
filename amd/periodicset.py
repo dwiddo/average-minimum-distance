@@ -29,6 +29,7 @@ class PeriodicSet:
         self.tags = kwargs
 
     def __getattr__(self, attr):
+        
         if 'tags' not in self.__dict__:
             self.tags = {}
         # if attr not in self.__dict__:
@@ -39,6 +40,7 @@ class PeriodicSet:
             raise AttributeError(f"{self.__class__.__name__} object has no attribute or tag {attr}")
 
     def __str__(self):
+        
         m, dims = self.motif.shape
         return f"PeriodicSet({self.name}: {m} motif points in {dims} dimensions)"
     
@@ -50,6 +52,7 @@ class PeriodicSet:
     # Also, this function is unfinished. It'll get confused by structures 
     # with overlapping sites --- but it's good enough for now.
     def __eq__(self, other):
+        
         motif = self.motif
         motif_ = other.motif
         cell = self.cell

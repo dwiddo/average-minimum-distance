@@ -48,8 +48,24 @@ def spacegroup(entry):
     """The space group symbol of the crystal."""
     return entry.crystal.spacegroup_symbol
 
+def has_disorder(entry):
+    
+    if entry.has_disorder:
+        return True
+    
+    if entry.crystal.has_disorder:
+        return True
+    
+    for a in entry.crystal.molecule.atoms:
+        occ = a.occupancy
+        if isinstance(occ, (int, float)) and occ < 1:
+            return True
+
+    return False
+
 def molecular_centres(entry):
     """(Geometric) molecular centres lying in the unit cell."""
+    
     frac_centres = []
     for c in entry.crystal.packing(inclusion='CentroidIncluded').components:
         coords = [a.fractional_coordinates for a in c.atoms]

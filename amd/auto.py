@@ -3,7 +3,6 @@ import csv
 import numpy as np
 from .io import CifReader, CSDReader, SetWriter
 from .calculate import PDD, AMD, PDD_to_AMD
-from .utils import ETA
 
 def analyse(cifs_or_refcodes,
             reader_kwargs=None,
@@ -46,7 +45,7 @@ def analyse(cifs_or_refcodes,
             k = calc_kwargs['k']
             del calc_kwargs['k']
         else:
-            k = 100 # default
+            k = 100     # default
             
         if calc_kwargs is None:
             calc_kwargs = {}
@@ -69,9 +68,6 @@ def analyse(cifs_or_refcodes,
     data = []
     columns = []
     names = []
-    
-    from ccdc.io import EntryReader
-    l = len(EntryReader('CSD'))
     
     for path_or_refcode in cifs_or_refcodes:
         

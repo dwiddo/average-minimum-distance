@@ -22,7 +22,20 @@ instead the distances to all neighbours are found (number of columns = no of poi
 
 Higher order PDDs
 -----------------
-Not yet implemented.
+In addition to the AMD and regular PDD, there is a sequence of 'higher order' PDD invariants 
+accessible by passing an int to the optional parameter ``order`` in ``amd.PDD()`` or ``amd.finite_PDD()``. 
+Each invariant in the sequence contains more information and grows in complexity.
+
+To summarise, each row of PDD^h pertains to an h-tuple of motif points, hence PDD^h contains m choose h rows
+before collapsing. Apart from weights, the first element of each row is the finite PDD (order 1) of the 
+h-tuple of points (just the distance between them if h = 2). The rest of a row is lexicographically ordered
+h-tuples of distances from the 3 points to other points in the set. 
+
+Note that before 1.1.7 the ``order`` parameter controlled the sorting of rows, that is now ``lexsort``. 
+The default is ``order=1`` which is the normal PDD (a matrix shape ``(m, k+1)`` with weights in the first 
+column). For any integer > 1, ``amd.PDD()`` returns a tuple ``(weights, dist, pdd)`` where ``weights`` 
+are the usual weights (number of row appearances / total rows), ``dist`` contains the finite PDDs (or
+distances) and ``pdd`` contains the h-tuples (as described above).
 
 Inverse design
 --------------

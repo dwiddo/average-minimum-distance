@@ -2,17 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.7] - 30/11/2021
+## [1.1.7] - 10/01/2022
 
 ### Added
 
-- AMD and PDD functions for finite point sets, `amd.finite_AMD()` and `amd.finite_PDD()`.
+- Higher-order PDDs added. The parameter `order` of `amd.PDD` selects the PDD order (changed from before when it controlled lexsorting the rows, which has been changed to `lexsort`), it can be any int, default `order=1`, the regular PDD. This infinite sequence of invariants grow in complexity but contain more information.
+
+- AMD and PDD functions for finite point sets, `amd.finite_AMD()` and `amd.finite_PDD()`. `amd.finite_PDD()` accepts the new `order` parameter.
 
 - Documentation is now available on [readthedocs](https://average-minimum-distance.readthedocs.io/en/latest/).
 
 ### Changed
 
-- Performance improvements and bug fixes.
+- Parameter `order` of `amd.PDD` no longer refers to lexicographically ordering the rows, this has been changed to `lexsort`. Higher-order PDDs are now implemented and `order` refers to the order of the PDD (default 1).
 
 ## [1.1.6] - 29/11/2021
 
