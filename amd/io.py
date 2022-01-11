@@ -62,6 +62,8 @@ class _Reader:
     atom_site_cartn_tags = ['_atom_site_cartn_x', '_atom_site_cartn_y', '_atom_site_cartn_z']
     symop_tags = ['_space_group_symop_operation_xyz', '_space_group_symop.operation_xyz', '_symmetry_equiv_pos_as_xyz']
     
+    TOL = 1e-3
+    
     def __init__(self, 
                  remove_hydrogens=False,      
                  disorder='skip',
@@ -145,7 +147,7 @@ class _Reader:
                     continue
                 
                 diffs = np.abs(site_ - all_sites)
-                mask = np.all(np.logical_or(diffs <= 1e-3, np.abs(diffs - 1) <= 1e-3), axis=-1)
+                mask = np.all(np.logical_or(diffs <= _Reader.TOL, np.abs(diffs - 1) <= _Reader.TOL), axis=-1)
                 
                 if np.any(mask):
                     where_equal = np.argwhere(mask).flatten()
@@ -233,7 +235,7 @@ class _Reader:
         asym_is_disordered = [v for i, v in enumerate(asym_is_disordered) if i not in remove]
         
         site_diffs = np.abs(asym_frac_motif[:, None] - asym_frac_motif)
-        overlapping = np.triu(np.all((site_diffs <= 1e-3) | (np.abs(site_diffs - 1) <= 1e-3), axis=-1), 1)
+        overlapping = np.triu(np.all((site_diffs <= _Reader.TOL) | (np.abs(site_diffs - 1) <= _Reader.TOL), axis=-1), 1)
         
         # if disorder is 'all_sites' and overlapping sites are disordered, don't remove either
         if self.disorder == 'all_sites':
@@ -415,7 +417,7 @@ class _Reader:
         
         # check for overlapping sites
         site_diffs = np.abs(asym_frac_motif[:, None] - asym_frac_motif)
-        overlapping = np.triu(np.all((site_diffs <= 1e-3) | (np.abs(site_diffs - 1) <= 1e-3), axis=-1), 1)
+        overlapping = np.triu(np.all((site_diffs <= _Reader.TOL) | (np.abs(site_diffs - 1) <= _Reader.TOL), axis=-1), 1)
         
         # if disorder is 'all_sites' and overlapping sites are disordered, don't remove either
         if self.disorder == 'all_sites':
@@ -602,6 +604,7 @@ class CSDReader(_Reader):
 
     def entry(self, refcode: str) -> PeriodicSet:
         """Read a PeriodicSet given any CSD refcode."""
+        
         entry = self._entry_reader.entry(refcode)
         periodic_set = self._Entry_to_PeriodicSet(entry)
         return periodic_set
@@ -625,7 +628,8 @@ class SetWriter:
         
         # need a name to store or you can't access items by key
         if periodic_set.name is None and name is None:
-            raise ValueError('Periodic set must have a name to be written. Either set the name attribute of the PeriodicSet or pass a name to SetWriter.write()')
+            raise ValueError('Periodic set must have a name to be written. Either set the name '
+                             'attribute of the PeriodicSet or pass a name to SetWriter.write()')
         
         if name is None:
             name = periodic_set.name
@@ -824,7 +828,6 @@ class SetReader:
 
         return data_
 
-
 ### ccdc.crystal.Crystal --> amd.periodicset.PeriodicSet
 ### ignores disorder, missing sites/coords, checks & no options
 
@@ -848,7 +851,7 @@ def crystal_to_periodicset(crystal):
     sitesym = crystal.symmetry_operators
     if not sitesym: sitesym = ('x,y,z',)
     
-    frac_motif, asym_unit, multiplicities, inverses = _Reader._expand(asym_frac_motif, sitesym)
+    frac_motif, asym_unit, multiplicities, _ = _Reader._expand(asym_frac_motif, sitesym)
     motif = frac_motif @ cell
     
     kwargs = {
@@ -860,7 +863,6 @@ def crystal_to_periodicset(crystal):
     periodic_set = PeriodicSet(motif, cell, **kwargs)
 
     return periodic_set
-
 
 ### ase.io.cif.CIFBlock --> amd.periodicset.PeriodicSet
 ### ignores disorder, missing sites/coords, checks & no options
