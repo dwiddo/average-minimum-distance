@@ -88,8 +88,7 @@ def AMD_cdist(amds: Union[np.ndarray, List[np.ndarray]],
     
     if low_memory:
         if not metric == 'chebyshev':
-            warnings.warn("Only metric 'chebyshev' implimented for low_memory AMD_cdist(). Using chebyshev",
-                            UserWarning)
+            warnings.warn("Using only allowed metric 'chebyshev' for low_memory", UserWarning)
         dm = np.empty((len(amds), len(amds_)))
         for i in range(len(amds)):
             dm[i] = np.amax(np.abs(amds_ - amds[i]), axis=-1)
@@ -136,8 +135,7 @@ def AMD_pdist(amds: Union[np.ndarray, List[np.ndarray]],
     if low_memory:
         m = len(amds)
         if not metric == 'chebyshev':
-            warnings.warn("Only metric 'chebyshev' implimented for low_memory AMD_pdist(). Using chebyshev",
-                            UserWarning)
+            warnings.warn("Using only allowed metric 'chebyshev' for low_memory", UserWarning)
         cdm = np.empty((m * (m - 1)) // 2, dtype=np.double)
         ind = 0
         for i in range(m):
@@ -305,26 +303,49 @@ def filter(n: int, pdds: List[np.ndarray], pdds_: Optional[List[np.ndarray]] = N
         dm = np.take_along_axis(dm, inds, axis=-1)
         return dm, inds
     
-    amds = np.array([np.average(pdd[:, 1:], weights=pdd[:, 0], axis=0) for pdd in pdds])
+    amds = np.array([np.average(pdd[:, 1:], weights=pdd[:, 0], axis=0)[:k] for pdd in pdds])
     
     # one set, pairwise
     if pdds_ is None:
-        amd_cdm = AMD_pdist(amds, low_memory=low_memory, **kwargs)
-        # kinda annoying I use squareform here. The alternative was so much worse...
-        amd_dm = squareform(amd_cdm)
-        inds = []
-        for i, row in enumerate(amd_dm):
-            inds_row = np.argpartition(row, n+1)[:n+1]
-            inds_row = inds_row[inds_row != i][:n]
-            inds.append(inds_row)
-        inds = np.array(inds)
         pdds_ = pdds
+        if low_memory:
+            if not metric == 'chebyshev':
+                warnings.warn("Using only allowed metric 'chebyshev' for low_memory", UserWarning)
+            if verbose: eta = ETA(len(amds))
+            inds = []
+            for i in range(len(amds)):
+                dists = np.amax(np.abs(amds - amds[i]), axis=-1)
+                inds_row = np.argpartition(dists, n+1)[:n+1]
+                inds_row = inds_row[inds_row != i][:n]
+                inds.append(inds_row)
+                if verbose: eta.update()
+            inds = np.array(inds)
+        else:
+            amd_cdm = AMD_pdist(amds, **kwargs)
+            # kinda annoying I use squareform here. The alternative was so much worse...
+            amd_dm = squareform(amd_cdm)
+            inds = []
+            for i, row in enumerate(amd_dm):
+                inds_row = np.argpartition(row, n+1)[:n+1]
+                inds_row = inds_row[inds_row != i][:n]
+                inds.append(inds_row)
+            inds = np.array(inds)
     
     # one set v another
     else:
-        amds_ = np.array([np.average(pdd[:,1:], weights=pdd[:,0], axis=0) for pdd in pdds_])
-        amd_dm = AMD_cdist(amds, amds_, low_memory=low_memory, **kwargs)
-        inds = np.array([np.argpartition(row, n)[:n] for row in amd_dm])
+        amds_ = np.array([np.average(pdd[:,1:], weights=pdd[:,0], axis=0)[:k] for pdd in pdds_])
+        if low_memory:
+            if not metric == 'chebyshev':
+                warnings.warn("Using only allowed metric 'chebyshev' for low_memory", UserWarning)
+            if verbose: eta = ETA(len(amds) * len(amds_))
+            inds = []
+            for i in range(len(amds)):
+                row = np.amax(np.abs(amds_ - amds[i]), axis=-1)
+                inds.append(np.argpartition(row, n)[:n])
+                if verbose: eta.update()
+        else:
+            amd_dm = AMD_cdist(amds, amds_, low_memory=low_memory, **kwargs)
+            inds = np.array([np.argpartition(row, n)[:n] for row in amd_dm])
     
     dm = np.empty(inds.shape)
     if verbose: eta = ETA(inds.shape[0] * inds.shape[1])
@@ -374,7 +395,7 @@ def AMD_mst(amds: npt.ArrayLike,
     lt_inds = np.tril_indices(m)
     dm[lt_inds] = 0
     
-    return _mst_from_distance_matrix(dm)
+    return mst_from_distance_matrix(dm)
 
 def PDD_mst(pdds: List[np.ndarray],
             amd_filter_cutoff: Optional[int] = None,
@@ -429,7 +450,7 @@ def PDD_mst(pdds: List[np.ndarray],
             for i_, j in enumerate(row):
                 dm[i, j] = dists[i][i_]
     
-    return _mst_from_distance_matrix(dm)
+    return mst_from_distance_matrix(dm)
 
 def neighbours_from_distance_matrix(n: int, dm: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Given a distance matrix, find the ``n`` nearest neighbours of each item.
@@ -474,7 +495,7 @@ def neighbours_from_distance_matrix(n: int, dm: np.ndarray) -> Tuple[np.ndarray,
     
     return nn_dm, inds
 
-def _mst_from_distance_matrix(dm):
+def mst_from_distance_matrix(dm):
     
     csr_tree = minimum_spanning_tree(csr_matrix(dm))
     tree = csr_tree.toarray()
@@ -485,3 +506,4 @@ def _mst_from_distance_matrix(dm):
         edge_list.append((int(i), int(j), dm[i][j]))
         
     return edge_list
+

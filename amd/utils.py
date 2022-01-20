@@ -154,6 +154,42 @@ def extract_tags(periodic_sets) -> dict:
 
     return data_
 
+def neighbours_df_dict(n_neighbours, references, comparisons, invariant_key=None):
+    """
+    n, reference psets, comparison psets --> dict passable to DataFrame
+    
+    Example::
+        data = amd.neighbours_df_dict(10, pdds, pdds_)
+        df = pd.DataFrame(data, index=ref_names)
+    """
+    from .compare import PDD_cdist, AMD_cdist, neighbours_from_distance_matrix
+    
+    # ref_names = [s.name for s in references]
+    com_names = [s.name for s in comparisons]
+    
+    if invariant_key is None:
+        from .calculate import PDD
+        # default is PDD100
+        ref_invs = [PDD(s, 100) for s in references]
+        com_invs = [PDD(s, 100) for s in comparisons]
+    else:
+        ref_invs = [s.tags[invariant_key] for s in references]
+        com_invs = [s.tags[invariant_key] for s in comparisons]
+    
+    if len(ref_invs[0].shape) == 2:     # auto-detect PDD as 2D arrays
+        dm = PDD_cdist(ref_invs, com_invs)
+    else:
+        dm = AMD_cdist(ref_invs, com_invs)
+    
+    nn_dm, inds = neighbours_from_distance_matrix(n_neighbours, dm)
+    
+    data = {}
+    for i in range(n_neighbours):
+        data['ID_' + str(i+1)]   = [com_names[j] for j in inds[:, i]]
+        data['DIST_' + str(i+1)] = nn_dm[:, i]
+        
+    return data
+
 def _extend_signature(base):
     def decorator(func):
         func_params = list(inspect.signature(func).parameters.values())[:-1]

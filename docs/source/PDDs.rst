@@ -5,7 +5,8 @@ Calculating PDDs
 ----------------
 
 The PDD (pointwise distance distribution) of a crystal is given by ``amd.PDD()``.
-It accepts a crystal and an integer k, returning the :math:`\text{PDD}_k` as a matrix. 
+It accepts a crystal and an integer k, returning the :math:`\text{PDD}_k` as a matrix
+with k+1 columns, the weights of each row being in the first column. 
 
 If you have a .cif file, use :class:`amd.CifReader` to read the crystals. If
 ``csd-python-api`` is installed and you have CSD refcodes, use :class:`amd.CSDReader`.
@@ -24,7 +25,7 @@ arrays, in Cartesian form. Examples::
     cell  = np.identity(3)
     cubic_pdd = amd.PDD((motif, cell), 100)
 
-Each PDD returned by ``amd.PDD(c, k)`` is a matrix with ``k`` columns. 
+Each PDD returned by ``amd.PDD(c, k)`` is a matrix with ``k+1`` columns. 
 
 Calculation options
 *******************

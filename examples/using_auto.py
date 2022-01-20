@@ -1,10 +1,17 @@
+"""
+Demonstration of amd.auto.analyse() which given cifs and/or CSD refcodes
+reads the structures, and optionally extracts data, calculates AMDs/PDDs,
+writes the structures to a file and makes a .csv of the scalar data.
+"""
+
 import os
+import amd
 import amd.auto
 import amd.ccdc_utils as cu
 import warnings
+warnings.filterwarnings('ignore')
 
-# cifs or refcodes here (or 'CSD')
-
+# cifs or refcodes here (or 'CSD' for the whole CSD)
 cifs_or_refcodes = [
     'CSD'
 ]
@@ -12,8 +19,6 @@ cifs_or_refcodes = [
 folder = ''
 hdf5_file = 'crystals.hdf5'
 csv_file  = 'crystal_data.csv'
-
-warnings.filterwarnings('ignore')
 
 extract_data = {
     'refcode_family':           cu.refcode_family,
@@ -66,3 +71,5 @@ amd.auto.analyse(cifs_or_refcodes,
                  calc_kwargs=calc_kwargs,
                  hdf5_path=hdf5_path,
                  csv_path=csv_path)
+
+# structures = list(amd.SetReader(hdf5_path))

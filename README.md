@@ -1,4 +1,4 @@
-# average-minimum-distance: distance-based isometry invariants
+# average-minimum-distance: isometrically invariant crystal fingerprints
 
 If you use our code in your work, please cite our paper at [arxiv.org/abs/2009.02488](https://arxiv.org/abs/2009.02488). The bib reference is at the bottom of this page; [click here jump to it](#citeus).
 
@@ -38,7 +38,10 @@ A crystal can also be read from the CSD using ```amd.CSDReader``` (if csd-python
 
 ### Comparing AMDs or PDDs
 
-The package includes functions for comparing sets of AMDs or PDDs. They behave like scipy's function ```scipy.distance.spatial.pdist```,
+The package includes functions for comparing sets of AMDs or PDDs. 
+
+
+ They behave like scipy's function ```scipy.distance.spatial.pdist```,
 which takes a set of points and compares them pairwise, returning a *condensed distance matrix*, a 1D vector containing the distances. This vector is the upper half of the 2D distance matrix in one list, since for pairwise comparisons the matrix is symmetric. The function ```amd.AMD_pdist``` similarly takes a list of AMDs and compares them pairwise, returning the condensed distance matrix:
 
 ```py

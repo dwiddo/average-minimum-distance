@@ -15,7 +15,7 @@ recomputing invariants.
 from typing import Callable, Iterable, Sequence, Tuple, Optional
 import numpy as np
 from ase.io.cif import NoStructureData, CIFBlock, parse_cif
-from ase.spacegroup.spacegroup import parse_sitesym # string symop -> rot, trans
+from ase.spacegroup.spacegroup import parse_sitesym     # string symop -> rot, trans
 import h5py
 
 from .periodicset import PeriodicSet
@@ -30,7 +30,7 @@ try:
     from ccdc.io import EntryReader             # .cif or 'CSD' -> Iterable[Entry]
     from ccdc.search import TextNumericSearch   # refcode -> family of refcodes
     _CCDC_ENABLED = True
-except ImportError:
+except Exception:
     _CCDC_ENABLED = False
 
 
