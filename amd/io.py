@@ -661,8 +661,7 @@ class SetReader:
         self.file.close()
     
     def family(self, refcode: str) -> Iterable[PeriodicSet]:
-        """Yield any :class:`.periodicset.PeriodicSet`s whose name 
-        starts with input refcode."""
+        """Yield any :class:`.periodicset.PeriodicSet`s whose name starts with input refcode."""
         
         for name in self.keys():
             if name.startswith(refcode):

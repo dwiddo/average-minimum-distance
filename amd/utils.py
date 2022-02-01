@@ -160,7 +160,7 @@ def neighbours_df_dict(n_neighbours, references, comparisons, invariant_key=None
     n, reference psets, comparison psets --> dict passable to DataFrame
     
     Example::
-        data = amd.neighbours_df_dict(10, pdds, pdds_)
+        data = amd.neighbours_df_dict(10, pdds, pdds\_)
         df = pd.DataFrame(data, index=ref_names)
     """
     from .compare import PDD_cdist, AMD_cdist, neighbours_from_distance_matrix
