@@ -29,45 +29,33 @@ class PeriodicSet:
         self.tags = kwargs
 
     def __getattr__(self, attr):
-        
         if 'tags' not in self.__dict__:
             self.tags = {}
-        # if attr not in self.__dict__:
-        #     raise AttributeError(f"{self.__class__.__name__} object has no attribute or tag {attr}")
         if attr in self.tags:
             return self.tags[attr]
         else:
             raise AttributeError(f"{self.__class__.__name__} object has no attribute or tag {attr}")
 
     def __str__(self):
-        
         m, dims = self.motif.shape
         return f"PeriodicSet({self.name}: {m} motif points in {dims} dimensions)"
     
     def __repr__(self):
         return f"PeriodicSet(name: {self.name}, cell: {self.cell}, motif: {self.motif}, tags: {self.tags})"
     
-    # used for debugging. Checks if the motif/cell agree point for point
-    # (disregarding order), NOT up to isometry.
-    # Also, this function is unfinished. It'll get confused by structures 
-    # with overlapping sites --- but it's good enough for now.
+    # used for debugging, checks if the motif/cell agree point for point
+    # (disregarding order), NOT up to isometry. 
     def __eq__(self, other):
-        
-        motif = self.motif
-        motif_ = other.motif
-        cell = self.cell
-        cell_ = other.cell
 
-        if not (cell.shape == cell_.shape and motif.shape == motif_.shape):
+        if self.cell.shape != other.cell.shape or self.motif.shape != other.motif.shape:
             return False
 
-        if not np.allclose(cell, cell_):
+        if not np.allclose(self.cell, other.cell):
             return False
 
         # this is the part that'd be confused by overlapping sites
         # just checks every motif point in either have a neighbour in the other
-        diffs = np.amax(np.abs(motif[:, None] - motif), axis=-1)
-        
+        diffs = np.amax(np.abs(other.motif[:, None] - self.motif), axis=-1)
         if not np.all((np.amin(diffs, axis=0) <= 1e-6) & (np.amin(diffs, axis=-1) <= 1e-6)):
             return False
         
@@ -83,7 +71,7 @@ class PeriodicSet:
                 for i, i_ in zip(self.tags[tag], other.tags[tag]):
                     if i != i_:
                         return False
-                        
+
         return True
     
     def __ne__(self, other):
@@ -111,7 +99,6 @@ class PeriodicSet:
         """
         
         data = {}
-        
         for tag in self.tags:
             if np.isscalar(self.tags[tag]):
                 data[tag] = self.tags[tag]

@@ -53,7 +53,6 @@ def AMD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]],
 
     motif, cell, asymmetric_unit, multiplicities = _extract_motif_cell(periodic_set)
     pdd, _, _ = nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
-    
     return np.average(pdd, axis=0, weights=multiplicities)
 
 def PDD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]], 
@@ -111,7 +110,6 @@ def PDD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]],
     motif, cell, asymmetric_unit, multiplicities = _extract_motif_cell(periodic_set)
     
     if order == 1:
-        
         dists, _, _ = nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
         
         if multiplicities is None:
@@ -130,7 +128,6 @@ def PDD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]],
         return pdd
     
     else:
-        
         dists, cloud, inds = nearest_neighbours(motif, cell, k + order + 1)
         weights, dist, pdd = _PDD_h_geq_2(motif, dists, cloud, inds, k, order, lexsort, collapse, collapse_tol)
         
@@ -163,7 +160,6 @@ def finite_AMD(motif: np.ndarray):
     """
     
     dm = np.sort(squareform(pdist(motif)), axis=-1)[:, 1:]
-    
     return np.average(dm, axis=0)
 
 def finite_PDD(motif: np.ndarray, 
@@ -209,7 +205,6 @@ def finite_PDD(motif: np.ndarray,
     m = motif.shape[0]
     
     if order == 1:
-        
         dists = np.sort(dm, axis=-1)[:, 1:]
         weights = np.full((m, ), 1 / m)
         
@@ -224,7 +219,6 @@ def finite_PDD(motif: np.ndarray,
         return pdd
     
     else:
-        
         inds = np.argsort(dm, axis=-1)
         dists = np.take_along_axis(dm, inds, axis=-1)[:, 1:]
         weights, dist, pdd = _PDD_h_geq_2(motif, dists, motif, inds, m - order, order, lexsort, collapse, collapse_tol)
@@ -321,11 +315,9 @@ def _extract_motif_cell(periodic_set):
     asymmetric_unit, multiplicities = None, None
 
     if isinstance(periodic_set, PeriodicSet):
-        
         motif, cell = periodic_set.motif, periodic_set.cell
         
         if 'asymmetric_unit' in periodic_set.tags and 'wyckoff_multiplicities' in periodic_set.tags:
-            
             asymmetric_unit = periodic_set.asymmetric_unit
             multiplicities = periodic_set.wyckoff_multiplicities
     
@@ -352,26 +344,6 @@ def _collapse_rows(weights, dists, collapse_tol):
         
     return weights, dists
 
-def _collapse_rows_h_geq_2(weights, dist, pdd, collapse_tol):
-    
-    dist_diffs = np.abs(dist[:, None] - dist) <= collapse_tol
-    
-    if dist.ndim == 1:
-        dist_overlapping = dist_diffs
-    else:
-        dist_overlapping = np.all(np.all(dist_diffs, axis=-1), axis=-1)
-    
-    pdd_overlapping = np.all(np.all(np.abs(pdd[:, None] - pdd) <= collapse_tol, axis=-1), axis=-1)
-    overlapping = np.logical_and(pdd_overlapping, dist_overlapping)
-    
-    res = _group_overlapping_and_sum_weights(weights, overlapping)
-    if res is not None:
-        weights = res[0]
-        dist = dist[res[1]]
-        pdd = pdd[res[1]]
-    
-    return weights, dist, pdd
-
 def _PDD_h_geq_2(motif, dists, cloud, inds, k, order, 
                  lexsort, collapse, collapse_tol):
     """Higher-order PDD algorithm. Not particularly optimised or well-tested."""
@@ -382,14 +354,11 @@ def _PDD_h_geq_2(motif, dists, cloud, inds, k, order,
     pdd = []
     
     for points in combinations(range(motif.shape[0]), order):
-        
         points = np.array(points)
         done = set(points)
         pointers = [0] * order
-        
         row = []
         for _ in range(k):
-        
             for i in range(order):
                 while int(inds[points[i]][pointers[i]]) in done:
                     if pointers[i] < k:
@@ -415,7 +384,20 @@ def _PDD_h_geq_2(motif, dists, cloud, inds, k, order,
     dist = np.array(dist)
     
     if collapse:
-        weights, dist, pdd = _collapse_rows_h_geq_2(weights, dist, pdd, collapse_tol)
+        dist_diffs = np.abs(dist[:, None] - dist) <= collapse_tol
+    
+        if dist.ndim == 1:
+            dist_overlapping = dist_diffs
+        else:
+            dist_overlapping = np.all(np.all(dist_diffs, axis=-1), axis=-1)
+        
+        pdd_overlapping = np.all(np.all(np.abs(pdd[:, None] - pdd) <= collapse_tol, axis=-1), axis=-1)
+        overlapping = np.logical_and(pdd_overlapping, dist_overlapping)
+        res = _group_overlapping_and_sum_weights(weights, overlapping)
+        if res is not None:
+            weights = res[0]
+            dist = dist[res[1]]
+            pdd = pdd[res[1]]
     
     if lexsort:
         if order == 2:

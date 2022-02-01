@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.7] - 10/01/2022
+## [1.1.7] - 01/02/2022
 
 ### Added
 
@@ -15,6 +15,8 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - Parameter `order` of `amd.PDD` no longer refers to lexicographically ordering the rows, this has been changed to `lexsort`. Higher-order PDDs are now implemented and `order` refers to the order of the PDD (default 1).
+
+- Fixed/reworked the ccdc Reader (especially for disorder). The disorder option 'ordered_sites' now does not remove all atoms with partial occupancy; rather it essentially (for the ccdc reader) uses the motif of entry.molecule instead of entry.disordered_molecule (removes atoms whose label ends with ?), so the result should look like some feasible ordered structure.
 
 ## [1.1.6] - 29/11/2021
 

@@ -7,6 +7,5 @@ tests/
 __pycache__/
 .pytest_cache/
 *.so
-*.cfg
 *.toml
 *~

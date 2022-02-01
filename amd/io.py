@@ -70,6 +70,7 @@ class _Reader:
                  heaviest_component=False,
                  extract_data=None,
                  include_if=None,
+                 show_warnings=True,
                 ):
         
         # settings
@@ -95,6 +96,7 @@ class _Reader:
         self.heaviest_component = heaviest_component
         self.extract_data = extract_data
         self.include_if = include_if
+        self.show_warnings = show_warnings
     
     ### public interface ###
     
@@ -119,7 +121,7 @@ class _Reader:
                 yield periodic_set
 
     @staticmethod
-    def _expand(asym_frac_motif: np.ndarray, sitesym: Sequence[str]) -> Tuple[np.ndarray, ...]:
+    def _expand(asym_frac_motif: np.ndarray, sitesym: Sequence[str], show_warnings=True) -> Tuple[np.ndarray, ...]:
         """
         Asymmetric unit's fractional coords + sitesyms (as strings)
         -->
@@ -134,7 +136,6 @@ class _Reader:
         inverses = []
         
         for inv, site in enumerate(asym_frac_motif):
-            
             multiplicity = 0
             
             for rot, trans in zip(rotations, translations):
@@ -155,8 +156,8 @@ class _Reader:
                         if inverses[ind] == inv:
                             pass
                         else:
-                            warnings.warn(f'positions {inverses[ind]} and {inv} are equivalent')
-
+                            if show_warnings:
+                                warnings.warn(f'positions {inverses[ind]} and {inv} are equivalent')
                 else:
                     all_sites.append(site_)
                     inverses.append(inv)
@@ -180,78 +181,73 @@ class _Reader:
         if self.include_if:
             if not all(check(block) for check in self.include_if):
                 return None
-        
-        # could replace with get_cellpar + cell_to_cellpar. Is there any point?
+            
+        # cell & asymmetric unit
         cell = block.get_cell().array
-        
-        # get asymmetric unit's fractional motif
         asym_frac_motif = [block.get(name) for name in _Reader.atom_site_fract_tags]
         if None in asym_frac_motif:
             asym_motif = [block.get(name) for name in _Reader.atom_site_cartn_tags]
             if None in asym_motif:
-                warnings.warn(f'Skipping {block.name} as coordinates were not found')
+                if self.show_warnings:
+                    warnings.warn(f'Skipping {block.name} as coordinates were not found')
                 return None
-                
-            asym_frac_motif = np.array(asym_motif) @ np.linalg.inv(cell)
-            
-        asym_frac_motif = np.array(asym_frac_motif).T     # fract coords in cif
-        
-        # remove will contain indices of all sites to remove
-        remove = []
+            asym_frac_motif = np.array(asym_motif) @ np.linalg.inv(cell)   
+        asym_frac_motif = np.array(asym_frac_motif).T
         
         try:
             asym_symbols = block.get_symbols()
-        except NoStructureData:
+        except NoStructureData as e:
             asym_symbols = ['Unknown' for _ in range(len(asym_frac_motif))]
 
-        # remove Hydrogens if requested
+        remove = [] # indices of sites to remove
         if self.remove_hydrogens:
-            remove.extend([i for i, sym in enumerate(asym_symbols) if sym == 'H'])
+            remove.extend((i for i, sym in enumerate(asym_symbols) if sym in 'HD'))
         
-        # disorder. if 'all_sites', include all sites. if 'ordered_sites', remove sites with disorder.
-        # if 'skip', don't read this structure
-        disordered = []             # list of indices where disorder is
-        asym_is_disordered = []     # True/False list same length as asym unit
+        # disorder
+        asym_is_disordered = []
         occupancies = block.get('_atom_site_occupancy')
-        # if no disorder information, assume there is no disorder
+        labels = block.get('_atom_site_label')
         if occupancies is not None:
-            # get indices of sites with fractional occupancy
-            for i, occ in enumerate(occupancies):
-                if i not in remove and isinstance(occ, (float, int)) and occ < 1:
-                    disordered.append(i)
-                    asym_is_disordered.append(True)
+            disordered = []     # indices where there is disorder
+            for i, (occ, label) in enumerate(zip(occupancies, labels)):
+                if (isinstance(occ, (float, int)) and occ < 1) or label.endswith('?'):
+                    if i not in remove:
+                        disordered.append(i)
+                        asym_is_disordered.append(True)
                 else:
                     asym_is_disordered.append(False)
 
             if self.disorder == 'skip' and len(disordered) > 0:
-                warnings.warn(f'Skipping {block.name} as structure is disordered')
+                if self.show_warnings:
+                    warnings.warn(f'Skipping {block.name} as structure is disordered')
                 return None
             elif self.disorder == 'ordered_sites':
                 remove.extend(disordered)
         
-        # get rid of unwanted sites in asym unit
+        # remove sites
         asym_frac_motif = np.mod(np.delete(asym_frac_motif, remove, axis=0), 1)
         asym_symbols = [s for i, s in enumerate(asym_symbols) if i not in remove]
         asym_is_disordered = [v for i, v in enumerate(asym_is_disordered) if i not in remove]
         
+        # if there are overlapping sites in asym unit, warn and keep only one
         site_diffs = np.abs(asym_frac_motif[:, None] - asym_frac_motif)
         overlapping = np.triu(np.all((site_diffs <= _Reader.TOL) | (np.abs(site_diffs - 1) <= _Reader.TOL), axis=-1), 1)
         
-        # if disorder is 'all_sites' and overlapping sites are disordered, don't remove either
-        if self.disorder == 'all_sites':
+        if self.disorder == 'all_sites':    # don't remove overlapping sites if one is disordered
             for i, j in np.argwhere(overlapping):
-                if asym_is_disordered[i] and asym_is_disordered[j]:
+                if asym_is_disordered[i] or asym_is_disordered[j]:
                     overlapping[i, j] = False
         
-        # if sites in asym unit overlap, warn and keep only one
         if overlapping.any():
-            warnings.warn(f'{block.name} may have overlapping sites')
+            if self.show_warnings:
+                warnings.warn(f'{block.name} may have overlapping sites; duplicates will be removed')
             keep_sites = ~overlapping.any(0)
             asym_frac_motif = asym_frac_motif[keep_sites]
-            asym_symbols = [t for t, keep in zip(asym_symbols, keep_sites) if keep]
+            asym_symbols = [sym for sym, keep in zip(asym_symbols, keep_sites) if keep]
         
         if asym_frac_motif.shape[0] == 0:
-            warnings.warn(f'Skipping {block.name} with no accepted sites')
+            if self.show_warnings:
+                warnings.warn(f'Skipping {block.name} as there are no sites with coordinates')
             return None
 
         sitesym = ('x,y,z',)
@@ -260,17 +256,17 @@ class _Reader:
                 sitesym = block[tag]
                 break
             
-        if isinstance(sitesym, str):
-            sitesym = [sitesym]
+        if isinstance(sitesym, str): sitesym = [sitesym]
         
-        frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym)
+        frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym, 
+                                                                       show_warnings=self.show_warnings)
         motif = frac_motif @ cell
 
         kwargs = {
-            'name': block.name, 
-            'asymmetric_unit': asym_unit,
-            'wyckoff_multiplicities': multiplicities,
-            'types': [asym_symbols[i] for i in inverses]
+            'name':                     block.name, 
+            'asymmetric_unit':          asym_unit,
+            'wyckoff_multiplicities':   multiplicities,
+            'types':                    [asym_symbols[i] for i in inverses],
         }
         
         if self.extract_data is not None:
@@ -290,168 +286,131 @@ class _Reader:
         
         # basic checks first. Some exclude the structure from consideration
         if not entry.has_3d_structure:
-            warnings.warn(f'Skipping {entry.identifier} as entry has no 3D structure')
+            if self.show_warnings:
+                warnings.warn(f'Skipping {entry.identifier} as entry has no 3D structure')
             return None
         
         # at least one entry raised RuntimeError when reading its crystal
         try:
             crystal = entry.crystal
         except RuntimeError as e:
-            warnings.warn(f'Skipping {entry.identifier}: {e}')
+            if self.show_warnings:
+                warnings.warn(f'Skipping {entry.identifier}: {e}')
             return None
         
         # first disorder check, if skipping. If occ == 1 for all atoms but the entry
         # or crystal is listed as having disorder, skip (can't know where disorder is).
         # If occ != 1 for any atoms, we wait to see if we remove them before skipping.
+        molecule = crystal.disordered_molecule
+        if self.disorder == 'ordered_sites':
+            molecule.remove_atoms(a for a in molecule.atoms if a.label.endswith('?'))
+        
         may_have_disorder = False
         if self.disorder == 'skip':
-            for a in crystal.molecule.atoms:
+            for a in molecule.atoms:
                 occ = a.occupancy
-                if isinstance(occ, (int, float)) and occ < 1:
+                if a.label.endswith('?') or (isinstance(occ, (int, float)) and occ < 1):
                     may_have_disorder = True
                     break
-            
+                
             if not may_have_disorder:
                 if crystal.has_disorder or entry.has_disorder:
-                    warnings.warn(f'Skipping {entry.identifier} as structure is disordered')
+                    if self.show_warnings:
+                        warnings.warn(f'Skipping {crystal.identifier} as structure is disordered')
                     return None
-        
+            
+        if self.remove_hydrogens:
+            molecule.remove_atoms(a for a in molecule.atoms if a.atomic_symbol in 'HD')
+            
         # heaviest component (removes all but the heaviest component of the asym unit)
-        # intended for removing solvents
+        # intended for removing solvents. probably doesn't play well with disorder
         if self.heaviest_component:
-            if len(crystal.molecule.components) > 1:
+            if len(molecule.components) > 1:
                 component_weights = []
-                for component in crystal.molecule.components:
+                for component in molecule.components:
                     weight = 0
                     for a in component.atoms:
-                        if isinstance(a.occupancy, (float, int)):
-                            weight += a.occupancy * a.atomic_weight
-                        else:
-                            weight += a.atomic_weight
+                        if isinstance(a.atomic_weight, (float, int)):
+                            if isinstance(a.occupancy, (float, int)):
+                                weight += a.occupancy * a.atomic_weight
+                            else:
+                                weight += a.atomic_weight
                     component_weights.append(weight)
-                crystal.molecule = crystal.molecule.components[np.argmax(np.array(component_weights))]
+                molecule = molecule.components[np.argmax(np.array(component_weights))]
+            
+        crystal.molecule = molecule
         
-        # remove hydrogens
-        if self.remove_hydrogens:
-            mol = crystal.molecule
-            mol.remove_atoms(a for a in mol.atoms if a.atomic_symbol in 'HD')
-            crystal.molecule = mol
-        
-        # at this point all atoms to be removed have been removed.
+        # by here all atoms to be removed have been (except via ordered_sites).
         # If disorder == 'skip' and there were atom(s) with occ < 1 found 
         # eariler, we check if all such atoms were removed. If not, skip.
-        if self.disorder == 'skip':
-            if may_have_disorder:
-                for a in crystal.molecule.atoms:
-                    occ = a.occupancy
-                    if isinstance(occ, (int, float)) and occ < 1:
-                        warnings.warn(f'Skipping {entry.identifier} as structure is disordered')
-                        return None
+        if self.disorder == 'skip' and may_have_disorder:
+            for a in crystal.disordered_molecule.atoms:
+                occ = a.occupancy
+                if a.label.endswith('?') or (isinstance(occ, (int, float)) and occ < 1):
+                    if self.show_warnings:
+                        warnings.warn(f'Skipping {crystal.identifier} as structure is disordered')
+                    return None
         
-        # check all atoms have coords
-        ### --- ! --- ###
-        if not crystal.molecule.all_atoms_have_sites:
-            warnings.warn(f'Skipping {entry.identifier} as some atoms do not have sites')
+        # if disorder is all_sites, we need to know where disorder is to ignore overlaps
+        asym_is_disordered = []     # True/False list same length as asym unit
+        if self.disorder == 'all_sites':
+            for atom in crystal.asymmetric_unit_molecule.atoms:
+                occ = atom.occupancy
+                if a.label.endswith('?') or (isinstance(occ, (int, float)) and occ < 1):
+                    asym_is_disordered.append(True)
+                else:
+                    asym_is_disordered.append(False)
+    
+        # check all atoms have coords. option/default remove unknown sites?
+        if not molecule.all_atoms_have_sites or any(a.fractional_coordinates is None for a in molecule.atoms):
+            if self.show_warnings:
+                warnings.warn(f'Skipping {crystal.identifier} as some atoms do not have sites')
             return None
         
-        # above check doesn't catch everything?
-        # mol = crystal.molecule
-        # remove = []
-        # for atom in crystal.molecule.atoms:
-        #     if atom.fractional_coordinates is None:
-        #         remove.append(atom)
-        # mol.remove_atoms(remove)
-        # crystal.molecule = mol
-        
-        # disorder. if 'all_sites', get indices of disordered atoms
-        # otherwise, look for disorder and remove if 'ordered_sites' or skip if 'skip'
-        
-        if self.disorder != 'all_sites':
-            
-            mol = crystal.molecule
-            
-            disordered = []
-            for atom in mol.atoms:
-                occ = atom.occupancy
-                if isinstance(occ, (float, int)) and occ < 1:
-                    disordered.append(atom)
-            
-            if len(disordered) > 0:
-                if self.disorder == 'skip':
-                    warnings.warn(f'Skipping {entry.identifier} as structure is disordered')
-                    return None
-                elif self.disorder == 'ordered_sites':
-                    mol.remove_atoms(disordered)
-            
-            crystal.molecule = mol
-            
-        else:
-            
-            asym_is_disordered = []
-            for atom in crystal.asymmetric_unit_molecule.atoms:
-                val = True if (isinstance(atom.occupancy, (float, int)) and atom.occupancy < 1) else False
-                asym_is_disordered.append(val)
-        
-        mol = crystal.molecule
-        remove = []
-        for atom in mol.atoms:
-            if atom.fractional_coordinates is None:
-                remove.append(atom)
-        if remove:
-            warnings.warn(f'{entry.identifier} has sites with no coordinates')
-            
-        mol.remove_atoms(remove)
-        crystal.molecule = mol
-        
+        # cell & asymmetric unit
         cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
-        
-        # asymmetric unit fractional coordinates
-        asym_frac_motif = np.array([[
-                            a.fractional_coordinates.x, 
-                            a.fractional_coordinates.y, 
-                            a.fractional_coordinates.z]
-                            for a in crystal.asymmetric_unit_molecule.atoms])
-        
+        asym_frac_motif = np.array([tuple(a.fractional_coordinates) 
+                                    for a in crystal.asymmetric_unit_molecule.atoms])
         asym_frac_motif = np.mod(asym_frac_motif, 1)
         asym_symbols = [a.atomic_symbol for a in crystal.asymmetric_unit_molecule.atoms]
         
-        # check for overlapping sites
+        # if there are overlapping sites in asym unit, warn and remove one
         site_diffs = np.abs(asym_frac_motif[:, None] - asym_frac_motif)
         overlapping = np.triu(np.all((site_diffs <= _Reader.TOL) | (np.abs(site_diffs - 1) <= _Reader.TOL), axis=-1), 1)
-        
-        # if disorder is 'all_sites' and overlapping sites are disordered, don't remove either
-        if self.disorder == 'all_sites':
+
+        if self.disorder == 'all_sites':    # don't remove overlapping sites if either is disordered
             for i, j in np.argwhere(overlapping):
-                if asym_is_disordered[i] and asym_is_disordered[j]:
+                if asym_is_disordered[i] or asym_is_disordered[j]:
                     overlapping[i, j] = False
         
-        # if sites in asym unit overlap, warn and keep only one
         if overlapping.any():
-            warnings.warn(f'{entry.identifier} may have overlapping sites')
+            if self.show_warnings:
+                warnings.warn(f'{crystal.identifier} may have overlapping sites; duplicates will be removed')
             keep_sites = ~overlapping.any(0)
             asym_frac_motif = asym_frac_motif[keep_sites]
-            asym_symbols = [t for t, keep in zip(asym_symbols, keep_sites) if keep]
-        
-        # if the above removed everything, skip this structure
+            asym_symbols = [sym for sym, keep in zip(asym_symbols, keep_sites) if keep]
+
         if asym_frac_motif.shape[0] == 0:
-            warnings.warn(f'Skipping {entry.identifier} with no accepted sites')
+            if self.show_warnings:
+                warnings.warn(f'Skipping {crystal.identifier} as there are no sites with coordinates')
             return None
         
         sitesym = crystal.symmetry_operators
         if not sitesym: sitesym = ('x,y,z',)
         
-        frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym)
+        frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym, 
+                                                                       show_warnings=self.show_warnings)
         motif = frac_motif @ cell
         
         kwargs = {
-            'name': crystal.identifier, 
-            'asymmetric_unit': asym_unit,
-            'wyckoff_multiplicities': multiplicities,
-            'types': [asym_symbols[i] for i in inverses]
+            'name':                     crystal.identifier, 
+            'asymmetric_unit':          asym_unit,
+            'wyckoff_multiplicities':   multiplicities,
+            'types':                    [asym_symbols[i] for i in inverses],
         }
 
         if self.extract_data is not None:
-            entry.crystal.molecule = crystal.molecule
+            entry.crystal.molecule = crystal.disordered_molecule
             for key in self.extract_data:
                 kwargs[key] = self.extract_data[key](entry)
 
@@ -490,31 +449,23 @@ class CifReader(_Reader):
                 amds.append(amd.AMD(periodic_set, 100))
     """
     
-    _READERS = {'ase', 'ccdc'}
-    
     @_extend_signature(_Reader.__init__)
     def __init__(self, filename, reader='ase', **kwargs):
         
         super().__init__(**kwargs)
         
-        if reader not in CifReader._READERS:
-            raise ValueError(f'Invalid reader {reader}. Reader must be one of {CifReader._READERS}')
+        if reader not in ('ase', 'ccdc'):
+            raise ValueError(f'Invalid reader {reader}; must be ase or ccdc.')
 
-        if reader != 'ccdc':
-            if self.heaviest_component:
-                raise NotImplementedError(f'Parameter heaviest_component not implimented for {reader}, only ccdc.')
-        
-        # function _map from parent _Reader sets up self._generator which yields PeriodicSet objects
+        if reader == 'ase' and self.heaviest_component:
+            raise NotImplementedError(f'Parameter heaviest_component not implimented for {reader}, only ccdc.')
 
         if reader == 'ase':
-            
             self._generator = self._map(self._CIFBlock_to_PeriodicSet, parse_cif(filename))
             
         elif reader == 'ccdc':
-            
             if not _CCDC_ENABLED:
-                raise ImportError(f"Failed to import ccdc. Either it is not installed or not licensed.")
-            
+                raise ImportError(f"Failed to import csd-python-api; please check it is installed and licensed.")
             self._generator = self._map(self._Entry_to_PeriodicSet, EntryReader(filename))
 
 class CSDReader(_Reader):
@@ -556,31 +507,26 @@ class CSDReader(_Reader):
     def __init__(self, refcodes=None, families=False, **kwargs):
 
         if not _CCDC_ENABLED:
-            raise ImportError(f"Failed to import ccdc. Either it is not installed or is not licensed.")
+            raise ImportError(f"Failed to import csd-python-api; please check it is installed and licensed.")
 
         super().__init__(**kwargs)
 
         if isinstance(refcodes, str) and refcodes.lower() == 'csd':
             refcodes = None
-            
+
         if refcodes is None:
             families = False
         else:
-            if isinstance(refcodes, str):
-                refcodes = [refcodes]
-            else:
-                refcodes = list(refcodes)
+            refcodes = [refcodes] if isinstance(refcodes, str) else list(refcodes)
         
         if families:
-            
-            # extend list of families to all refcodes
             all_refcodes = []
             for refcode in refcodes:
                 query = TextNumericSearch()
                 query.add_identifier(refcode)
-                all_refcodes.extend([hit.identifier for hit in query.search()])
+                all_refcodes.extend((hit.identifier for hit in query.search()))
 
-            # filters down to all unique refcodes
+            # filter to unique refcodes
             seen = set()
             seen_add = seen.add
             refcodes = [refcode for refcode in all_refcodes if not (refcode in seen or seen_add(refcode))]
@@ -627,11 +573,10 @@ class SetWriter:
             raise ValueError(f'Object type {periodic_set.__class__.__name__} cannot be written with SetWriter')
         
         # need a name to store or you can't access items by key
-        if periodic_set.name is None and name is None:
-            raise ValueError('Periodic set must have a name to be written. Either set the name '
-                             'attribute of the PeriodicSet or pass a name to SetWriter.write()')
-        
         if name is None:
+            if periodic_set.name is None:
+                raise ValueError('Periodic set must have a name to be written. Either set the name '
+                                 'attribute of the PeriodicSet or pass a name to SetWriter.write()')
             name = periodic_set.name
         
         # this group is the PeriodicSet
@@ -639,43 +584,31 @@ class SetWriter:
         
         # datasets in the group for motif and cell
         group.create_dataset('motif', data=periodic_set.motif)
-        group.create_dataset('cell', data=periodic_set.cell)
+        group.create_dataset('cell',  data=periodic_set.cell)
         
         if periodic_set.tags:
-            
             # a subgroup contains tags that are lists or ndarrays
             tags_group = group.create_group('tags')
             
             for tag in periodic_set.tags:
-                
                 data = periodic_set.tags[tag]
 
-                # scalars (nums and strs) stored as attrs
-                if np.isscalar(data):
+                if data is None:                    # nonce to handle None
+                    tags_group.attrs[tag] = '__None' 
+                elif np.isscalar(data):             # scalars (nums and strs) stored as attrs
                     tags_group.attrs[tag] = data
-                    
-                elif data is None:
-                    tags_group.attrs[tag] = '__None' # nonce to handle None
-                
                 elif isinstance(data, np.ndarray):
                     tags_group.create_dataset(tag, data=data)
-                    
-                elif isinstance(data, list):
-                    
+                elif isinstance(data, list):    
                     # lists of strings stored as special type for some reason
-                    # if any string is in the tags
                     if any(isinstance(d, str) for d in data):
                         data = [str(d) for d in data]
-                        tags_group.create_dataset(tag, data=data, 
-                                                  dtype=SetWriter._str_dtype)
-                        
-                    # everything else must be castable to ndarray
-                    else:
+                        tags_group.create_dataset(tag, data=data, dtype=SetWriter._str_dtype)
+                    else:    # other lists must be castable to ndarray
                         data = np.asarray(data)
-                        tags_group.create_dataset(tag, data=np.array(data))
-                    
+                        tags_group.create_dataset(tag, data=np.array(data))           
                 else:
-                    raise ValueError(f'Cannot store object {data} of type {type(data)} in hdf5')
+                    raise ValueError(f'Cannot store tag of type {type(data)} with SetWriter')
     
     def iwrite(self, periodic_sets: Iterable[PeriodicSet]):
         """Write :class:`.periodicset.PeriodicSet` objects from an iterable to file."""
@@ -710,7 +643,6 @@ class SetReader:
         
         if 'tags' in group:
             for tag in group['tags']:
-                # tag: data e.g. 'types': ['C', 'H', 'O',...]
                 data = group['tags'][tag][:]
                      
                 if any(isinstance(d, (bytes, bytearray)) for d in data):
@@ -720,11 +652,7 @@ class SetReader:
         
             for attr in group['tags'].attrs:
                 data = group['tags'].attrs[attr]
-                
-                if data == '__None':
-                    periodic_set.tags[attr] = None
-                else:
-                    periodic_set.tags[attr] = data
+                periodic_set.tags[attr] = None if data == '__None' else data
 
         return periodic_set
     
@@ -733,7 +661,7 @@ class SetReader:
         self.file.close()
     
     def family(self, refcode: str) -> Iterable[PeriodicSet]:
-        """Yield any :class:`.periodicset.PeriodicSet` whose name 
+        """Yield any :class:`.periodicset.PeriodicSet`s whose name 
         starts with input refcode."""
         
         for name in self.keys():
@@ -748,8 +676,7 @@ class SetReader:
         return len(self.keys())
     
     def __iter__(self):
-        # interface to loop over the SetReader
-        # does not close the SetReader when done
+        # interface to loop over the SetReader; does not close the SetReader when done
         for name in self.keys():
             yield self._get_set(name)
 
@@ -830,7 +757,6 @@ class SetReader:
 
 ### ccdc.crystal.Crystal --> amd.periodicset.PeriodicSet
 ### ignores disorder, missing sites/coords, checks & no options
-
 def crystal_to_periodicset(crystal):
     
     cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)

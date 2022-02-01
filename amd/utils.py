@@ -77,6 +77,7 @@ class ETA:
                                   (1 - ETA._moving_average_factor) * self.time_per_epoch
             
         percent = round(100 * self.counter / self.to_do, 2)
+        percent = '{:.2f}'.format(percent)
         remaining = int(((self.to_do - self.counter) / self.update_rate) * self.time_per_epoch)
         eta = str(timedelta(seconds=remaining))
         self.tic = toc
@@ -110,7 +111,7 @@ class ETA:
 def extract_tags(periodic_sets) -> dict:
     """Return ``dict`` with scalar data in the tags of PeriodicSets in the passed list.
     
-    Dict is in format easily passable to ``pandas.DataFrame``, as in::
+    Dict is in format passable to ``pandas.DataFrame``, as in::
     
         periodic_sets = list(amd.SetReader('periodic_sets.hdf5'))
         names = [s.name for s in periodic_sets]

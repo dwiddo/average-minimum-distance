@@ -49,18 +49,13 @@ def spacegroup(entry):
     return entry.crystal.spacegroup_symbol
 
 def has_disorder(entry):
-    
-    if entry.has_disorder:
+    """Returns True if any disorder is found in the crystal."""
+    if entry.has_disorder or entry.crystal.has_disorder:
         return True
-    
-    if entry.crystal.has_disorder:
-        return True
-    
     for a in entry.crystal.molecule.atoms:
         occ = a.occupancy
-        if isinstance(occ, (int, float)) and occ < 1:
+        if a.label.endswith('?') or (isinstance(occ, (int, float)) and occ < 1):
             return True
-
     return False
 
 def molecular_centres(entry):
