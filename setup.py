@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 classifiers = [
     'Development Status :: 3 - Alpha',
-    'Programming Language :: Python :: 3.7'
+    'Programming Language :: Python :: 3.7',
     'Intended Audience :: Science/Research',
     'Topic :: Software Development :: Libraries',
     'License :: Other/Proprietary License',
