@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.8] - 22/02/2022
+
+### Added
+
+- Reconstructing periodic sets from PDDs added. Recently it was shown the PDD is complete in a general position and it is possible to reconstruct a periodic set from its PDD with large enough k. The first (inefficient) implementation of this algorithm has be added in the module amd.reconstruct.
+  
+- amd.CifReader can now read a folder of .cifs or other files with the optional folder argument (True/False).
+
+### Changed
+
+- `amd.finite_AMD()` and `amd.finite_PDD()` changed to `amd.AMD_finite()` and `amd.PDD_finite()` for easier autocompletion.
+
 ## [1.1.7] - 01/02/2022
 
 ### Added

@@ -101,7 +101,6 @@ def generate_concentric_cloud(motif: np.ndarray, cell: np.ndarray) -> Iterable[n
         int_lattice = next(int_lattice_generator) @ cell
         yield np.concatenate([motif + translation for translation in int_lattice])
 
-
 def nearest_neighbours(motif: np.ndarray, 
                        cell: np.ndarray, 
                        k: int, 
@@ -162,10 +161,41 @@ def nearest_neighbours(motif: np.ndarray,
     while not np.array_equal(pdd, pdd_):
         pdd = pdd_
         cloud = np.append(cloud, next(cloud_generator), axis=0)
+        cloud = np.append(cloud, next(cloud_generator), axis=0)
         tree = cKDTree(cloud, compact_nodes=False, balanced_tree=False)
         pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
 
     return pdd_[:, 1:], cloud, inds[:, 1:]
+
+def nearest_neighbours_minval(motif, cell, min_val):
+    """PDD large enough to be reconstructed from 
+    (such that last col values all > 2 * diam(cell))."""
+    
+    cloud_generator = generate_concentric_cloud(motif, cell)
+    
+    cloud = []
+    for _ in range(3):
+        cloud.append(next(cloud_generator))
+        
+    cloud = np.concatenate(cloud)
+    tree = cKDTree(cloud, compact_nodes=False, balanced_tree=False)
+    pdd_, _ = tree.query(motif, k=cloud.shape[0], workers=-1)
+    pdd = np.empty_like(pdd_)
+
+    while True:
+        if np.all(pdd[:, -1] >= min_val):
+            col_where = np.argwhere(np.all(pdd >= min_val, axis=0))[0][0]
+            if np.array_equal(pdd[:, :col_where+1], pdd_[:, :col_where+1]):
+                break
+            
+        pdd = pdd_
+        cloud = np.vstack((cloud, next(cloud_generator), next(cloud_generator)))
+        tree = cKDTree(cloud, compact_nodes=False, balanced_tree=False)
+        pdd_, _ = tree.query(motif, k=cloud.shape[0], workers=-1)
+    
+    k = np.argwhere(np.all(pdd >= min_val, axis=0))[0][0]
+
+    return pdd[:, 1:k+1]
 
 if __name__ == '__main__':
     

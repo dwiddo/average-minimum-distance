@@ -13,6 +13,8 @@ recomputing invariants.
 """
 
 from typing import Callable, Iterable, Sequence, Tuple, Optional
+from itertools import chain
+import os
 import numpy as np
 from ase.io.cif import NoStructureData, CIFBlock, parse_cif
 from ase.spacegroup.spacegroup import parse_sitesym     # string symop -> rot, trans
@@ -32,7 +34,7 @@ try:
     _CCDC_ENABLED = True
 except Exception:
     _CCDC_ENABLED = False
-
+    
 
 class _Reader:
     """Base Reader class. Contains parsers for converting ase CifBlock 
@@ -62,7 +64,7 @@ class _Reader:
     atom_site_cartn_tags = ['_atom_site_cartn_x', '_atom_site_cartn_y', '_atom_site_cartn_z']
     symop_tags = ['_space_group_symop_operation_xyz', '_space_group_symop.operation_xyz', '_symmetry_equiv_pos_as_xyz']
     
-    TOL = 1e-3
+    equiv_site_tol = 1e-3
     
     def __init__(self, 
                  remove_hydrogens=False,      
@@ -129,7 +131,6 @@ class _Reader:
         """
 
         rotations, translations = parse_sitesym(sitesym)
-        
         all_sites = []
         asym_unit = [0]
         multiplicities = []
@@ -148,7 +149,7 @@ class _Reader:
                     continue
                 
                 diffs = np.abs(site_ - all_sites)
-                mask = np.all(np.logical_or(diffs <= _Reader.TOL, np.abs(diffs - 1) <= _Reader.TOL), axis=-1)
+                mask = np.all(np.logical_or(diffs <= _Reader.equiv_site_tol, np.abs(diffs - 1) <= _Reader.equiv_site_tol), axis=-1)
                 
                 if np.any(mask):
                     where_equal = np.argwhere(mask).flatten()
@@ -170,7 +171,6 @@ class _Reader:
         frac_motif = np.array(all_sites)
         asym_unit = np.array(asym_unit[:-1])
         multiplicities = np.array(multiplicities)
-        
         return frac_motif, asym_unit, multiplicities, inverses
    
     ### Parsers. Intended to be passed to _map ###
@@ -231,7 +231,7 @@ class _Reader:
         
         # if there are overlapping sites in asym unit, warn and keep only one
         site_diffs = np.abs(asym_frac_motif[:, None] - asym_frac_motif)
-        overlapping = np.triu(np.all((site_diffs <= _Reader.TOL) | (np.abs(site_diffs - 1) <= _Reader.TOL), axis=-1), 1)
+        overlapping = np.triu(np.all((site_diffs <= _Reader.equiv_site_tol) | (np.abs(site_diffs - 1) <= _Reader.equiv_site_tol), axis=-1), 1)
         
         if self.disorder == 'all_sites':    # don't remove overlapping sites if one is disordered
             for i, j in np.argwhere(overlapping):
@@ -376,7 +376,7 @@ class _Reader:
         
         # if there are overlapping sites in asym unit, warn and remove one
         site_diffs = np.abs(asym_frac_motif[:, None] - asym_frac_motif)
-        overlapping = np.triu(np.all((site_diffs <= _Reader.TOL) | (np.abs(site_diffs - 1) <= _Reader.TOL), axis=-1), 1)
+        overlapping = np.triu(np.all((site_diffs <= _Reader.equiv_site_tol) | (np.abs(site_diffs - 1) <= _Reader.equiv_site_tol), axis=-1), 1)
 
         if self.disorder == 'all_sites':    # don't remove overlapping sites if either is disordered
             for i, j in np.argwhere(overlapping):
@@ -408,7 +408,7 @@ class _Reader:
             'wyckoff_multiplicities':   multiplicities,
             'types':                    [asym_symbols[i] for i in inverses],
         }
-
+        print(asym_symbols)
         if self.extract_data is not None:
             entry.crystal.molecule = crystal.disordered_molecule
             for key in self.extract_data:
@@ -450,7 +450,7 @@ class CifReader(_Reader):
     """
     
     @_extend_signature(_Reader.__init__)
-    def __init__(self, filename, reader='ase', **kwargs):
+    def __init__(self, path, reader='ase', folder=False, **kwargs):
         
         super().__init__(**kwargs)
         
@@ -461,12 +461,29 @@ class CifReader(_Reader):
             raise NotImplementedError(f'Parameter heaviest_component not implimented for {reader}, only ccdc.')
 
         if reader == 'ase':
-            self._generator = self._map(self._CIFBlock_to_PeriodicSet, parse_cif(filename))
+            if folder:
+                generators = (parse_cif(os.path.join(path, file)) for file in os.listdir(path) if file.endswith('.cif'))
+                raw_generator = chain(*generators)
+            else:
+                raw_generator = parse_cif(path)
+            
+            self._generator = self._map(self._CIFBlock_to_PeriodicSet, raw_generator)
             
         elif reader == 'ccdc':
             if not _CCDC_ENABLED:
                 raise ImportError(f"Failed to import csd-python-api; please check it is installed and licensed.")
-            self._generator = self._map(self._Entry_to_PeriodicSet, EntryReader(filename))
+            
+            if folder:
+                generators = []
+                for file in os.listdir(path):
+                    suff = os.path.splitext(file)[1][1:]
+                    if suff.lower() in EntryReader.known_suffixes:
+                        generators.append(EntryReader(os.path.join(path, file)))
+                raw_generator = chain(*generators)
+            else:
+                raw_generator = EntryReader(path)
+                
+            self._generator = self._map(self._Entry_to_PeriodicSet, raw_generator)
 
 class CSDReader(_Reader):
     """Read Entries from the CSD, yielding :class:`.periodicset.PeriodicSet` objects.

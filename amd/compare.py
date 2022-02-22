@@ -46,6 +46,10 @@ def emd(pdd, pdd_, metric='chebyshev', return_transport=False, **kwargs):
     else:
         return emd_dist
 
+def EMD(pdd, pdd_, metric='chebyshev', return_transport=False, **kwargs):
+    """Alias for amd.emd()."""
+    return emd(pdd, pdd_, metric=metric, return_transport=return_transport, **kwargs)
+
 def AMD_cdist(amds: Union[np.ndarray, List[np.ndarray]], 
               amds_: Union[np.ndarray, List[np.ndarray]],
               k: Optional[int] = None,

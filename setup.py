@@ -3,16 +3,18 @@ from setuptools import setup, find_packages
 classifiers = [
     'Development Status :: 3 - Alpha',
     'Programming Language :: Python :: 3.7',
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
     'Intended Audience :: Science/Research',
     'Topic :: Software Development :: Libraries',
     'License :: Other/Proprietary License',
 ]
 
 install_requires = [
-	'numpy==1.20.1,<1.21',
-	'scipy==1.6.1',
+	'numpy>=1.21',
+	'scipy>=1.6.1',
 	'ase>=3.22.0',
-	'numba>=0.53.1',
+	'numba>=0.55.0',
 	'h5py>=3.3.0',
 ]
 
@@ -29,7 +31,7 @@ project_urls = {
 
 kw = {
     'name':             			 'average-minimum-distance',
-    'version':          			 '1.1.7',
+    'version':          			 '1.1.8',
     'description':      			 'For calculation and comparison of AMD/PDD isometric invariants of periodic sets. Includes .cif reading functionality.',
     'long_description': 			 open('README.md').read(),
     'long_description_content_type': 'text/markdown',
@@ -40,7 +42,7 @@ kw = {
     'url':              			 'https://github.com/dwiddo/average-minimum-distance',
     'project_urls':					 project_urls,
     'classifiers':      			 classifiers,
-    'python_requires':				 '>=3.6',
+    'python_requires':				 '>=3.7',
     'install_requires': 			 install_requires,
     'extras_require':   			 extras_require,
     'packages':         			 find_packages(),

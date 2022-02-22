@@ -116,10 +116,12 @@ for i in range(len(set1)):
 
 The arXiv paper for this package is [here](arxiv.org/abs/2009.02488). Use the following bib reference to cite us:
 
-@article{widdowson2020average,  
-  title={Average Minimum Distances of periodic point sets},  
-  author={Daniel Widdowson and Marco Mosca and Angeles Pulido and Vitaliy Kurlin and Andrew Cooper},  
-  journal={arXiv:2009.02488},  
-  year={2020}
-
+@article{widdowson2022average,
+  title={Average Minimum Distances of periodic point sets - fundamental invariants for mapping all periodic crystals},
+  author={Daniel Widdowson and Marco M Mosca and Angeles Pulido and Vitaliy Kurlin and Andrew I Cooper},
+  journal={MATCH Communications in Mathematical and in Computer Chemistry},
+  doi={10.46793/match.87-3.529W},
+  volume={87},
+  pages={529-559},
+  year={2022}
 }

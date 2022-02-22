@@ -1,14 +1,16 @@
 """General utility functions and classes."""
 
 import inspect
+import random
 import time
 from datetime import timedelta
-import random
 import numpy as np
+
+def lattice_cubic(dims=3):
+    return (np.zeros((1, dims)), np.identity(dims))
 
 def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     """Simplified version of function from ase.geometry.
-    
     Unit cell params a,b,c,α,β,γ --> cell as 3x3 ndarray.
     """
     # Handle orthorhombic cells separately to avoid rounding errors
@@ -39,6 +41,20 @@ def cellpar_to_cell_2D(a, b, alpha):
     cell = np.array([[a, 0],
                      [b * np.cos(alpha * np.pi / 180.), b * np.sin(alpha * np.pi / 180.)]])
     return cell
+
+def diameter(cell):
+    """Diameter of a unit cell."""
+    dims = cell.shape[0]
+    if dims == 2:
+        d = np.amax(np.linalg.norm(np.array([cell[0] + cell[1], cell[0] - cell[1]]), axis=-1))
+    elif dims == 3:
+        d = np.amax(np.array([
+            np.linalg.norm(cell[0] + cell[1] + cell[2]),
+            np.linalg.norm(cell[0] + cell[1] - cell[2]),
+            np.linalg.norm(cell[0] - cell[1] + cell[2]),
+            np.linalg.norm(- cell[0] + cell[1] + cell[2])
+        ]))
+    return d
 
 def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
     

@@ -4,17 +4,17 @@
 from typing import Union, Tuple
 from collections import defaultdict
 from itertools import combinations
-import math
-
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
-
-from ._nearest_neighbours import nearest_neighbours
+from scipy.special import comb
+from ._nearest_neighbours import nearest_neighbours, nearest_neighbours_minval
 from .periodicset import PeriodicSet
+from .utils import diameter
+
 
 def AMD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]], 
         k: int) -> np.ndarray:
-    """Computes an AMD vector up to `k` from a periodic set.
+    """Computes the AMD up to `k` of a periodic set.
     
     Parameters
     ----------
@@ -61,7 +61,7 @@ def PDD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]],
         lexsort: bool = True, 
         collapse: bool = True, 
         collapse_tol: float = 1e-4) -> np.ndarray:
-    """Computes a PDD up to k from a periodic set.
+    """Computes the PDD up to `k` of a periodic set.
     
     Parameters
     ----------
@@ -128,12 +128,15 @@ def PDD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]],
         return pdd
     
     else:
+        if motif.shape[0] < order:
+            raise ValueError(f'Higher-order PDD is not defined when the number of motif points ({motif.shape[0]}) is smaller than the order ({order})')
+        
         dists, cloud, inds = nearest_neighbours(motif, cell, k + order + 1)
         weights, dist, pdd = _PDD_h_geq_2(motif, dists, cloud, inds, k, order, lexsort, collapse, collapse_tol)
         
         return weights, dist, pdd
 
-def finite_AMD(motif: np.ndarray):
+def AMD_finite(motif: np.ndarray):
     """Computes the AMD of a finite point set (up to k = `len(motif) - 1`).
     
     Parameters
@@ -153,8 +156,8 @@ def finite_AMD(motif: np.ndarray):
         trapezium = np.array([[0,0],[1,1],[3,1],[4,0]])
         kite      = np.array([[0,0],[1,1],[1,-1],[4,0]])
         
-        trap_amd = amd.finite_AMD(trapezium)
-        kite_amd = amd.finite_AMD(kite)
+        trap_amd = amd.AMD_finite(trapezium)
+        kite_amd = amd.AMD_finite(kite)
     
         dist = amd.AMD_pdist(trap_amd, kite_amd)
     """
@@ -162,7 +165,7 @@ def finite_AMD(motif: np.ndarray):
     dm = np.sort(squareform(pdist(motif)), axis=-1)[:, 1:]
     return np.average(dm, axis=0)
 
-def finite_PDD(motif: np.ndarray, 
+def PDD_finite(motif: np.ndarray, 
                order: int = 1,
                lexsort: bool = True, 
                collapse: bool = True, 
@@ -195,8 +198,8 @@ def finite_PDD(motif: np.ndarray,
         trapezium = np.array([[0,0],[1,1],[3,1],[4,0]])
         kite      = np.array([[0,0],[1,1],[1,-1],[4,0]])
         
-        trap_pdd = amd.finite_PDD(trapezium)
-        kite_pdd = amd.finite_PDD(kite)
+        trap_pdd = amd.PDD_finite(trapezium)
+        kite_pdd = amd.PDD_finite(kite)
     
         dist = amd.emd(trap_pdd, kite_pdd)
     """
@@ -224,6 +227,69 @@ def finite_PDD(motif: np.ndarray,
         weights, dist, pdd = _PDD_h_geq_2(motif, dists, motif, inds, m - order, order, lexsort, collapse, collapse_tol)
         
         return weights, dist, pdd
+
+def PDD_reconstructable(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]], 
+                        lexsort: bool = True):
+    """Computes the PDD of a periodic set with `k` (no of columns) large enough such that
+    the periodic set can be reconstructed from the PDD.
+    
+    Parameters
+    ----------
+    periodic_set : :class:`.periodicset.PeriodicSet` or tuple of ndarrays
+        A periodic set represented by a :class:`.periodicset.PeriodicSet` object or 
+        by a tuple (motif, cell) with coordinates in Cartesian form.
+    k : int
+        Number of columns in the PDD, plus one for the first column of weights.
+    order : int
+        Order of the PDD, default 1. See papers for a description of higher-order PDDs.
+    lexsort : bool, optional
+        Whether or not to lexicographically order the rows. Default True.
+    collapse: bool, optional
+        Whether or not to collapse identical rows (within a tolerance). Default True.
+    collapse_tol: float
+        If two rows have all entries closer than collapse_tol, they get collapsed.
+        Default is 1e-4.
+
+    Returns
+    -------
+    ndarray
+        An ndarray with k+1 columns, the PDD of ``periodic_set`` up to `k`.
+        
+    Examples
+    --------
+    Make list of PDDs with ``k=100`` for crystals in mycif.cif::
+
+        pdds = []
+        for periodic_set in amd.CifReader('mycif.cif'):
+            pdds.append(amd.PDD(periodic_set, 100, lexsort=False))    # do not lexicographically order rows
+            
+    Make list of PDDs with ``k=10`` for crystals in these CSD refcode families::
+    
+        pdds = []
+        for periodic_set in amd.CSDReader(['HXACAN', 'ACSALA'], families=True):
+            pdds.append(amd.PDD(periodic_set, 10, collapse=False))  # do not collapse rows
+            
+    Manually pass a periodic set as a tuple (motif, cell)::
+
+        # simple cubic lattice
+        motif = np.array([[0,0,0]])
+        cell = np.array([[1,0,0], [0,1,0], [0,0,1]])
+        cubic_amd = amd.PDD((motif, cell), 100)
+    """
+    
+    motif, cell, _, _ = _extract_motif_cell(periodic_set) 
+    dims = cell.shape[0]
+    
+    if dims not in (2, 3):
+        raise ValueError('Reconstructing from PDD only implemented for 2 and 3 dimensions')
+    
+    min_val = diameter(cell) * 2
+    pdd = nearest_neighbours_minval(motif, cell, min_val)
+    
+    if lexsort:
+        pdd = pdd[np.lexsort(np.rot90(pdd))]
+    
+    return pdd
 
 def PDD_to_AMD(pdd: np.ndarray) -> np.ndarray:
     """Calculates AMD from a PDD. Faster than computing both from scratch.
@@ -269,11 +335,7 @@ def PPC(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]) -> floa
         The PPC of ``periodic_set``.
     """
     
-    if isinstance(periodic_set, PeriodicSet):
-        motif, cell = periodic_set.motif, periodic_set.cell
-    else:
-        motif, cell = periodic_set[0], periodic_set[1]
-
+    motif, cell, _, _ = _extract_motif_cell(periodic_set)
     m, n = motif.shape
     det = np.linalg.det(cell)
     t = (n - n % 2) / 2
@@ -296,14 +358,9 @@ def AMD_estimate(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
     :math:`V_n` is the volume of a unit sphere in :math:`n`-dimensional space.
     """
     
-    if isinstance(periodic_set, PeriodicSet):
-        motif, cell = periodic_set.motif, periodic_set.cell
-    else:
-        motif, cell = periodic_set[0], periodic_set[1]
-        
+    motif, cell, _, _ = _extract_motif_cell(periodic_set)
     n = motif.shape[1]
-    c = PPC(motif, cell)
-    
+    c = PPC((motif, cell))
     return np.array([(x ** (1. / n)) * c for x in range(1, k + 1)])
 
 def _extract_motif_cell(periodic_set):
@@ -348,7 +405,7 @@ def _PDD_h_geq_2(motif, dists, cloud, inds, k, order,
                  lexsort, collapse, collapse_tol):
     """Higher-order PDD algorithm. Not particularly optimised or well-tested."""
     
-    n_rows = math.comb(motif.shape[0], order)
+    n_rows = comb(motif.shape[0], order, exact=True)
     weights = np.full((n_rows, ), 1 / n_rows)
     dist = []
     pdd = []
@@ -378,7 +435,7 @@ def _PDD_h_geq_2(motif, dists, cloud, inds, k, order,
         if order == 2:
             dist.append(np.linalg.norm(motif[points[0]] - motif[points[1]]))
         else:
-            dist.append(finite_PDD(motif[points], collapse=False)[:, 1:])
+            dist.append(PDD_finite(motif[points], collapse=False)[:, 1:])
 
     pdd = np.array(pdd)
     dist = np.array(dist)
