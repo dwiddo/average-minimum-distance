@@ -3,7 +3,7 @@ import numpy as np
 from scipy.spatial import cKDTree
 from numba import njit
 from ._nearest_neighbours import generate_concentric_cloud
-from .utils import random_cell, diameter
+from .utils import diameter
 
 def _unique_within_tol(arr, prec):
     # get only unique values in a vector within a tolerance

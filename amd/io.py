@@ -13,20 +13,15 @@ recomputing invariants.
 """
 
 from typing import Callable, Iterable, Sequence, Tuple, Optional
-from itertools import chain
 import os
+import warnings
 import numpy as np
-from ase.io.cif import NoStructureData, CIFBlock, parse_cif
+import ase.io.cif
 from ase.spacegroup.spacegroup import parse_sitesym     # string symop -> rot, trans
 import h5py
 
 from .periodicset import PeriodicSet
 from .utils import _extend_signature, cellpar_to_cell
-
-import warnings
-def _warning(message, category, filename, lineno, file=None, line=None):
-    return f'{filename}:{lineno}: {category.__name__}: {message}\n'
-warnings.formatwarning = _warning
 
 try:
     from ccdc.io import EntryReader             # .cif or 'CSD' -> Iterable[Entry]
@@ -34,7 +29,12 @@ try:
     _CCDC_ENABLED = True
 except Exception:
     _CCDC_ENABLED = False
-    
+
+
+def _warning(message, category, filename, lineno, file=None, line=None):
+    return f'{filename}:{lineno}: {category.__name__}: {message}\n'
+warnings.formatwarning = _warning
+
 
 class _Reader:
     """Base Reader class. Contains parsers for converting ase CifBlock 
@@ -99,6 +99,8 @@ class _Reader:
         self.extract_data = extract_data
         self.include_if = include_if
         self.show_warnings = show_warnings
+        self.current_identifier = None
+        self.current_filename = None
     
     ### public interface ###
     
@@ -118,12 +120,11 @@ class _Reader:
         """
         
         for item in iterable:
-            periodic_set = func(item)
-            if periodic_set is not None:
-                yield periodic_set
-
-    @staticmethod
-    def _expand(asym_frac_motif: np.ndarray, sitesym: Sequence[str], show_warnings=True) -> Tuple[np.ndarray, ...]:
+            res = func(item)
+            if res is not None:
+                yield res
+                
+    def _expand(self, asym_frac_motif: np.ndarray, sitesym: Sequence[str]) -> Tuple[np.ndarray, ...]:
         """
         Asymmetric unit's fractional coords + sitesyms (as strings)
         -->
@@ -157,8 +158,8 @@ class _Reader:
                         if inverses[ind] == inv:
                             pass
                         else:
-                            if show_warnings:
-                                warnings.warn(f'positions {inverses[ind]} and {inv} are equivalent')
+                            if self.show_warnings:
+                                warnings.warn(f'{self.current_identifier} has equivalent positions {inverses[ind]} and {inv}')
                 else:
                     all_sites.append(site_)
                     inverses.append(inv)
@@ -175,28 +176,28 @@ class _Reader:
    
     ### Parsers. Intended to be passed to _map ###
     
-    def _CIFBlock_to_PeriodicSet(self, block: CIFBlock) -> PeriodicSet:
+    def _CIFBlock_to_PeriodicSet(self, block: ase.io.cif.CIFBlock) -> PeriodicSet:
         """ase.io.cif.CIFBlock --> PeriodicSet. Returns None for a "bad" set."""
         
         if self.include_if:
             if not all(check(block) for check in self.include_if):
                 return None
             
-        # cell & asymmetric unit
+        self.current_identifier = block.name
         cell = block.get_cell().array
         asym_frac_motif = [block.get(name) for name in _Reader.atom_site_fract_tags]
         if None in asym_frac_motif:
             asym_motif = [block.get(name) for name in _Reader.atom_site_cartn_tags]
             if None in asym_motif:
                 if self.show_warnings:
-                    warnings.warn(f'Skipping {block.name} as coordinates were not found')
+                    warnings.warn(f'Skipping {self.current_identifier} as coordinates were not found')
                 return None
             asym_frac_motif = np.array(asym_motif) @ np.linalg.inv(cell)   
         asym_frac_motif = np.array(asym_frac_motif).T
         
         try:
             asym_symbols = block.get_symbols()
-        except NoStructureData as e:
+        except ase.io.cif.NoStructureData as _:
             asym_symbols = ['Unknown' for _ in range(len(asym_frac_motif))]
 
         remove = [] # indices of sites to remove
@@ -219,7 +220,7 @@ class _Reader:
 
             if self.disorder == 'skip' and len(disordered) > 0:
                 if self.show_warnings:
-                    warnings.warn(f'Skipping {block.name} as structure is disordered')
+                    warnings.warn(f'Skipping {self.current_identifier} as structure is disordered')
                 return None
             elif self.disorder == 'ordered_sites':
                 remove.extend(disordered)
@@ -228,7 +229,7 @@ class _Reader:
         asym_frac_motif = np.mod(np.delete(asym_frac_motif, remove, axis=0), 1)
         asym_symbols = [s for i, s in enumerate(asym_symbols) if i not in remove]
         asym_is_disordered = [v for i, v in enumerate(asym_is_disordered) if i not in remove]
-        
+
         # if there are overlapping sites in asym unit, warn and keep only one
         site_diffs = np.abs(asym_frac_motif[:, None] - asym_frac_motif)
         overlapping = np.triu(np.all((site_diffs <= _Reader.equiv_site_tol) | (np.abs(site_diffs - 1) <= _Reader.equiv_site_tol), axis=-1), 1)
@@ -240,17 +241,17 @@ class _Reader:
         
         if overlapping.any():
             if self.show_warnings:
-                warnings.warn(f'{block.name} may have overlapping sites; duplicates will be removed')
+                warnings.warn(f'{self.current_identifier} may have overlapping sites; duplicates will be removed')
             keep_sites = ~overlapping.any(0)
             asym_frac_motif = asym_frac_motif[keep_sites]
             asym_symbols = [sym for sym, keep in zip(asym_symbols, keep_sites) if keep]
         
         if asym_frac_motif.shape[0] == 0:
             if self.show_warnings:
-                warnings.warn(f'Skipping {block.name} as there are no sites with coordinates')
+                warnings.warn(f'Skipping {self.current_identifier} as there are no sites with coordinates')
             return None
 
-        sitesym = ('x,y,z',)
+        sitesym = ['x,y,z',]
         for tag in _Reader.symop_tags:
             if tag in block:
                 sitesym = block[tag]
@@ -263,11 +264,13 @@ class _Reader:
         motif = frac_motif @ cell
 
         kwargs = {
-            'name':                     block.name, 
+            'name':                     self.current_identifier, 
             'asymmetric_unit':          asym_unit,
             'wyckoff_multiplicities':   multiplicities,
             'types':                    [asym_symbols[i] for i in inverses],
         }
+        
+        if self.current_filename: kwargs['filename'] = self.current_filename
         
         if self.extract_data is not None:
             for key in self.extract_data:
@@ -284,10 +287,11 @@ class _Reader:
             if not all(check(entry) for check in self.include_if):
                 return None
         
+        self.current_identifier = entry.identifier
         # basic checks first. Some exclude the structure from consideration
         if not entry.has_3d_structure:
             if self.show_warnings:
-                warnings.warn(f'Skipping {entry.identifier} as entry has no 3D structure')
+                warnings.warn(f'Skipping {self.current_identifier} as entry has no 3D structure')
             return None
         
         # at least one entry raised RuntimeError when reading its crystal
@@ -295,7 +299,7 @@ class _Reader:
             crystal = entry.crystal
         except RuntimeError as e:
             if self.show_warnings:
-                warnings.warn(f'Skipping {entry.identifier}: {e}')
+                warnings.warn(f'Skipping {self.current_identifier}: {e}')
             return None
         
         # first disorder check, if skipping. If occ == 1 for all atoms but the entry
@@ -316,7 +320,7 @@ class _Reader:
             if not may_have_disorder:
                 if crystal.has_disorder or entry.has_disorder:
                     if self.show_warnings:
-                        warnings.warn(f'Skipping {crystal.identifier} as structure is disordered')
+                        warnings.warn(f'Skipping {self.current_identifier} as structure is disordered')
                     return None
             
         if self.remove_hydrogens:
@@ -348,14 +352,14 @@ class _Reader:
                 occ = a.occupancy
                 if a.label.endswith('?') or (isinstance(occ, (int, float)) and occ < 1):
                     if self.show_warnings:
-                        warnings.warn(f'Skipping {crystal.identifier} as structure is disordered')
+                        warnings.warn(f'Skipping {self.current_identifier} as structure is disordered')
                     return None
         
         # if disorder is all_sites, we need to know where disorder is to ignore overlaps
         asym_is_disordered = []     # True/False list same length as asym unit
         if self.disorder == 'all_sites':
-            for atom in crystal.asymmetric_unit_molecule.atoms:
-                occ = atom.occupancy
+            for a in crystal.asymmetric_unit_molecule.atoms:
+                occ = a.occupancy
                 if a.label.endswith('?') or (isinstance(occ, (int, float)) and occ < 1):
                     asym_is_disordered.append(True)
                 else:
@@ -364,7 +368,7 @@ class _Reader:
         # check all atoms have coords. option/default remove unknown sites?
         if not molecule.all_atoms_have_sites or any(a.fractional_coordinates is None for a in molecule.atoms):
             if self.show_warnings:
-                warnings.warn(f'Skipping {crystal.identifier} as some atoms do not have sites')
+                warnings.warn(f'Skipping {self.current_identifier} as some atoms do not have sites')
             return None
         
         # cell & asymmetric unit
@@ -374,25 +378,25 @@ class _Reader:
         asym_frac_motif = np.mod(asym_frac_motif, 1)
         asym_symbols = [a.atomic_symbol for a in crystal.asymmetric_unit_molecule.atoms]
         
-        # if there are overlapping sites in asym unit, warn and remove one
+        # if there are overlapping sites in asym unit, warn and keep only one
         site_diffs = np.abs(asym_frac_motif[:, None] - asym_frac_motif)
         overlapping = np.triu(np.all((site_diffs <= _Reader.equiv_site_tol) | (np.abs(site_diffs - 1) <= _Reader.equiv_site_tol), axis=-1), 1)
-
-        if self.disorder == 'all_sites':    # don't remove overlapping sites if either is disordered
+        
+        if self.disorder == 'all_sites':    # don't remove overlapping sites if one is disordered
             for i, j in np.argwhere(overlapping):
                 if asym_is_disordered[i] or asym_is_disordered[j]:
                     overlapping[i, j] = False
         
         if overlapping.any():
             if self.show_warnings:
-                warnings.warn(f'{crystal.identifier} may have overlapping sites; duplicates will be removed')
+                warnings.warn(f'{self.current_identifier} may have overlapping sites; duplicates will be removed')
             keep_sites = ~overlapping.any(0)
             asym_frac_motif = asym_frac_motif[keep_sites]
             asym_symbols = [sym for sym, keep in zip(asym_symbols, keep_sites) if keep]
 
         if asym_frac_motif.shape[0] == 0:
             if self.show_warnings:
-                warnings.warn(f'Skipping {crystal.identifier} as there are no sites with coordinates')
+                warnings.warn(f'Skipping {self.current_identifier} as there are no sites with coordinates')
             return None
         
         sitesym = crystal.symmetry_operators
@@ -403,12 +407,14 @@ class _Reader:
         motif = frac_motif @ cell
         
         kwargs = {
-            'name':                     crystal.identifier, 
+            'name':                     self.current_identifier, 
             'asymmetric_unit':          asym_unit,
             'wyckoff_multiplicities':   multiplicities,
             'types':                    [asym_symbols[i] for i in inverses],
         }
-        print(asym_symbols)
+
+        if self.current_filename: kwargs['filename'] = self.current_filename
+
         if self.extract_data is not None:
             entry.crystal.molecule = crystal.disordered_molecule
             for key in self.extract_data:
@@ -458,32 +464,33 @@ class CifReader(_Reader):
             raise ValueError(f'Invalid reader {reader}; must be ase or ccdc.')
 
         if reader == 'ase' and self.heaviest_component:
-            raise NotImplementedError(f'Parameter heaviest_component not implimented for {reader}, only ccdc.')
+            raise NotImplementedError(f'Parameter heaviest_component not implimented for ase, only ccdc.')
 
         if reader == 'ase':
-            if folder:
-                generators = (parse_cif(os.path.join(path, file)) for file in os.listdir(path) if file.endswith('.cif'))
-                raw_generator = chain(*generators)
-            else:
-                raw_generator = parse_cif(path)
-            
-            self._generator = self._map(self._CIFBlock_to_PeriodicSet, raw_generator)
-            
+            extensions = {'cif'}
+            file_parser = ase.io.cif.parse_cif
+            pset_converter = self._CIFBlock_to_PeriodicSet
+
         elif reader == 'ccdc':
             if not _CCDC_ENABLED:
                 raise ImportError(f"Failed to import csd-python-api; please check it is installed and licensed.")
+            extensions = EntryReader.known_suffixes
+            file_parser = EntryReader
+            pset_converter = self._Entry_to_PeriodicSet
             
-            if folder:
-                generators = []
-                for file in os.listdir(path):
-                    suff = os.path.splitext(file)[1][1:]
-                    if suff.lower() in EntryReader.known_suffixes:
-                        generators.append(EntryReader(os.path.join(path, file)))
-                raw_generator = chain(*generators)
-            else:
-                raw_generator = EntryReader(path)
-                
-            self._generator = self._map(self._Entry_to_PeriodicSet, raw_generator)
+        if folder:
+            generator = self._folder_generator(path, file_parser, extensions)
+        else:
+            generator = file_parser(path)
+            
+        self._generator = self._map(pset_converter, generator)
+
+    def _folder_generator(self, path, file_parser, extensions):
+        for file in os.listdir(path):
+            suff = os.path.splitext(file)[1][1:]
+            if suff.lower() in extensions:
+                self.current_filename = file
+                yield from file_parser(os.path.join(path, file))
 
 class CSDReader(_Reader):
     """Read Entries from the CSD, yielding :class:`.periodicset.PeriodicSet` objects.
@@ -549,9 +556,9 @@ class CSDReader(_Reader):
             refcodes = [refcode for refcode in all_refcodes if not (refcode in seen or seen_add(refcode))]
 
         self._entry_reader = EntryReader('CSD')
-        self._generator = self._map(self._Entry_to_PeriodicSet, self._init_ccdc_reader(refcodes))
+        self._generator = self._map(self._Entry_to_PeriodicSet, self._ccdc_generator(refcodes))
     
-    def _init_ccdc_reader(self, refcodes):
+    def _ccdc_generator(self, refcodes):
         """Generates ccdc Entries from CSD refcodes"""
         
         if refcodes is None:
@@ -792,8 +799,9 @@ def crystal_to_periodicset(crystal):
     
     sitesym = crystal.symmetry_operators
     if not sitesym: sitesym = ('x,y,z',)
-    
-    frac_motif, asym_unit, multiplicities, _ = _Reader._expand(asym_frac_motif, sitesym)
+    r = _Reader()
+    r.current_identifier = crystal.identifier
+    frac_motif, asym_unit, multiplicities, _ = r._expand(asym_frac_motif, sitesym)
     motif = frac_motif @ cell
     
     kwargs = {
@@ -835,8 +843,10 @@ def cifblock_to_periodicset(block):
         
     if isinstance(sitesym, str):
         sitesym = [sitesym]
-    
-    frac_motif, asym_unit, multiplicities, inverses = _Reader._expand(asym_frac_motif, sitesym)
+        
+    r = _Reader()
+    r.current_identifier = block.name
+    frac_motif, asym_unit, multiplicities, _ = r._expand(asym_frac_motif, sitesym)
     motif = frac_motif @ cell
 
     kwargs = {

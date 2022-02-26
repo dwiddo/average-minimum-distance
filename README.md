@@ -38,7 +38,7 @@ A crystal can also be read from the CSD using ```amd.CSDReader``` (if csd-python
 
 ### Comparing AMDs or PDDs
 
-The package includes functions for comparing sets of AMDs or PDDs. 
+The package includes functions for comparing sets of AMDs or PDDs.
 
 They behave like scipy's function ```scipy.distance.spatial.pdist```,
 which takes a set of points and compares them pairwise, returning a *condensed distance matrix*, a 1D vector containing the distances. This vector is the upper half of the 2D distance matrix in one list, since for pairwise comparisons the matrix is symmetric. The function ```amd.AMD_pdist``` similarly takes a list of AMDs and compares them pairwise, returning the condensed distance matrix:

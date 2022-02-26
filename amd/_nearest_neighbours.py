@@ -5,7 +5,7 @@ from itertools import product, combinations
 from collections import defaultdict
 import numpy as np
 from numba import njit
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 
 @njit()
 def _dist(xy, z):
@@ -154,7 +154,7 @@ def nearest_neighbours(motif: np.ndarray,
     cloud.append(next(cloud_generator))
     cloud = np.concatenate(cloud)
 
-    tree = cKDTree(cloud, compact_nodes=False, balanced_tree=False)
+    tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
     pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
     pdd = np.empty_like(pdd_)
 
@@ -162,7 +162,7 @@ def nearest_neighbours(motif: np.ndarray,
         pdd = pdd_
         cloud = np.append(cloud, next(cloud_generator), axis=0)
         cloud = np.append(cloud, next(cloud_generator), axis=0)
-        tree = cKDTree(cloud, compact_nodes=False, balanced_tree=False)
+        tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
         pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
 
     return pdd_[:, 1:], cloud, inds[:, 1:]
@@ -178,7 +178,7 @@ def nearest_neighbours_minval(motif, cell, min_val):
         cloud.append(next(cloud_generator))
         
     cloud = np.concatenate(cloud)
-    tree = cKDTree(cloud, compact_nodes=False, balanced_tree=False)
+    tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
     pdd_, _ = tree.query(motif, k=cloud.shape[0], workers=-1)
     pdd = np.empty_like(pdd_)
 
@@ -190,7 +190,7 @@ def nearest_neighbours_minval(motif, cell, min_val):
             
         pdd = pdd_
         cloud = np.vstack((cloud, next(cloud_generator), next(cloud_generator)))
-        tree = cKDTree(cloud, compact_nodes=False, balanced_tree=False)
+        tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
         pdd_, _ = tree.query(motif, k=cloud.shape[0], workers=-1)
     
     k = np.argwhere(np.all(pdd >= min_val, axis=0))[0][0]

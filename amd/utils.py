@@ -52,7 +52,7 @@ def diameter(cell):
             np.linalg.norm(cell[0] + cell[1] + cell[2]),
             np.linalg.norm(cell[0] + cell[1] - cell[2]),
             np.linalg.norm(cell[0] - cell[1] + cell[2]),
-            np.linalg.norm(- cell[0] + cell[1] + cell[2])
+            np.linalg.norm(-cell[0] + cell[1] + cell[2])
         ]))
     return d
 

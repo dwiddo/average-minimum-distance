@@ -12,11 +12,13 @@ some common patterns when reading .CIFs::
     # create list of crystals in a .cif
     crystals = list(amd.CifReader('file.cif'))
 
-    # create list of crystals in individual .cifs in a folder
-    # read_one returns the first crystal, nice when the .cif has one crystal
+    # Use folder=True to read all cifs in a folder
+    crystals = list(amd.CifReader(folder_path, folder=True))
+
+    # if you need the file names as well
     import os
-    crystals = [amd.CifReader(os.path.join(folder, file)).read_one() 
-                for file in os.listdir(folder)]
+    crystals = [amd.CifReader(os.path.join(folder_path, file)).read_one(), file
+                for file in os.listdir(folder_path)]
 
 The :class:`CifReader` yields :class:`PeriodicSet` objects, which can be passed to :func:`amd.AMD` 
 or :func:`amd.PDD`. The :class:`PeriodicSet` has attributes ``.name``, 
@@ -30,13 +32,14 @@ Reading options
 
 :class:`CifReader` accepts the following parameters (many shared by :class:`.io.CSDReader`)::
 
-    amd.CifReader('file.cif',
-                  reader='ase',
-                  remove_hydrogens=False,
-                  disorder='skip',
-                  heaviest_component=False,
-                  extract_data=None,
-                  include_if=None)
+    amd.CifReader('file.cif',                  # path to file/folder
+                  reader='ase',                # backend cif parser
+                  remove_hydrogens=False,      # remove H/D
+                  disorder='skip',             # handling disorder
+                  heaviest_component=False,    # remove 
+                  extract_data=None,           # extract more data
+                  include_if=None,             # ignore some crystals
+                  folder=False)                # if path is to a folder
 
 * :code:`reader` controls the backend package used to parse the file. The default is :code:`ase`; to use csd-python-api pass :code:`ccdc`. The ccdc reader can read any format accepted by `ccdc's EntryReader <https://downloads.ccdc.cam.ac.uk/documentation/API/modules/io_api.html#ccdc.io.EntryReader>`_, though only .CIFs have been tested.
 * :code:`remove_hydrogens` removes Hydrogen atoms from the structure.
@@ -44,6 +47,7 @@ Reading options
 * :code:`heaviest_component` takes the heaviest connected molecule in the motif, intended for removing solvents. Only available when ``reader='ccdc'``.
 * :code:`extract_data` is used to extract more data from crystals, as in the example below.
 * :code:`include_if` can remove unwanted structures, as in the example below.
+* :code:`folder` will read all crystals from files in a folder.
 
 An example only reading entries with a ``.polymorph`` label and extracting additional data::
 
