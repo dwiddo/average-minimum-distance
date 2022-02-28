@@ -259,8 +259,7 @@ class _Reader:
             
         if isinstance(sitesym, str): sitesym = [sitesym]
         
-        frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym, 
-                                                                       show_warnings=self.show_warnings)
+        frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym)
         motif = frac_motif @ cell
 
         kwargs = {
@@ -402,8 +401,7 @@ class _Reader:
         sitesym = crystal.symmetry_operators
         if not sitesym: sitesym = ('x,y,z',)
         
-        frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym, 
-                                                                       show_warnings=self.show_warnings)
+        frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym)
         motif = frac_motif @ cell
         
         kwargs = {
