@@ -123,7 +123,7 @@ class _Reader:
             res = func(item)
             if res is not None:
                 yield res
-                
+
     def _expand(self, asym_frac_motif: np.ndarray, sitesym: Sequence[str]) -> Tuple[np.ndarray, ...]:
         """
         Asymmetric unit's fractional coords + sitesyms (as strings)

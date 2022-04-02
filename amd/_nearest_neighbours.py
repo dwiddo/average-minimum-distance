@@ -156,6 +156,7 @@ def nearest_neighbours(motif: np.ndarray,
 
     tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
     pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
+    pdd_ = np.round(pdd_, decimals=15)
     pdd = np.empty_like(pdd_)
 
     while not np.array_equal(pdd, pdd_):
@@ -164,6 +165,7 @@ def nearest_neighbours(motif: np.ndarray,
         cloud = np.append(cloud, next(cloud_generator), axis=0)
         tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
         pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
+        pdd_ = np.round(pdd_, decimals=15)
 
     return pdd_[:, 1:], cloud, inds[:, 1:]
 

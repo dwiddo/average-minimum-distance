@@ -6,8 +6,8 @@ import time
 from datetime import timedelta
 import numpy as np
 
-def lattice_cubic(dims=3):
-    return (np.zeros((1, dims)), np.identity(dims))
+def lattice_cubic(scale=1, dims=3):
+    return (np.zeros((1, dims)), np.identity(dims) * scale)
 
 def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     """Simplified version of function from ase.geometry.
@@ -74,7 +74,7 @@ class ETA:
     
     _moving_average_factor = 0.3    # epochtime_{n+1} = factor * epochtime + (1-factor) * epochtime_{n}
     
-    def __init__(self, to_do, update_rate=100):
+    def __init__(self, to_do, update_rate=1000):
         self.to_do = to_do
         self.update_rate = update_rate
         self.counter = 0

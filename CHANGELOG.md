@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.8] - 22/02/2022
+## [1.1.8] - 25/03/2022
 
 ### Added
 
@@ -13,6 +13,10 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - `amd.finite_AMD()` and `amd.finite_PDD()` changed to `amd.AMD_finite()` and `amd.PDD_finite()` for easier autocompletion.
+
+### Removed
+
+- Higher-order PDDs (the order parameter of `amd.PDD()` and `amd.PDD_finite()`) are removed and replaced with `amd.SDD()` (simplex distance distribution). This invariant is only appropriate for finite sets, but first-order SDDs are equivalent to PDDs.
 
 ## [1.1.7] - 01/02/2022
 

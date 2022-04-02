@@ -57,7 +57,6 @@ def AMD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]],
 
 def PDD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]], 
         k: int,
-        order: int = 1,
         lexsort: bool = True, 
         collapse: bool = True, 
         collapse_tol: float = 1e-4) -> np.ndarray:
@@ -69,9 +68,8 @@ def PDD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]],
         A periodic set represented by a :class:`.periodicset.PeriodicSet` object or 
         by a tuple (motif, cell) with coordinates in Cartesian form.
     k : int
-        Number of columns in the PDD, plus one for the first column of weights.
-    order : int
-        Order of the PDD, default 1. See papers for a description of higher-order PDDs.
+        Number of columns in the PDD (the returned matrix has an additional first 
+        column containing weights).
     lexsort : bool, optional
         Whether or not to lexicographically order the rows. Default True.
     collapse: bool, optional
@@ -108,33 +106,22 @@ def PDD(periodic_set: Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]],
     """
     
     motif, cell, asymmetric_unit, multiplicities = _extract_motif_cell(periodic_set)
+    dists, _, _ = nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
     
-    if order == 1:
-        dists, _, _ = nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
-        
-        if multiplicities is None:
-            weights = np.full((motif.shape[0], ), 1 / motif.shape[0])
-        else:
-            weights = multiplicities / np.sum(multiplicities)
-        
-        if collapse:
-            weights, dists = _collapse_rows(weights, dists, collapse_tol)
-            
-        pdd = np.hstack((weights[:, None], dists))
-        
-        if lexsort:
-            pdd = pdd[np.lexsort(np.rot90(dists))]
-        
-        return pdd
-    
+    if multiplicities is None:
+        weights = np.full((motif.shape[0], ), 1 / motif.shape[0])
     else:
-        if motif.shape[0] < order:
-            raise ValueError(f'Higher-order PDD is not defined when the number of motif points ({motif.shape[0]}) is smaller than the order ({order})')
+        weights = multiplicities / np.sum(multiplicities)
+    
+    if collapse:
+        weights, dists = _collapse_rows(weights, dists, collapse_tol)
         
-        dists, cloud, inds = nearest_neighbours(motif, cell, k + order + 1)
-        weights, dist, pdd = _PDD_h_geq_2(motif, dists, cloud, inds, k, order, lexsort, collapse, collapse_tol)
-        
-        return weights, dist, pdd
+    pdd = np.hstack((weights[:, None], dists))
+    
+    if lexsort:
+        pdd = pdd[np.lexsort(np.rot90(dists))]
+    
+    return pdd
 
 def AMD_finite(motif: np.ndarray):
     """Computes the AMD of a finite point set (up to k = `len(motif) - 1`).
@@ -165,8 +152,7 @@ def AMD_finite(motif: np.ndarray):
     dm = np.sort(squareform(pdist(motif)), axis=-1)[:, 1:]
     return np.average(dm, axis=0)
 
-def PDD_finite(motif: np.ndarray, 
-               order: int = 1,
+def PDD_finite(motif: np.ndarray,
                lexsort: bool = True, 
                collapse: bool = True, 
                collapse_tol: float = 1e-4):
@@ -176,8 +162,6 @@ def PDD_finite(motif: np.ndarray,
     ----------
     motif : ndarray
         Cartesian coordinates of points in a set. Shape (n_points, dimensions)
-    order : int
-        Order of the PDD, default 1. See papers for a description of higher-order PDDs.
     lexsort : bool, optional
         Whether or not to lexicographically order the rows. Default True.
     collapse: bool, optional
@@ -206,25 +190,127 @@ def PDD_finite(motif: np.ndarray,
     
     dm = squareform(pdist(motif))
     m = motif.shape[0]
+    dists = np.sort(dm, axis=-1)[:, 1:]
+    weights = np.full((m, ), 1 / m)
+    
+    if collapse:
+        weights, dists = _collapse_rows(weights, dists, collapse_tol)
+    
+    pdd = np.hstack((weights[:, None], dists))
+    
+    if lexsort:
+        pdd = pdd[np.lexsort(np.rot90(dists))]
+        
+    return pdd
+
+def SDD(motif: np.ndarray, 
+        order: int = 1,
+        lexsort: bool = True, 
+        collapse: bool = True, 
+        collapse_tol: float = 1e-4):
+    """Computes the SSD (simplex distance distribution) of a finite point set,
+    with `len(motif) - 1` columns. The SDD with order h considers h-sized collection 
+    of points in the motif; the first-order SDD is equivalent to the PDD for finite sets.
+    
+    Parameters
+    ----------
+    motif : ndarray
+        Cartesian coordinates of points in a set. Shape (n_points, dimensions)
+    order : int
+        Order of the SDD, default 1. See papers for a description of higher-order SDDs.
+    lexsort : bool, optional
+        Whether or not to lexicographically order the rows. Default True.
+    collapse: bool, optional
+        Whether or not to collapse identical rows (within a tolerance). Default True.
+    collapse_tol: float
+        If two rows have all entries closer than collapse_tol, they get collapsed.
+        Default is 1e-4.
+
+    Returns
+    -------
+    ndarray
+        An ndarray with len(motif) columns, the SDD of ``motif``.
+        
+    Examples
+    --------
+    Find the SDD of between finite trapezium and kite point sets::
+
+        trapezium = np.array([[0,0],[1,1],[3,1],[4,0]])
+        kite      = np.array([[0,0],[1,1],[1,-1],[4,0]])
+        
+        trap_pdd = amd.SDD(trapezium, order=2)
+        kite_pdd = amd.SDD(kite)
+    """
     
     if order == 1:
-        dists = np.sort(dm, axis=-1)[:, 1:]
-        weights = np.full((m, ), 1 / m)
-        
-        if collapse:
-            weights, dists = _collapse_rows(weights, dists, collapse_tol)
-        
-        pdd = np.hstack((weights[:, None], dists))
-        
-        if lexsort:
-            pdd = pdd[np.lexsort(np.rot90(dists))]
-            
-        return pdd
+        return PDD_finite(motif, lexsort=lexsort, collapse=collapse, collapse_tol=collapse_tol)
     
     else:
+        if motif.shape[0] <= order:
+            raise ValueError(f'The higher order SDD is only defined when the order ({order}) is smaller than the number of points ({motif.shape[0]})')
+        
+        dm = squareform(pdist(motif))
+        m = motif.shape[0]
         inds = np.argsort(dm, axis=-1)
         dists = np.take_along_axis(dm, inds, axis=-1)[:, 1:]
-        weights, dist, pdd = _PDD_h_geq_2(motif, dists, motif, inds, m - order, order, lexsort, collapse, collapse_tol)
+        inds = inds[:, 1:]
+        n_rows = comb(motif.shape[0], order, exact=True)
+        weights = np.full((n_rows, ), 1 / n_rows)
+        dist = []
+        pdd = []
+        
+        for points in combinations(range(motif.shape[0]), order):
+            points = np.array(points)
+            done = set(points)
+            pointers = [0] * order
+            row = []
+            for _ in range(m - order):
+                for i in range(order):
+                    while int(inds[points[i]][pointers[i]]) in done:
+                        if pointers[i] < m - order:
+                            pointers[i] += 1
+                        else:
+                            break
+
+                _, closest_i = min(((dists[points[i]][pointers[i]], i) for i in range(order)), key=lambda x: x[0])
+                point = inds[points[closest_i]][pointers[closest_i]]
+                row.append(sorted(np.linalg.norm(motif[points[i]] - motif[point]) for i in range(order)))
+                done.add(int(point))
+                if pointers[closest_i] < m - order:
+                    pointers[closest_i] += 1
+                
+            pdd.append(row)
+            
+            if order == 2:
+                dist.append(np.linalg.norm(motif[points[0]] - motif[points[1]]))
+            else:
+                dist.append(PDD_finite(motif[points], collapse=False)[:, 1:])
+
+        pdd, dist = np.array(pdd), np.array(dist)
+        
+        if collapse:
+            dist_diffs = np.abs(dist[:, None] - dist) <= collapse_tol
+        
+            if dist.ndim == 1:
+                dist_overlapping = dist_diffs
+            else:
+                dist_overlapping = np.all(np.all(dist_diffs, axis=-1), axis=-1)
+            
+            pdd_overlapping = np.all(np.all(np.abs(pdd[:, None] - pdd) <= collapse_tol, axis=-1), axis=-1)
+            overlapping = np.logical_and(pdd_overlapping, dist_overlapping)
+            res = _group_overlapping_and_sum_weights(weights, overlapping)
+            if res is not None:
+                weights, dist, pdd = res[0], dist[res[1]], pdd[res[1]]
+        
+        if lexsort:
+            if order == 2:
+                flat_pdd = np.hstack((dist[:, None], pdd.reshape((pdd.shape[0], pdd.shape[1] * pdd.shape[2]))))
+                args = np.lexsort(np.rot90(flat_pdd))
+            else:
+                flat_dist = dist.reshape((dist.shape[0], dist.shape[1] * dist.shape[2]))
+                flat_pdd = pdd.reshape((pdd.shape[0], pdd.shape[1] * pdd.shape[2]))
+                args = np.lexsort(np.rot90(np.hstack((flat_dist, flat_pdd))))
+            weights, dist, pdd = weights[args], dist[args], pdd[args]
         
         return weights, dist, pdd
 
@@ -400,73 +486,6 @@ def _collapse_rows(weights, dists, collapse_tol):
         dists = dists[res[1]]
         
     return weights, dists
-
-def _PDD_h_geq_2(motif, dists, cloud, inds, k, order, 
-                 lexsort, collapse, collapse_tol):
-    """Higher-order PDD algorithm. Not particularly optimised or well-tested."""
-    
-    n_rows = comb(motif.shape[0], order, exact=True)
-    weights = np.full((n_rows, ), 1 / n_rows)
-    dist = []
-    pdd = []
-    
-    for points in combinations(range(motif.shape[0]), order):
-        points = np.array(points)
-        done = set(points)
-        pointers = [0] * order
-        row = []
-        for _ in range(k):
-            for i in range(order):
-                while int(inds[points[i]][pointers[i]]) in done:
-                    if pointers[i] < k:
-                        pointers[i] += 1
-                    else:
-                        break
-
-            _, closest_i = min(((dists[points[i]][pointers[i]], i) for i in range(order)), key=lambda x: x[0])
-            point = inds[points[closest_i]][pointers[closest_i]]
-            row.append(sorted(np.linalg.norm(motif[points[i]] - cloud[point]) for i in range(order)))
-            done.add(int(point))
-            if pointers[closest_i] < k:
-                pointers[closest_i] += 1
-            
-        pdd.append(row)
-        
-        if order == 2:
-            dist.append(np.linalg.norm(motif[points[0]] - motif[points[1]]))
-        else:
-            dist.append(PDD_finite(motif[points], collapse=False)[:, 1:])
-
-    pdd = np.array(pdd)
-    dist = np.array(dist)
-    
-    if collapse:
-        dist_diffs = np.abs(dist[:, None] - dist) <= collapse_tol
-    
-        if dist.ndim == 1:
-            dist_overlapping = dist_diffs
-        else:
-            dist_overlapping = np.all(np.all(dist_diffs, axis=-1), axis=-1)
-        
-        pdd_overlapping = np.all(np.all(np.abs(pdd[:, None] - pdd) <= collapse_tol, axis=-1), axis=-1)
-        overlapping = np.logical_and(pdd_overlapping, dist_overlapping)
-        res = _group_overlapping_and_sum_weights(weights, overlapping)
-        if res is not None:
-            weights = res[0]
-            dist = dist[res[1]]
-            pdd = pdd[res[1]]
-    
-    if lexsort:
-        if order == 2:
-            flat_pdd = np.hstack((dist[:, None], pdd.reshape((pdd.shape[0], pdd.shape[1] * pdd.shape[2]))))
-            args = np.lexsort(np.rot90(flat_pdd))
-        else:
-            flat_dist = dist.reshape((dist.shape[0], pdd.shape[1] * pdd.shape[2]))
-            flat_pdd = pdd.reshape((pdd.shape[0], pdd.shape[1] * pdd.shape[2]))
-            args = np.lexsort(np.rot90(np.hstack(flat_dist, flat_pdd)))
-        weights, dist, pdd = weights[args], dist[args], pdd[args]
-    
-    return weights, dist, pdd
 
 def _group_overlapping_and_sum_weights(weights, overlapping):
     # I hate this solution, but I can't seem to make anything cleverer work.
