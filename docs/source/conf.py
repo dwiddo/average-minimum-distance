@@ -20,6 +20,7 @@ MOCK_MODULES = [
     'numba',
     'scipy',
     'scipy.spatial',
+    'scipy.special',
     'scipy.spatial.distance',
     'scipy.sparse',
     'scipy.sparse.csgraph',
@@ -38,11 +39,11 @@ for mod_name in MOCK_MODULES:
 # -- Project information -----------------------------------------------------
 
 project = 'average-minimum-distance'
-copyright = '2021, Daniel Widdowson'
+copyright = '2022, Daniel Widdowson'
 author = 'Daniel Widdowson'
 
 # The full version, including alpha/beta/rc tags
-release = '1.1.7'
+release = '1.1.8'
 
 # -- General configuration ---------------------------------------------------
 
