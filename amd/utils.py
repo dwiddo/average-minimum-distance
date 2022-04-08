@@ -74,7 +74,7 @@ class ETA:
     
     _moving_average_factor = 0.3    # epochtime_{n+1} = factor * epochtime + (1-factor) * epochtime_{n}
     
-    def __init__(self, to_do, update_rate=1000):
+    def __init__(self, to_do, update_rate=100):
         self.to_do = to_do
         self.update_rate = update_rate
         self.counter = 0

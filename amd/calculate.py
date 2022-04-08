@@ -208,7 +208,7 @@ def SDD(motif: np.ndarray,
         lexsort: bool = True, 
         collapse: bool = True, 
         collapse_tol: float = 1e-4):
-    """Computes the SSD (simplex distance distribution) of a finite point set,
+    """Computes the SSD (simplex-wise distance distribution) of a finite point set,
     with `len(motif) - 1` columns. The SDD with order h considers h-sized collection 
     of points in the motif; the first-order SDD is equivalent to the PDD for finite sets.
     
