@@ -1,17 +1,17 @@
 # average-minimum-distance: isometrically invariant crystal fingerprints
 
 [![PyPI](https://img.shields.io/pypi/v/average-minimum-distance.svg)](https://pypi.org/project/average-minimum-distance/)
-[![Status](https://img.shields.io/pypi/status/average-minimum-distance)](https://pypi.org/project/average-minimum-distance/)
-[![Format](https://img.shields.io/pypi/format/average-minimum-distance)](https://pypi.org/project/average-minimum-distance/)
 [![MATCH Paper](https://img.shields.io/badge/DOI-10.46793%2Fmatch.87--3.529W-blue)](https://doi.org/10.46793/match.87-3.529W)
+[![Format](https://img.shields.io/pypi/format/average-minimum-distance)](https://pypi.org/project/average-minimum-distance/)
 [![CC-0 license](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-blue.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+[![Status](https://img.shields.io/pypi/status/average-minimum-distance)](https://pypi.org/project/average-minimum-distance/)
 
-For calculation and comparison of AMD/PDD isometric invariants of periodic sets. Includes .cif reading functionality.
+Implements new isometric invariants average minimum distances (AMD) and point-wise distance distributions (PDD)  of periodic sets. Includes .cif reading functionality.
 
-- **Paper:** https://doi.org/10.46793/match.87-3.529W
-- **Documentation:** https://average-minimum-distance.readthedocs.io/en/latest/
-- **Source code:** https://github.com/dwiddo/average-minimum-distance
-- 
+- **Paper:** doi.org/10.46793/match.87-3.529W or on arxiv at arxiv.org/abs/2009.02488
+- **Documentation:** average-minimum-distance.readthedocs.io
+- **Source code:** github.com/dwiddo/average-minimum-distance
+
 If you use our code in your work, please cite our paper at [arxiv.org/abs/2009.02488](https://arxiv.org/abs/2009.02488). The bib reference is at the bottom of this page; [click here jump to it](#citeus).
 
 ## What's amd?
