@@ -8,7 +8,6 @@ Submodules
    :maxdepth: 4
 
    amd.calculate
-   amd.ccdc_utils
    amd.compare
    amd.io
    amd.periodicset

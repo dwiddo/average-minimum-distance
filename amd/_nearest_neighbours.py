@@ -1,26 +1,13 @@
 """Implements core function nearest_neighbours used for AMD and PDD calculations."""
 
 from typing import Iterable, Optional
-from itertools import product, combinations
-from collections import defaultdict
+import itertools
+import collections
+
+import numba
 import numpy as np
-from numba import njit
-from scipy.spatial import KDTree
+import scipy.spatial
 
-@njit()
-def _dist(xy, z):
-    s = 0
-    for val in xy:
-        s += val ** 2
-    s += z ** 2
-    return s
-
-@njit()
-def _distkey(pt):
-    s = 0
-    for val in pt:
-        s += val ** 2
-    return s
 
 def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
     """Generates batches of integer lattice points.
@@ -40,16 +27,30 @@ def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
         Yields arrays of integer points in dims dimensional Euclidean space.
     """
     
-    ymax = defaultdict(int)
+    @numba.njit()
+    def _dist(xy, z):
+        s = 0
+        for val in xy:
+            s += val ** 2
+        s += z ** 2
+        return s
+    
+    @numba.njit()
+    def _distkey(pt):
+        s = 0
+        for val in pt:
+            s += val ** 2
+        return s
+    
+    ymax = collections.defaultdict(int)
     d = 0
     
     while True:
-        
         # get integer lattice points in +ve directions
         positive_int_lattice = []
         while True:
             batch = []
-            for xy in product(range(d+1), repeat=dims-1):
+            for xy in itertools.product(range(d+1), repeat=dims-1):
                 if _dist(xy, ymax[xy]) <= d**2:
                     batch.append((*xy, ymax[xy]))
                     ymax[xy] += 1
@@ -63,7 +64,7 @@ def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
         for p in positive_int_lattice:
             int_lattice.append(p)
             for n_reflections in range(1, dims+1):
-                for indexes in combinations(range(dims), n_reflections):
+                for indexes in itertools.combinations(range(dims), n_reflections):
                     if all((p[i] for i in indexes)):
                         p_ = list(p)
                         for i in indexes:
@@ -73,7 +74,11 @@ def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
         yield np.array(int_lattice)
         d += 1
 
-def generate_concentric_cloud(motif: np.ndarray, cell: np.ndarray) -> Iterable[np.ndarray]:
+
+def generate_concentric_cloud(
+        motif: np.ndarray,  
+        cell: np.ndarray
+) -> Iterable[np.ndarray]:
     """
     Generates batches of points from a periodic set given by (motif, cell)
     which are roughly successively further away from the origin.
@@ -101,10 +106,12 @@ def generate_concentric_cloud(motif: np.ndarray, cell: np.ndarray) -> Iterable[n
         int_lattice = next(int_lattice_generator) @ cell
         yield np.concatenate([motif + translation for translation in int_lattice])
 
-def nearest_neighbours(motif: np.ndarray, 
-                       cell: np.ndarray, 
-                       k: int, 
-                       asymmetric_unit: Optional[np.ndarray] = None):
+
+def nearest_neighbours(
+        motif: np.ndarray, 
+        cell: np.ndarray, 
+        k: int, 
+        asymmetric_unit: Optional[np.ndarray] = None):
     """
     Given a periodic set represented by (motif, cell) and an integer k, find 
     the k nearest neighbours of the motif points in the periodic set.
@@ -154,20 +161,27 @@ def nearest_neighbours(motif: np.ndarray,
     cloud.append(next(cloud_generator))
     cloud = np.concatenate(cloud)
 
-    tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
+    tree = scipy.spatial.KDTree(cloud, 
+                                compact_nodes=False, 
+                                balanced_tree=False)
     pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
-    pdd_ = np.round(pdd_, decimals=15)
+    # pdd_ = np.round(pdd_, decimals=18)
     pdd = np.empty_like(pdd_)
 
-    while not np.array_equal(pdd, pdd_):
+    # while not np.array_equal(pdd, pdd_):
+    while not np.allclose(pdd, pdd_, atol=0, rtol=1e-12):
         pdd = pdd_
-        cloud = np.append(cloud, next(cloud_generator), axis=0)
-        cloud = np.append(cloud, next(cloud_generator), axis=0)
-        tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
+        cloud = np.vstack((cloud, 
+                           next(cloud_generator), 
+                           next(cloud_generator)))
+        tree = scipy.spatial.KDTree(cloud, 
+                                    compact_nodes=False, 
+                                    balanced_tree=False)
         pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
-        pdd_ = np.round(pdd_, decimals=15)
+        # pdd_ = np.round(pdd_, decimals=18)
 
     return pdd_[:, 1:], cloud, inds[:, 1:]
+
 
 def nearest_neighbours_minval(motif, cell, min_val):
     """PDD large enough to be reconstructed from 
@@ -180,7 +194,9 @@ def nearest_neighbours_minval(motif, cell, min_val):
         cloud.append(next(cloud_generator))
         
     cloud = np.concatenate(cloud)
-    tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
+    tree = scipy.spatial.KDTree(cloud, 
+                                compact_nodes=False, 
+                                balanced_tree=False)
     pdd_, _ = tree.query(motif, k=cloud.shape[0], workers=-1)
     pdd = np.empty_like(pdd_)
 
@@ -191,16 +207,20 @@ def nearest_neighbours_minval(motif, cell, min_val):
                 break
             
         pdd = pdd_
-        cloud = np.vstack((cloud, next(cloud_generator), next(cloud_generator)))
-        tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
+        cloud = np.vstack((cloud, 
+                           next(cloud_generator), 
+                           next(cloud_generator)))
+        tree = scipy.spatial.KDTree(cloud, 
+                                    compact_nodes=False, 
+                                    balanced_tree=False)
         pdd_, _ = tree.query(motif, k=cloud.shape[0], workers=-1)
     
     k = np.argwhere(np.all(pdd >= min_val, axis=0))[0][0]
 
     return pdd[:, 1:k+1]
 
+
 if __name__ == '__main__':
-    
     motif = np.array([[0,0,0],[0.1,0.1,0.1]])
     cell = np.identity(3)
     cloud, pdd, inds = nearest_neighbours(motif, cell, 10)

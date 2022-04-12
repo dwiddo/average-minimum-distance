@@ -9,5 +9,3 @@ Module list
    amd.io
    amd.periodicset
    amd.utils
-   amd.ccdc_utils
-   

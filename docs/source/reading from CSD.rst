@@ -49,13 +49,9 @@ The :code:`CSDReader` accepts the following parameters (many shared by :class:`.
                   families=False,
                   remove_hydrogens=False,
                   disorder='skip',
-                  heaviest_component=False,
-                  extract_data=None,
-                  include_if=None)
+                  heaviest_component=False)
 
 * As described above, :code:`families` chooses whether to read refcodes or refcode families.
 * :code:`remove_hydrogens` removes Hydrogen atoms from the structure.
 * :code:`disorder` controls how disordered structures are handled. The default is to ``skip`` any crystal with disorder, since disorder conflicts with the periodic set model. To read disordered structures anyway, choose either :code:`ordered_sites` to remove sites with disorder or :code:`all_sites` include all sites regardless.
 * :code:`heaviest_component` takes the heaviest connected molecule in the motif, intended for removing solvents. Only available when ``reader='ccdc'``.
-* :code:`extract_data` is used to extract more data from crystals.
-* :code:`include_if` can remove unwanted structures.

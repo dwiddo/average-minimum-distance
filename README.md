@@ -1,5 +1,17 @@
 # average-minimum-distance: isometrically invariant crystal fingerprints
 
+[![PyPI](https://img.shields.io/pypi/v/average-minimum-distance.svg)](https://pypi.org/project/average-minimum-distance/)
+[![Status](https://img.shields.io/pypi/status/average-minimum-distance)](https://pypi.org/project/average-minimum-distance/)
+[![Format](https://img.shields.io/pypi/format/average-minimum-distance)](https://pypi.org/project/average-minimum-distance/)
+[![MATCH Paper](https://img.shields.io/badge/DOI-10.46793%2Fmatch.87--3.529W-blue)](https://doi.org/10.46793/match.87-3.529W)
+[![CC-0 license](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-blue.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+
+For calculation and comparison of AMD/PDD isometric invariants of periodic sets. Includes .cif reading functionality.
+
+- **Paper:** https://doi.org/10.46793/match.87-3.529W
+- **Documentation:** https://average-minimum-distance.readthedocs.io/en/latest/
+- **Source code:** https://github.com/dwiddo/average-minimum-distance
+- 
 If you use our code in your work, please cite our paper at [arxiv.org/abs/2009.02488](https://arxiv.org/abs/2009.02488). The bib reference is at the bottom of this page; [click here jump to it](#citeus).
 
 ## What's amd?
@@ -32,7 +44,7 @@ reader = amd.CifReader('path/to/file.cif')
 amds = [amd.AMD(crystal, 100) for crystal in reader]
 ```
 
-*Note: CifReader accepts optional arguments, e.g. for removing hydrogen, handling disorder and extracting more data. See the documentation for details.*
+*Note: CifReader accepts optional arguments, e.g. for removing hydrogen and handling disorder. See the documentation for details.*
 
 A crystal can also be read from the CSD using ```amd.CSDReader``` (if csd-python-api is installed), or created manually.
 

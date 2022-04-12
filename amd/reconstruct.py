@@ -1,9 +1,15 @@
-from itertools import product, combinations, permutations
+"""Functions for resconstructing a periodic set up to isometry from its PDD.
+This is possible 'in a general position', see our papers for more."""
+
+import itertools
+
 import numpy as np
-from scipy.spatial import cKDTree
-from numba import njit
-from ._nearest_neighbours import generate_concentric_cloud
+import scipy.spatial
+import numba
+
 from .utils import diameter
+from ._nearest_neighbours import generate_concentric_cloud
+
 
 def reconstruct(pdd, cell):
     """Reconstruct a motif from a PDD and unit cell.
@@ -32,7 +38,7 @@ def reconstruct(pdd, cell):
     """
     # TODO: get a more reduced neighbour set
     # TODO: find all shared distances in a big operation at the start? could be faster
-    
+    # TODO: move PREC variable to its proper place
     PREC = 1e-10
     
     dims = cell.shape[0]
@@ -72,10 +78,10 @@ def reconstruct(pdd, cell):
     
     # all combinations of vecs in neighbour set forming a basis
     bases = []
-    for vecs in combinations(nn_set, dims):
+    for vecs in itertools.combinations(nn_set, dims):
         vecs = np.asarray(vecs)
         if np.abs(np.linalg._umath_linalg.det(vecs, signature='d->d')) > PREC:
-            bases.extend((basis for basis in permutations(vecs, dims)))
+            bases.extend((basis for basis in itertools.permutations(vecs, dims)))
     
     q = _find_second_point(shared_dists, bases, cloud, PREC)
     
@@ -107,11 +113,12 @@ def reconstruct(pdd, cell):
 
     return motif
 
+
 def _find_second_point(shared_dists, bases, cloud, prec):
     dims = cloud.shape[-1]
     abs_q = shared_dists[0]
      
-    for distance_tup in combinations(shared_dists[1:], dims):
+    for distance_tup in itertools.combinations(shared_dists[1:], dims):
         for basis in bases:
             
             if dims == 2:
@@ -125,6 +132,7 @@ def _find_second_point(shared_dists, bases, cloud, prec):
                 if np.all(np.linalg.norm(cloud - res, axis=-1) - abs_q + prec > 0):
                     return res
 
+
 def _find_further_point(shared_dists1, shared_dists2, bases, cloud, q, prec):
     # distance from origin (first motif point) to further point
     dims = cloud.shape[-1]
@@ -132,7 +140,7 @@ def _find_further_point(shared_dists1, shared_dists2, bases, cloud, q, prec):
 
     # try all ordered subsequences of distances shared between first and further row,
     # with all combinations of the vectors in the neighbour set forming a basis
-    for distance_tup in combinations(shared_dists1[1:], dims):  
+    for distance_tup in itertools.combinations(shared_dists1[1:], dims):  
         for basis in bases:
             
             if dims == 2:
@@ -149,10 +157,11 @@ def _find_further_point(shared_dists1, shared_dists2, bases, cloud, q, prec):
                     if np.any(np.abs(shared_dists2 - np.linalg.norm(q - res)) < prec):
                         return res
 
+
 def _neighbour_set(cell, prec):
     """(superset of) the neighbour set of origin for a lattice"""
     # half of all combinations of basis vectors
-    coeffs = np.array(list(product((-1,0,1), repeat=cell.shape[0])))
+    coeffs = np.array(list(itertools.product((-1,0,1), repeat=cell.shape[0])))
     coeffs = coeffs[coeffs.any(axis=-1)]    # remove (0,0,0)
     
     vecs = []
@@ -165,14 +174,14 @@ def _neighbour_set(cell, prec):
 
     k_ = 5
 
-    tree = cKDTree(cloud, compact_nodes=False, balanced_tree=False)
+    tree = scipy.spatial.cKDTree(cloud, compact_nodes=False, balanced_tree=False)
     dists, inds = tree.query(vecs, k=k_, workers=-1)
     dists_ = np.zeros_like(dists)
     
     while not np.array_equal(dists, dists_):
         dists = np.copy(dists_)
         cloud = np.vstack((cloud, next(cloud_generator), next(cloud_generator)))
-        tree = cKDTree(cloud, compact_nodes=False, balanced_tree=False)
+        tree = scipy.spatial.cKDTree(cloud, compact_nodes=False, balanced_tree=False)
         dists_, inds = tree.query(vecs, k=k_, workers=-1)
     
     tmp_inds = np.unique(inds[:, 1:].flatten())
@@ -195,6 +204,7 @@ def _neighbour_set(cell, prec):
     
     return neighbour_set
 
+
 def _four_sphere_pairwise_intersecion(p1, p2, p3, r1, r2, r3, abs_val, prec):
     # True/False intersection of four spheres, one centered at the origin (radius abs_val)
     flags = [False] * 6
@@ -215,7 +225,8 @@ def _four_sphere_pairwise_intersecion(p1, p2, p3, r1, r2, r3, abs_val, prec):
         return False
     return True
 
-@njit()
+
+@numba.njit()
 def _bilaterate(p1, p2, r1, r2, abs_val, prec):
     # Intersection of three circles, one centered at the origin (radius abs_val)
     d = np.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2)
@@ -247,7 +258,8 @@ def _bilaterate(p1, p2, r1, r2, abs_val, prec):
         else:
             return None
 
-@njit()
+
+@numba.njit()
 def _trilaterate(p1, p2, p3, r1, r2, r3, abs_val, prec):
     # Intersection of four spheres, one centered at the origin (radius abs_val)
     temp1 = p2 - p1
@@ -278,17 +290,21 @@ def _trilaterate(p1, p2, p3, r1, r2, r3, abs_val, prec):
     else:
         return None
 
+
 def _unique_within_tol(arr, prec):
     # get only unique values in a vector within a tolerance
     return arr[~np.any(np.triu(np.abs(arr[:, None] - arr) < prec, 1), axis=0)]
+
 
 def _remove_values_within_tol(vec, values_to_remove, prec):
     # remove specified values in vec, within tol
     return vec[~np.any(np.abs(vec[:, None] - values_to_remove) < prec, axis=-1)]
 
+
 def _shared_values_within_tol(v1, v2, prec):
     # get values shared between v1, v2 within tol
     return v1[np.argwhere(np.abs(v1[:, None] - v2) < prec)[:, 0]]
+
 
 if __name__ == '__main__':
     pass

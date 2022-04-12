@@ -24,7 +24,6 @@ more details about specific tasks.
    amd.io
    amd.periodicset
    amd.utils
-   amd.ccdc_utils
 
 .. mdinclude:: ../../README.md
 

@@ -12,11 +12,17 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- `amd.finite_AMD()` and `amd.finite_PDD()` changed to `amd.AMD_finite()` and `amd.PDD_finite()` for easier autocompletion.
+- Higher-order PDDs (the order parameter of `amd.PDD()` and `amd.PDD_finite()`) are removed and replaced with `amd.SDD()` (simplex distance distribution). This invariant is only appropriate for finite sets, but first-order SDDs are equivalent to PDDs.
+
+- `amd.finite_AMD` and `amd.finite_PDD` changed to `amd.AMD_finite` and `amd.PDD_finite` for easier autocompletion.
+
+- `amd.compare.filter` changed to `amd.compare.PDD_cdist_AMD_filter` so it is not confused with the built-in function `filter()`.
+
+- Function `amd.compare.neighbours_from_distance_matrix` moved to `amd.utils.neighbours_from_distance_matrix`.
 
 ### Removed
 
-- Higher-order PDDs (the order parameter of `amd.PDD()` and `amd.PDD_finite()`) are removed and replaced with `amd.SDD()` (simplex distance distribution). This invariant is only appropriate for finite sets, but first-order SDDs are equivalent to PDDs.
+- Removed several functions added from last few versions. These have been moved to a private package as they were just cluttering this one. List of removed functions/modules: `amd.auto`, `amd.ccdc_utils`, `amd.periodicset.PeriodicSet.to_dict`, `amd.io.SetReader.extract_tags`, `amd.compare.mst_from_distance_matrix`, `amd.compare.AMD_mst`, `amd.compare.PDD_mst`, `amd.utils.extract_tags`, `amd.utils.neighbours_df_dict`.
 
 ## [1.1.7] - 01/02/2022
 

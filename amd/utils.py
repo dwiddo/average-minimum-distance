@@ -1,17 +1,86 @@
-"""General utility functions and classes."""
+"""Often-used utility functions."""
 
+from typing import Tuple
 import inspect
 import random
 import time
-from datetime import timedelta
-import numpy as np
+import datetime
 
-def lattice_cubic(scale=1, dims=3):
-    return (np.zeros((1, dims)), np.identity(dims) * scale)
+import numpy as np
+import scipy.spatial
+
+
+def neighbours_from_distance_matrix(
+        n: int, 
+        dm: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Given a distance matrix, find the ``n`` nearest neighbours of each item.
+    
+    Parameters
+    ----------
+    n : int
+        Number of nearest neighbours to find for each item.
+    dm : ndarray
+        2D distance matrix or 1D condensed distance matrix.
+   
+    Returns
+    -------
+    tuple of ndarrays (nn_dm, inds)
+        For item ``i``, ``nn_dm[i][j]`` is the distance from item ``i`` to its ``j+1`` st 
+        nearest neighbour, and ``inds[i][j]`` is the index of this neighbour (``j+1`` since
+        index 0 is the first nearest neighbour).
+    """
+    
+    # 2D distance matrix
+    if len(dm.shape) == 2:
+        inds = np.array([np.argpartition(row, n)[:n] for row in dm])
+    
+    # 1D condensed distance vector
+    elif len(dm.shape) == 1:
+        dm = scipy.spatial.squareform(dm)
+        inds = []
+        for i, row in enumerate(dm):
+            inds_row = np.argpartition(row, n+1)[:n+1]
+            inds_row = inds_row[inds_row != i][:n]
+            inds.append(inds_row)
+        inds = np.array(inds)
+    
+    else:
+        ValueError(
+            'Input must be an ndarray, either a 2D distance matrix '
+            'or a condensed distance matrix (returned by pdist).')
+
+    # inds are the indexes of nns: inds[i,j] is the j-th nn to point i
+    nn_dm = np.take_along_axis(dm, inds, axis=-1)
+    sorted_inds = np.argsort(nn_dm, axis=-1)
+    inds = np.take_along_axis(inds, sorted_inds, axis=-1)
+    nn_dm = np.take_along_axis(nn_dm, sorted_inds, axis=-1)
+    
+    return nn_dm, inds
+
+
+def diameter(cell):
+    """Diameter of a unit cell in 3 or fewer dimensions."""
+    dims = cell.shape[0]
+    if dims == 1:
+        return cell[0][0]
+    if dims == 2:
+        d = np.amax(np.linalg.norm(np.array([cell[0] + cell[1], cell[0] - cell[1]]), axis=-1))
+    elif dims == 3:
+        d = np.amax(np.array([
+            np.linalg.norm(cell[0] + cell[1] + cell[2]),
+            np.linalg.norm(cell[0] + cell[1] - cell[2]),
+            np.linalg.norm(cell[0] - cell[1] + cell[2]),
+            np.linalg.norm(-cell[0] + cell[1] + cell[2])
+        ]))
+    else:
+        raise ValueError(f'diameter only implimented for dimensions <= 3 (passed {dims})')
+    return d
+
 
 def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     """Simplified version of function from ase.geometry.
-    Unit cell params a,b,c,α,β,γ --> cell as 3x3 ndarray.
+    3D unit cell parameters a,b,c,α,β,γ --> cell as 3x3 ndarray.
     """
     # Handle orthorhombic cells separately to avoid rounding errors
     eps = 2 * np.spacing(90.0, dtype=np.float64)  # around 1.4e-14
@@ -37,40 +106,36 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
                      [b*cos_gamma, b*sin_gamma, 0],
                      [c*cos_beta,  c*cy,        c*np.sqrt(cz_sqr)]])
 
+
 def cellpar_to_cell_2D(a, b, alpha):
+    """UD unit cell parameters a,b,α --> cell as 2x2 ndarray."""
     cell = np.array([[a, 0],
                      [b * np.cos(alpha * np.pi / 180.), b * np.sin(alpha * np.pi / 180.)]])
     return cell
 
-def diameter(cell):
-    """Diameter of a unit cell."""
-    dims = cell.shape[0]
-    if dims == 2:
-        d = np.amax(np.linalg.norm(np.array([cell[0] + cell[1], cell[0] - cell[1]]), axis=-1))
-    elif dims == 3:
-        d = np.amax(np.array([
-            np.linalg.norm(cell[0] + cell[1] + cell[2]),
-            np.linalg.norm(cell[0] + cell[1] - cell[2]),
-            np.linalg.norm(cell[0] - cell[1] + cell[2]),
-            np.linalg.norm(-cell[0] + cell[1] + cell[2])
-        ]))
-    return d
+
+def lattice_cubic(scale=1, dims=3):
+    """Return a pair (motif, cell) representing a cubic lattice, passable to 
+    ``amd.AMD()`` or ``amd.PDD()``."""
+    return (np.zeros((1, dims)), np.identity(dims) * scale)
+
 
 def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
-    
+    """Random unit cell."""
     lengths = [random.uniform(*length_bounds) for _ in range(dims)]
-    
     if dims == 3:
         angles = [random.uniform(*angle_bounds) for _ in range(dims)]
         return cellpar_to_cell(*lengths, *angles)
-    
     elif dims == 2:
         alpha = random.uniform(*angle_bounds)
         return cellpar_to_cell_2D(*lengths, alpha)
+    else:
+        raise ValueError(f'random_cell only implimented for dimensions 2 and 3 (passed {dims})')
+
 
 class ETA:
-    """Pass total amount to do on construction, then call .update() on every 
-    loop. ETA will estimate an ETA and print it to the terminal."""
+    """Pass total amount to do, then call .update() on every loop. 
+    This object will estimate an ETA and print it to the terminal."""
     
     _moving_average_factor = 0.3    # epochtime_{n+1} = factor * epochtime + (1-factor) * epochtime_{n}
     
@@ -82,6 +147,21 @@ class ETA:
         self.tic = self.start_time
         self.time_per_epoch = None
         self.done = False
+    
+    def update(self):
+        """Call when one item is finished."""
+        self.counter += 1
+        if self.counter == self.to_do:
+            msg = self._finished()
+            print(msg, end='\r\n')
+            self.done = True
+            return
+        elif self.counter > self.to_do:
+            return
+        
+        if not self.counter % self.update_rate:
+            msg = self._end_epoch()
+            print(msg, end='\r')
     
     def _end_epoch(self):
         toc = time.perf_counter()
@@ -95,118 +175,18 @@ class ETA:
         percent = round(100 * self.counter / self.to_do, 2)
         percent = '{:.2f}'.format(percent)
         remaining = int(((self.to_do - self.counter) / self.update_rate) * self.time_per_epoch)
-        eta = str(timedelta(seconds=remaining))
+        eta = str(datetime.timedelta(seconds=remaining))
         self.tic = toc
         return f'{percent}%, ETA {eta}' + ' ' * 30
     
     def _finished(self):
         total = time.perf_counter() - self.start_time
-        msg = f'Total time: {round(total,2)}s, ' \
+        msg = f'Total time: {round(total, 2)}s, ' \
               f'n passes: {self.counter} ' \
-              f'({round(self.to_do/total,2)} passes/second)'
+              f'({round(self.to_do/total, 2)} passes/second)'
         return msg
-    
-    def update(self):
-        """Call when one item is finished."""
-        
-        self.counter += 1
-        
-        if self.counter == self.to_do:
-            msg = self._finished()
-            print(msg, end='\r\n')
-            self.done = True
-            return
-        
-        elif self.counter > self.to_do:
-            return
-        
-        if not self.counter % self.update_rate:
-            msg = self._end_epoch()
-            print(msg, end='\r')
-
-def extract_tags(periodic_sets) -> dict:
-    """Return ``dict`` with scalar data in the tags of PeriodicSets in the passed list.
-    
-    Dict is in format passable to ``pandas.DataFrame``, as in::
-    
-        periodic_sets = list(amd.SetReader('periodic_sets.hdf5'))
-        names = [s.name for s in periodic_sets]
-        data = amd.utils.extract_tags(periodic_sets)
-        df = pd.DataFrame(data, index=names, columns=data.keys())
-    
-    Format of returned dict is for example:: 
-    
-        {
-            'density': [1.231, 2.532, ...],
-            'family':  ['CBMZPN', 'SEMFAU', ...], 
-            ...
-        }
-        
-    where the inner lists have the same order as the items in ``periodic_sets``.
-    """
-    
-    data = []
-    columns = []
-    
-    for p_set in periodic_sets:
-        
-        row = {}
-        for tag in p_set.tags:
-            value = p_set.tags[tag]
-            if np.isscalar(value):
-                if tag not in columns:
-                    columns.append(tag)
-                row[tag] = value
-        data.append(row)
-        
-    data_ = {}
-    for col_name in columns:
-        column_data = []
-        for row in data:
-            if col_name in row:
-                column_data.append(row[col_name])
-            else:
-                column_data.append(None)
-        data_[col_name] = column_data
-
-    return data_
-
-def neighbours_df_dict(n_neighbours, references, comparisons, invariant_key=None):
-    """
-    n, reference psets, comparison psets --> dict passable to DataFrame
-    
-    Example::
-        data = amd.neighbours_df_dict(10, pdds, pdds\_)
-        df = pd.DataFrame(data, index=ref_names)
-    """
-    from .compare import PDD_cdist, AMD_cdist, neighbours_from_distance_matrix
-    
-    # ref_names = [s.name for s in references]
-    com_names = [s.name for s in comparisons]
-    
-    if invariant_key is None:
-        from .calculate import PDD
-        # default is PDD100
-        ref_invs = [PDD(s, 100) for s in references]
-        com_invs = [PDD(s, 100) for s in comparisons]
-    else:
-        ref_invs = [s.tags[invariant_key] for s in references]
-        com_invs = [s.tags[invariant_key] for s in comparisons]
-    
-    if len(ref_invs[0].shape) == 2:     # auto-detect PDD as 2D arrays
-        dm = PDD_cdist(ref_invs, com_invs)
-    else:
-        dm = AMD_cdist(ref_invs, com_invs)
-    
-    nn_dm, inds = neighbours_from_distance_matrix(n_neighbours, dm)
-    
-    data = {}
-    for i in range(n_neighbours):
-        data['ID_' + str(i+1)]   = [com_names[j] for j in inds[:, i]]
-        data['DIST_' + str(i+1)] = nn_dm[:, i]
-        
-    return data
-
+ 
+   
 def _extend_signature(base):
     def decorator(func):
         func_params = list(inspect.signature(func).parameters.values())[:-1]

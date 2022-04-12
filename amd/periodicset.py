@@ -11,32 +11,32 @@ They can be written to a file with :class:`.io.SetWriter` which can be read with
 from typing import Optional
 import numpy as np
 
+
 class PeriodicSet:
-    """Represents a periodic set (which mathematically represents a crystal). 
-    
+    """A periodic set is the mathematical representation of a crystal by putting a
+    single point in the center of every atom. A periodic set is defined by a basis
+    (unit cell) and collection of points (motif) which repeats according to the basis.
     Has attributes motif, cell and name (which can be :const:`None`). 
+    
     :class:`PeriodicSet` objects are returned by the readers in the :mod:`.io` module.
+    Instances of this object can be passed to :func:`.calculate.AMD` or 
+    :func:`.calculate.PDD`.
     """
 
-    def __init__(self, motif: np.ndarray, 
-                       cell: np.ndarray, 
-                       name: Optional[str] = None, 
-                       **kwargs):
+    def __init__(
+            self, 
+            motif: np.ndarray, 
+            cell: np.ndarray, 
+            name: Optional[str] = None, 
+            **kwargs):
         
         self.motif = motif
         self.cell  = cell
         self.name  = name
         self.tags = kwargs
-
-    def __getattr__(self, attr):
-        if 'tags' not in self.__dict__:
-            self.tags = {}
-        if attr in self.tags:
-            return self.tags[attr]
-        else:
-            raise AttributeError(f"{self.__class__.__name__} object has no attribute or tag {attr}")
-
+    
     def __str__(self):
+        
         m, dims = self.motif.shape
         return f"PeriodicSet({self.name}: {m} motif points in {dims} dimensions)"
     
@@ -46,7 +46,7 @@ class PeriodicSet:
     # used for debugging, checks if the motif/cell agree point for point
     # (disregarding order), NOT up to isometry. 
     def __eq__(self, other):
-
+        
         if self.cell.shape != other.cell.shape or self.motif.shape != other.motif.shape:
             return False
 
@@ -74,8 +74,20 @@ class PeriodicSet:
 
         return True
     
+    def __getattr__(self, attr):
+        
+        if 'tags' not in self.__dict__:
+            self.tags = {}
+        if attr in self.tags:
+            return self.tags[attr]
+        else:
+            raise AttributeError(f"{self.__class__.__name__} object has no attribute or tag {attr}")
+    
     def __ne__(self, other):
         return not self.__eq__(other)
+    
+    def copy(self):
+        return PeriodicSet(self.motif, self.cell, name=self.name, **self.tags)
     
     def astype(self, dtype):
         """Returns copy of the :class:`PeriodicSet` with ``.motif`` 
@@ -85,22 +97,3 @@ class PeriodicSet:
                            self.cell.astype(dtype),
                            name=self.name,
                            **self.tags)
-
-    def to_dict(self) -> dict:
-        """Return ``dict`` with scalar data in the tags of the :class:`PeriodicSet`.
-        
-        Format of returned ``dict`` is for example::
-        
-            {
-                'density': 1.231, 
-                'family': 'CBMZPN', 
-                ...
-            }
-        """
-        
-        data = {}
-        for tag in self.tags:
-            if np.isscalar(self.tags[tag]):
-                data[tag] = self.tags[tag]
-
-        return data
