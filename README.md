@@ -8,7 +8,7 @@
 
 Implements new isometric invariants average minimum distances (AMD) and point-wise distance distributions (PDD)  of periodic sets. Includes .cif reading functionality.
 
-- **Paper:** doi.org/10.46793/match.87-3.529W or on arxiv at arxiv.org/abs/2009.02488
+- **Paper:** https://doi.org/10.46793/match.87-3.529W or on arxiv at https://arxiv.org/abs/2009.02488
 - **Documentation:** average-minimum-distance.readthedocs.io
 - **Source code:** github.com/dwiddo/average-minimum-distance
 
