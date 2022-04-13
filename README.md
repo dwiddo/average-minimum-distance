@@ -1,7 +1,6 @@
 # average-minimum-distance: isometrically invariant crystal fingerprints
 
 [![PyPI](https://img.shields.io/pypi/v/average-minimum-distance.svg)](https://pypi.org/project/average-minimum-distance/)
-[![Format](https://img.shields.io/pypi/format/average-minimum-distance)](https://pypi.org/project/average-minimum-distance/)
 [![Status](https://img.shields.io/pypi/status/average-minimum-distance)](https://pypi.org/project/average-minimum-distance/)
 [![Read the Docs](https://img.shields.io/readthedocs/average-minimum-distance)](https://average-minimum-distance.readthedocs.io)
 [![MATCH Paper](https://img.shields.io/badge/DOI-10.46793%2Fmatch.87--3.529W-blue)](https://doi.org/10.46793/match.87-3.529W)
@@ -10,10 +9,11 @@
 Implements isometric invariants average minimum distances (AMD) and point-wise distance distributions (PDD)  of periodic sets. Includes .cif reading functionality.
 
 - **Paper:** https://doi.org/10.46793/match.87-3.529W or on arXiv at https://arxiv.org/abs/2009.02488
+- **PyPI Download:** https://pypi.org/project/average-minimum-distance/
 - **Documentation:** https://average-minimum-distance.readthedocs.io
 - **Source code:** https://github.com/dwiddo/average-minimum-distance
 
-If you use our code in your work, please cite our paper at [arxiv.org/abs/2009.02488](https://arxiv.org/abs/2009.02488). The bib reference is at the bottom of this page; [click here jump to it](#citeus).
+If you use our code in your work, please cite us. The bib reference is at the bottom of this page; [click here jump to it](#citeus).
 
 ## What's amd?
 
@@ -72,16 +72,16 @@ dm = squareform(cdm)
 
 The function ```amd.AMD_pdist``` has an equivalent for PDDs, ```amd.PDD_pdist```. There are also the equivalents of ```scipy.distance.spatial.cdist```, ```amd.AMD_cdist``` and ```amd.PDD_cdist```, which take two sets and compares one vs the other, returning a 2D distance matrix.
 
-## Example: PDD-based dendrogram of a family of crystals
+## Example: PDD-based dendrogram of crystals in a .CIF
 
-This example reads crystals in the DEBXIT family, compares them by PDD and plots a single linkage dendrogram:
+This example reads crystals from a .CIF, compares them by PDD and plots a single linkage dendrogram:
 
 ```py
 import amd
 import matplotlib.pyplot as plt
 from scipy.cluster import hierarchy
 
-crystals = list(amd.CSDReader('DEBXIT', families=True))
+crystals = list(amd.CifReader('crystals.cif'))
 names = [crystal.name for crystal in crystals]
 pdds = [amd.PDD(crystal, 100) for crystal in crystals]
 cdm = amd.PDD_pdist(pdds)

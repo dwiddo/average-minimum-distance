@@ -102,7 +102,7 @@ class _Reader:
                         'extract_data must be a dict with callable values')
                 if key in _Reader.reserved_tags:
                     raise ValueError(
-                        f'extract_data includes reserved key {key}; change {key} to a different value to resolve')
+                        f'extract_data includes reserved key {key}')
         
         if include_if:
             for f in include_if:

@@ -12,7 +12,7 @@ from ._network_simplex import network_simplex
 from .utils import ETA
 
 
-def emd(
+def EMD(
         pdd:  np.ndarray, 
         pdd_: np.ndarray, 
         metric: Optional[str] = 'chebyshev',
@@ -56,9 +56,8 @@ def emd(
         return emd_dist
 
 
-def sdd_EMD(sdd, sdd_, return_transport: Optional[bool] = False):
-    r"""Earth mover's distance (EMD) between two SDDs, also known as
-    the Wasserstein metric.
+def SDD_EMD(sdd, sdd_, return_transport: Optional[bool] = False):
+    r"""Earth mover's distance (EMD) between two SDDs.
     
     Parameters
     ----------
@@ -262,7 +261,7 @@ def PDD_cdist(
     for i in range(n):
         pdd = pdds[i]
         for j in range(m):
-            dm[i, j] = emd(pdd[:, :t], pdds_[j][:, :t], metric=metric, **kwargs)
+            dm[i, j] = EMD(pdd[:, :t], pdds_[j][:, :t], metric=metric, **kwargs)
             if verbose: eta.update()
 
     return dm
@@ -312,20 +311,20 @@ def PDD_pdist(
     inds = ((i,j) for i in range(0, m - 1) for j in range(i + 1, m))
 
     for r, (i, j) in enumerate(inds):
-        cdm[r] = emd(pdds[i][:, :t], pdds[j][:, :t], metric=metric, **kwargs)
+        cdm[r] = EMD(pdds[i][:, :t], pdds[j][:, :t], metric=metric, **kwargs)
         if verbose: eta.update()
     
     return cdm
 
 
-def EMD(
+def emd(
         pdd:  np.ndarray,
         pdd_: np.ndarray, 
         metric: Optional[str] = 'chebyshev',
         return_transport: Optional[bool] = False, 
         **kwargs):
     """Alias for amd.emd()."""
-    return emd(pdd, pdd_, metric=metric, return_transport=return_transport, **kwargs)
+    return EMD(pdd, pdd_, metric=metric, return_transport=return_transport, **kwargs)
 
 
 def PDD_cdist_AMD_filter(
@@ -447,7 +446,7 @@ def PDD_cdist_AMD_filter(
     
     for i, row in enumerate(inds):
         for i_, j in enumerate(row):
-            dm[i, i_] = emd(pdds[i][:,:t], pdds_[j][:,:t], **metric_kwargs)
+            dm[i, i_] = EMD(pdds[i][:,:t], pdds_[j][:,:t], **metric_kwargs)
             if verbose: eta.update()
 
     sorted_inds = np.argsort(dm, axis=-1)

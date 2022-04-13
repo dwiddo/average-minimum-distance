@@ -29,7 +29,6 @@ extras_require = {
 
 project_urls = {
     'Documentation': 'https://average-minimum-distance.readthedocs.io/en/latest/',
-	'Bug Tracker': 'https://github.com/dwiddo/average-minimum-distance/issues',
 	'Changelog': 'https://github.com/dwiddo/average-minimum-distance/blob/master/CHANGELOG.md',
 }
 

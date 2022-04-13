@@ -165,10 +165,8 @@ def nearest_neighbours(
                                 compact_nodes=False, 
                                 balanced_tree=False)
     pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
-    # pdd_ = np.round(pdd_, decimals=18)
     pdd = np.empty_like(pdd_)
 
-    # while not np.array_equal(pdd, pdd_):
     while not np.allclose(pdd, pdd_, atol=0, rtol=1e-12):
         pdd = pdd_
         cloud = np.vstack((cloud, 
@@ -178,7 +176,6 @@ def nearest_neighbours(
                                     compact_nodes=False, 
                                     balanced_tree=False)
         pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
-        # pdd_ = np.round(pdd_, decimals=18)
 
     return pdd_[:, 1:], cloud, inds[:, 1:]
 
