@@ -27,17 +27,14 @@ def network_simplex(source_demands, sink_demands, network_costs):
            INFOR 17(1):16--34. 1979.
     """
 
+    n_sources, n_sinks = source_demands.shape[0], sink_demands.shape[0]
     network_costs = network_costs.ravel()
 
     # Constant used throughout for conversions from floating point to integer
     fp_multiplier = np.array([1000000], dtype=np.int64)
 
-    # Using numerical ordering is nice for indexing
-    sources = np.arange(source_demands.shape[0]).astype(np.int64)
-    sinks = np.arange(sink_demands.shape[0]).astype(np.int64) + source_demands.shape[0]
-
     # Add one additional node for a dummy source and sink
-    nodes = np.arange(source_demands.shape[0] + sink_demands.shape[0]).astype(np.int64)
+    nodes = np.arange(n_sources + n_sinks).astype(np.int64)
 
     # Multiply by a large number and cast to int to remove floating points
     source_d_fp = source_demands * fp_multiplier.astype(np.int64)
@@ -58,7 +55,6 @@ def network_simplex(source_demands, sink_demands, network_costs):
 
     # Create demands array
     demands = np.concatenate((-source_d_int, sink_d_int)).astype(np.int64)
-    n_sources, n_sinks = sources.shape[0], sinks.shape[0]
 
     # Create fully connected arcs between all sources and sinks
     conn_tails = np.array([i for i in range(n_sources) for _ in range(n_sinks)],
@@ -117,17 +113,16 @@ def network_simplex(source_demands, sink_demands, network_costs):
     # General arrays for the spanning tree
     potentials = np.array([faux_inf if d <= 0 else -faux_inf for d in demands]).T
     parent = np.concatenate((np.ones(n) * -1, np.array([-2]))).astype(np.int64)
-    edge = np.arange(e, e+n).astype(np.int64)
+    edge = np.arange(e, e + n).astype(np.int64)
     size = np.concatenate((np.ones(n), np.array([n + 1]))).astype(np.int64)
     next_node = np.concatenate((np.arange(1, n), np.array([-1, 0]))).astype(np.int64)
     prev_node = np.arange(-1, n)          # previous nodes in depth-first thread
     last_node = np.concatenate((np.arange(n), np.array([n - 1]))).astype(np.int64)  # last descendants in depth-first thread
+    f = 0
 
     ###########################################################################
     # Main Pivot loop
     ###########################################################################
-
-    f = 0
 
     while True:
         i, p, q, f = find_entering_edges(e, f, tails, heads, costs, potentials, flows)
@@ -138,8 +133,7 @@ def network_simplex(source_demands, sink_demands, network_costs):
         j, s, t = find_leaving_edge(cycle_nodes, cycle_edges, capac, flows, tails, heads)
         augment_flow(cycle_nodes, cycle_edges, residual_capacity(j, s, capac, flows, tails), tails, flows)
 
-        if i != j:  # Do nothing more if the entering edge is the same as the
-                    # the leaving edge.
+        if i != j:  # Do nothing more if the entering edge is the same as the leaving edge.
             if parent[t] != s:
                 # Ensure that s is the parent of t.
                 s, t = t, s
@@ -153,6 +147,9 @@ def network_simplex(source_demands, sink_demands, network_costs):
             add_edge(i, p, q, next_node, prev_node, last_node, size, parent, edge)
             update_potentials(i, p, q, heads, potentials, costs, last_node, next_node)
 
+    # final_emd, final_flows = emd_from_flows_and_costs(flows[:e], costs[:e], fp_multiplier)
+    # return final_emd, final_flows
+    
     flow_cost = 0
     final_flows = flows[:e].astype(np.float64)
     edge_costs = costs[:e].astype(np.float64)
@@ -168,6 +165,24 @@ def network_simplex(source_demands, sink_demands, network_costs):
     final_flows = final_flows / fp_multiplier
 
     return final[0], final_flows
+
+
+# @numba.njit(cache=True)
+# def emd_from_flows_and_costs(flows, costs, fp_multiplier):
+#     """Calculate final EMD from flow and cost matrices."""
+#     flow_cost = 0
+#     final_flows = flows.astype(np.float64)
+#     edge_costs = costs.astype(np.float64)
+
+#     # dot product is returning wrong values for some reason...
+#     for arc_ind, flow in np.ndenumerate(final_flows):
+#         flow_cost += flow * edge_costs[arc_ind]
+
+#     final = flow_cost / fp_multiplier
+#     final = final.astype(np.float64)
+#     final = final / fp_multiplier
+#     final_flows = final_flows / fp_multiplier
+#     return final[0], final_flows
 
 
 @numba.njit(cache=True)

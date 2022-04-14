@@ -135,7 +135,7 @@ class _Reader:
         """Iterates over iterable, passing items through parser and
         yielding the result if it is not None.
         """
-
+        
         for item in iterable:
             res = func(item)
             if res is not None:
@@ -151,7 +151,7 @@ class _Reader:
         -->
         frac_motif, asym_unit, multiplicities, inverses
         """
-
+        
         rotations, translations = ase.spacegroup.spacegroup.parse_sitesym(sitesym)
         all_sites = []
         asym_unit = [0]
@@ -170,22 +170,7 @@ class _Reader:
                     multiplicity += 1
                     continue
 
-                diffs1 = np.abs(site_ - all_sites)
-                diffs2 = np.abs(diffs1 - 1)
-                mask = np.all(np.logical_or(diffs1 <= _Reader.equiv_site_tol,
-                                            diffs2 <= _Reader.equiv_site_tol),
-                              axis=-1)
-
-                if np.any(mask):
-                    where_equal = np.argwhere(mask).flatten()
-                    for ind in where_equal:
-                        if inverses[ind] == inv:
-                            pass
-                        else:
-                            if self.show_warnings:
-                                warnings.warn(
-                                    f'{self.current_identifier} has equivalent positions {inverses[ind]} and {inv}')
-                else:
+                if not self._is_site_overlapping(site_, all_sites, inverses, inv):
                     all_sites.append(site_)
                     inverses.append(inv)
                     multiplicity += 1
@@ -198,6 +183,27 @@ class _Reader:
         asym_unit = np.array(asym_unit[:-1])
         multiplicities = np.array(multiplicities)
         return frac_motif, asym_unit, multiplicities, inverses
+
+    def _is_site_overlapping(self, new_site, all_sites, inverses, inv):
+        """Return True (and warn) if new_site overlaps with a site in all_sites."""
+        diffs1 = np.abs(new_site - all_sites)
+        diffs2 = np.abs(diffs1 - 1)
+        mask = np.all(np.logical_or(diffs1 <= _Reader.equiv_site_tol,
+                                    diffs2 <= _Reader.equiv_site_tol),
+                        axis=-1)
+
+        if np.any(mask):
+            where_equal = np.argwhere(mask).flatten()
+            for ind in where_equal:
+                if inverses[ind] == inv:
+                    pass
+                else:
+                    if self.show_warnings:
+                        warnings.warn(
+                            f'{self.current_identifier} has equivalent positions {inverses[ind]} and {inv}')
+            return True
+        else:
+            return False
 
     def _CIFBlock_to_PeriodicSet(self, block) -> PeriodicSet:
         """ase.io.cif.CIFBlock --> PeriodicSet. Returns None for a "bad" set."""
