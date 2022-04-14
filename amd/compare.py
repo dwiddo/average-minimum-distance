@@ -61,9 +61,9 @@ def SDD_EMD(sdd, sdd_, return_transport: Optional[bool] = False):
     
     Parameters
     ----------
-    sdd : tuple of ndarrays (or None)
+    sdd : tuple of ndarrays
         SDD of a crystal.
-    sdd\_ : tuple of ndarrays (or None)
+    sdd\_ : tuple of ndarrays
         SDD of a crystal.
     return_transport: bool, optional
         Return a tuple (distance, transport_plan) with the optimal transport.
@@ -82,17 +82,50 @@ def SDD_EMD(sdd, sdd_, return_transport: Optional[bool] = False):
     
     dists, dists_ = sdd[2], sdd_[2]
     
-    if not dists.shape[-1] == dists_.shape[-1]:
-        raise ValueError(f'Dimension/order of SDDs passed are not the same: {sdd[2].shape[-1]} vs {sdd_[2].shape[-1]}')
+    # first order SDD, equivalent to PDD
+    if dists.ndim == 2 and dists_.ndim == 2:
+        dm = scipy.spatial.distance.cdist(dists, dists_, metric='chebyshev')
+        emd_dist, transport_plan = network_simplex(sdd[0], sdd_[0], dm)
+        
+        if return_transport:
+            return emd_dist, transport_plan.reshape(dm.shape)
+        else:
+            return emd_dist
     
-    dist_abs_diffs = np.abs(sdd[1][:, None] - sdd_[1])
+    order = dists.shape[-1]
     n, m = len(sdd[0]), len(sdd_[0])
+    
+    dist_cdist = None
+    if order == 2:
+        dist_cdist = np.abs(sdd[1][:, None] - sdd_[1])
+    else:
+        dist, dist_ = sdd[1], sdd_[1]
+        
+        # take EMDs between finite PDDs in dist column
+        """
+        weights = np.full((order, ), 1 / order)
+        dist_cdist = np.empty((n, m), dtype=np.float64)
+        for i in range(n):
+            for j in range(m):
+                finite_pdd_dm = scipy.spatial.distance.cdist(dist[i], dist_[j], metric='chebyshev')
+                dists_emd, _ = network_simplex(weights, weights, finite_pdd_dm)
+                dist_cdist[i, j] = dists_emd
+        """
+        
+        # flatten and compare by linf
+        flat_dist  = dist.reshape((n, order * (order - 1)))
+        flat_dist_ = dist_.reshape((m, order * (order - 1)))
+        flat_dist  = np.sort(flat_dist, axis=-1)
+        flat_dist_ = np.sort(flat_dist_, axis=-1)
+        dist_cdist = scipy.spatial.distance.cdist(flat_dist, flat_dist_, metric='chebyshev')
+        
     dm = np.empty((n, m), dtype=np.float64)
     for i in range(n):
         for j in range(m):
-            cost_matrix = np.amax(np.abs(dists[i][:, None] - dists_[j]), axis=-1)
+            cost_matrix = scipy.spatial.distance.cdist(dists[i], dists_[j], metric='chebyshev')
             row_ind, col_ind = scipy.optimize.linear_sum_assignment(cost_matrix)
-            dm[i, j] = np.amax(np.amax(cost_matrix[row_ind, col_ind]), dist_abs_diffs[i, j])
+            dm[i, j] = max(np.amax(cost_matrix[row_ind, col_ind]), dist_cdist[i, j])
+            
     emd_dist, transport_plan = network_simplex(sdd[0], sdd_[0], dm)
     
     if return_transport:
@@ -147,6 +180,7 @@ def AMD_cdist(
             warnings.warn(
                 "Using only allowed metric 'chebyshev' for low_memory", 
                 UserWarning)
+            
         dm = np.empty((len(amds), len(amds_)))
         for i in range(len(amds)):
             dm[i] = np.amax(np.abs(amds_ - amds[i]), axis=-1)
@@ -382,7 +416,7 @@ def PDD_cdist_AMD_filter(
         
         if pdds_ is None:
             pdd_cdm = PDD_pdist(pdds, verbose=verbose, **kwargs)
-            dm = scipy.spatial.squareform(pdd_cdm)
+            dm = scipy.spatial.distance.squareform(pdd_cdm)
         else:
             dm = PDD_cdist(pdds, pdds_, verbose=verbose, **kwargs)
         
@@ -412,8 +446,7 @@ def PDD_cdist_AMD_filter(
             inds = np.array(inds)
         else:
             amd_cdm = AMD_pdist(amds, **kwargs)
-            # kinda annoying I use squareform here. The alternative was so much worse...
-            amd_dm = scipy.spatial.squareform(amd_cdm)
+            amd_dm = scipy.spatial.distance.squareform(amd_cdm)
             inds = []
             for i, row in enumerate(amd_dm):
                 inds_row = np.argpartition(row, n+1)[:n+1]

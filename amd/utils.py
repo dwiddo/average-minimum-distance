@@ -1,10 +1,10 @@
-"""Often-used utility functions."""
+"""Helpful utility functions."""
 
 from typing import Tuple
-import inspect
 import random
 import time
 import datetime
+import inspect
 
 import numpy as np
 import scipy.spatial
@@ -37,7 +37,7 @@ def neighbours_from_distance_matrix(
     
     # 1D condensed distance vector
     elif len(dm.shape) == 1:
-        dm = scipy.spatial.squareform(dm)
+        dm = scipy.spatial.distance.squareform(dm)
         inds = []
         for i, row in enumerate(dm):
             inds_row = np.argpartition(row, n+1)[:n+1]

@@ -64,7 +64,6 @@ def reconstruct(pdd, cell):
     
     # neighbour set: (a superset of) the lattice points close enough to the Voronoi domain
     nn_set = _neighbour_set(cell, PREC)
-    
     lattice_dists = np.linalg.norm(cloud, axis=-1)
     lattice_dists = lattice_dists[lattice_dists <= diam]
     lattice_dists = _unique_within_tol(lattice_dists, PREC)
@@ -80,7 +79,7 @@ def reconstruct(pdd, cell):
     bases = []
     for vecs in itertools.combinations(nn_set, dims):
         vecs = np.asarray(vecs)
-        if np.abs(np.linalg._umath_linalg.det(vecs, signature='d->d')) > PREC:
+        if np.abs(np.linalg.det(vecs)) > PREC:
             bases.extend((basis for basis in itertools.permutations(vecs, dims)))
     
     q = _find_second_point(shared_dists, bases, cloud, PREC)
@@ -95,7 +94,7 @@ def reconstruct(pdd, cell):
         return motif
     
     for row in pdd[2:, :]:
-        row_reduced = _remove_values_within_tol(row, lattice_dists, PREC)
+        row_reduced   = _remove_values_within_tol(row, lattice_dists, PREC)
         shared_dists1 = _shared_values_within_tol(row1_reduced, row_reduced, PREC)
         shared_dists2 = _shared_values_within_tol(row2_reduced, row_reduced, PREC)
         shared_dists1 = _unique_within_tol(shared_dists1, PREC)
@@ -108,9 +107,7 @@ def reconstruct(pdd, cell):
         motif.append(q_)
     
     motif = np.array(motif)
-    inv_cell = np.linalg._umath_linalg.inv(cell, signature='d->d')
-    motif = np.mod(motif @ inv_cell, 1) @ cell
-
+    motif = np.mod(motif @ np.linalg.inv(cell), 1) @ cell
     return motif
 
 
@@ -160,28 +157,34 @@ def _find_further_point(shared_dists1, shared_dists2, bases, cloud, q, prec):
 
 def _neighbour_set(cell, prec):
     """(superset of) the neighbour set of origin for a lattice"""
-    # half of all combinations of basis vectors
+    
+    k_ = 5
     coeffs = np.array(list(itertools.product((-1,0,1), repeat=cell.shape[0])))
     coeffs = coeffs[coeffs.any(axis=-1)]    # remove (0,0,0)
     
+    # half of all combinations of basis vectors
     vecs = []
     for c in coeffs:
         vecs.append(np.sum(cell * c[None, :].T, axis=0) / 2)
     vecs = np.array(vecs)
 
-    cloud_generator = generate_concentric_cloud(np.zeros((1, cell.shape[0])), cell)
+    origin = np.zeros((1, cell.shape[0]))
+    cloud_generator = generate_concentric_cloud(origin, cell)
     cloud = np.concatenate((next(cloud_generator), next(cloud_generator)))
-
-    k_ = 5
-
-    tree = scipy.spatial.cKDTree(cloud, compact_nodes=False, balanced_tree=False)
+    tree = scipy.spatial.cKDTree(cloud, 
+                                 compact_nodes=False, 
+                                 balanced_tree=False)
     dists, inds = tree.query(vecs, k=k_, workers=-1)
-    dists_ = np.zeros_like(dists)
+    dists_ = np.empty_like(dists)
     
-    while not np.array_equal(dists, dists_):
-        dists = np.copy(dists_)
-        cloud = np.vstack((cloud, next(cloud_generator), next(cloud_generator)))
-        tree = scipy.spatial.cKDTree(cloud, compact_nodes=False, balanced_tree=False)
+    while not np.allclose(dists, dists_, atol=0, rtol=1e-12):
+        dists = dists_
+        cloud = np.vstack((cloud, 
+                           next(cloud_generator), 
+                           next(cloud_generator)))
+        tree = scipy.spatial.cKDTree(cloud, 
+                                     compact_nodes=False, 
+                                     balanced_tree=False)
         dists_, inds = tree.query(vecs, k=k_, workers=-1)
     
     tmp_inds = np.unique(inds[:, 1:].flatten())
@@ -195,7 +198,7 @@ def _neighbour_set(cell, prec):
     # so, check if the dist to 0 is leq (within tol) than dist to all other lattice points
     nn_norms = np.linalg.norm(neighbour_set, axis=-1)
     halves_norms = nn_norms / 2
-    halves_to_lattice_dists = np.linalg.norm(neighbour_set_half[:, None] - neighbour_set, axis=-1)
+    halves_to_lattice_dists = scipy.spatial.distance.cdist(neighbour_set_half, neighbour_set)
     
     # Do I need to + PREC?
     # inds of voronoi neighbours in cloud

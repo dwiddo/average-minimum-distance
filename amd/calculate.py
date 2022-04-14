@@ -256,9 +256,9 @@ def SDD(
 
     Returns
     -------
-    ndarray or tuple of ndarrays
-        The h-order SDD of ``motif``. If h = 1 this is the PDD, a single array. If h > 1,
-        3 arrays are returned, ``weights``, ``dist`` and ``sdd``. 
+    tuple of ndarrays
+        The h-order SDD of ``motif``. A tuple of 3 arrays is returned, 
+        ``weights``, ``dist`` and ``sdd``. If order=1, dist is None.
         
     Examples
     --------
