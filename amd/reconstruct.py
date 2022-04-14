@@ -19,7 +19,7 @@ def reconstruct(pdd, cell):
     for this function, instead use amd.PDD_reconstructable which returns a version of 
     the PDD which is passable to this function.
     Currently quite slow and has variable run times.
-    
+
     Parameters
     ----------
     pdd : ndarray
@@ -29,29 +29,28 @@ def reconstruct(pdd, cell):
         PDD which is acceptable for this argument.
     cell : ndarray
         Unit cell of the periodic set to reconstruct.
-        
+
     Returns
     -------
     ndarray
         The reconstructed motif of the periodic set.
-    
     """
     # TODO: get a more reduced neighbour set
     # TODO: find all shared distances in a big operation at the start? could be faster
     # TODO: move PREC variable to its proper place
     PREC = 1e-10
-    
+
     dims = cell.shape[0]
     if dims not in (2, 3):
         raise ValueError('Reconstructing from PDD only implemented for 2 and 3 dimensions')
-    
+
     diam = diameter(cell)
     motif = [np.zeros((dims, ))]    # set first point as origin wlog, return if 1 motif point
-    
+
     if pdd.shape[0] == 1:
         motif = np.array(motif)
         return motif
-    
+
     # finding lattice distances so we can ignore them
     cloud_generator = generate_concentric_cloud(np.array(motif), cell)
     cloud = []
@@ -61,38 +60,38 @@ def reconstruct(pdd, cell):
         cloud.append(l)
         l = next(cloud_generator)
     cloud = np.concatenate(cloud)
-    
+
     # neighbour set: (a superset of) the lattice points close enough to the Voronoi domain
     nn_set = _neighbour_set(cell, PREC)
     lattice_dists = np.linalg.norm(cloud, axis=-1)
     lattice_dists = lattice_dists[lattice_dists <= diam]
     lattice_dists = _unique_within_tol(lattice_dists, PREC)
-    
+
     # remove lattice distances from first and second rows
     row1_reduced = _remove_values_within_tol(pdd[0], lattice_dists, PREC)
     row2_reduced = _remove_values_within_tol(pdd[1], lattice_dists, PREC)
     # get shared dists between first and second rows
     shared_dists = _shared_values_within_tol(row1_reduced, row2_reduced, PREC)
     shared_dists = _unique_within_tol(shared_dists, PREC)
-    
+
     # all combinations of vecs in neighbour set forming a basis
     bases = []
     for vecs in itertools.combinations(nn_set, dims):
         vecs = np.asarray(vecs)
         if np.abs(np.linalg.det(vecs)) > PREC:
             bases.extend((basis for basis in itertools.permutations(vecs, dims)))
-    
+
     q = _find_second_point(shared_dists, bases, cloud, PREC)
-    
+
     if q is None:
         raise RuntimeError('Second point of motif could not be found.')
-    
+
     motif.append(q)
-    
+
     if pdd.shape[0] == 2:
         motif = np.array(motif)
         return motif
-    
+
     for row in pdd[2:, :]:
         row_reduced   = _remove_values_within_tol(row, lattice_dists, PREC)
         shared_dists1 = _shared_values_within_tol(row1_reduced, row_reduced, PREC)
@@ -100,12 +99,12 @@ def reconstruct(pdd, cell):
         shared_dists1 = _unique_within_tol(shared_dists1, PREC)
         shared_dists2 = _unique_within_tol(shared_dists2, PREC)
         q_ = _find_further_point(shared_dists1, shared_dists2, bases, cloud, q, PREC)
-            
+
         if q_ is None:
             raise RuntimeError('Further point of motif could not be found.')
-        
+
         motif.append(q_)
-    
+
     motif = np.array(motif)
     motif = np.mod(motif @ np.linalg.inv(cell), 1) @ cell
     return motif
@@ -114,17 +113,17 @@ def reconstruct(pdd, cell):
 def _find_second_point(shared_dists, bases, cloud, prec):
     dims = cloud.shape[-1]
     abs_q = shared_dists[0]
-     
+
     for distance_tup in itertools.combinations(shared_dists[1:], dims):
         for basis in bases:
-            
+
             if dims == 2:
                 res = _bilaterate(*basis, *distance_tup, abs_q, prec)
             elif dims == 3:
                 if not _four_sphere_pairwise_intersecion(*basis, *distance_tup, abs_q, prec):
                     continue
                 res = _trilaterate(*basis, *distance_tup, abs_q, prec)
-            
+
             if res is not None:
                 if np.all(np.linalg.norm(cloud - res, axis=-1) - abs_q + prec > 0):
                     return res
@@ -139,7 +138,7 @@ def _find_further_point(shared_dists1, shared_dists2, bases, cloud, q, prec):
     # with all combinations of the vectors in the neighbour set forming a basis
     for distance_tup in itertools.combinations(shared_dists1[1:], dims):  
         for basis in bases:
-            
+
             if dims == 2:
                 res = _bilaterate(*basis, *distance_tup, abs_q_, prec)
             elif dims == 3:
@@ -157,11 +156,11 @@ def _find_further_point(shared_dists1, shared_dists2, bases, cloud, q, prec):
 
 def _neighbour_set(cell, prec):
     """(superset of) the neighbour set of origin for a lattice"""
-    
+
     k_ = 5
     coeffs = np.array(list(itertools.product((-1,0,1), repeat=cell.shape[0])))
     coeffs = coeffs[coeffs.any(axis=-1)]    # remove (0,0,0)
-    
+
     # half of all combinations of basis vectors
     vecs = []
     for c in coeffs:
@@ -176,7 +175,7 @@ def _neighbour_set(cell, prec):
                                  balanced_tree=False)
     dists, inds = tree.query(vecs, k=k_, workers=-1)
     dists_ = np.empty_like(dists)
-    
+
     while not np.allclose(dists, dists_, atol=0, rtol=1e-12):
         dists = dists_
         cloud = np.vstack((cloud, 
@@ -186,11 +185,11 @@ def _neighbour_set(cell, prec):
                                      compact_nodes=False, 
                                      balanced_tree=False)
         dists_, inds = tree.query(vecs, k=k_, workers=-1)
-    
+
     tmp_inds = np.unique(inds[:, 1:].flatten())
     tmp_inds = tmp_inds[tmp_inds != 0]
     neighbour_set = cloud[tmp_inds]
-    
+
     # reduce neighbour set
     # half the lattice points and find their nearest neighbours in the lattice
     neighbour_set_half = neighbour_set / 2
@@ -199,12 +198,11 @@ def _neighbour_set(cell, prec):
     nn_norms = np.linalg.norm(neighbour_set, axis=-1)
     halves_norms = nn_norms / 2
     halves_to_lattice_dists = scipy.spatial.distance.cdist(neighbour_set_half, neighbour_set)
-    
+
     # Do I need to + PREC?
     # inds of voronoi neighbours in cloud
     voronoi_neighbours = np.all(halves_to_lattice_dists - halves_norms + prec >= 0, axis=-1)    
     neighbour_set = neighbour_set[voronoi_neighbours]
-    
     return neighbour_set
 
 
@@ -223,7 +221,7 @@ def _four_sphere_pairwise_intersecion(p1, p2, p3, r1, r2, r3, abs_val, prec):
         flags[4] = True
     if np.linalg.norm(p2 - p3) > r2 + r3 - prec:
         flags[5] = True
-    
+
     if any(flags):
         return False
     return True
@@ -241,7 +239,7 @@ def _bilaterate(p1, p2, r1, r2, abs_val, prec):
         return None
     if d == 0 and r1 == r2: # coincident circles
         return None
-    
+
     else:
         a = (r1 ** 2 - r2 ** 2 + d ** 2) / (2 * d)
         h = np.sqrt(r1 ** 2 - a ** 2)
@@ -253,7 +251,7 @@ def _bilaterate(p1, p2, r1, r2, abs_val, prec):
         y4 = y2 + h * v[0]
         q1 = np.array((x3, y3))
         q2 = np.array((x4, y4))
-        
+
         if np.abs(np.sqrt(x3 ** 2 + y3 ** 2) - abs_val) < prec:
             return q1
         elif np.abs(np.sqrt(x4 ** 2 + y4 ** 2) - abs_val) < prec:
@@ -272,20 +270,20 @@ def _trilaterate(p1, p2, p3, r1, r2, r3, abs_val, prec):
     i = np.core.dot(e_x, temp2)
     temp3 = temp2 - i * e_x
     e_y = temp3 / np.linalg.norm(temp3)
-    
+
     j = np.core.dot(e_y, temp2)
     x = (r1 * r1 - r2 * r2 + d * d) / (2 * d)
     y = (r1 * r1 - r3 * r3 -2 * i * x + i * i + j * j) / (2 * j)
     temp4 = r1 * r1 - x * x - y * y
-    
+
     if temp4 < 0:
         return None
-    
+
     e_z = np.cross(e_x, e_y)
     z = np.sqrt(temp4)
     p_12_a = p1 + x * e_x + y * e_y + z * e_z
     p_12_b = p1 + x * e_x + y * e_y - z * e_z
-    
+
     if np.abs(np.linalg.norm(p_12_a) - abs_val) < prec:
         return p_12_a
     elif np.abs(np.linalg.norm(p_12_b) - abs_val) < prec:
@@ -307,7 +305,3 @@ def _remove_values_within_tol(vec, values_to_remove, prec):
 def _shared_values_within_tol(v1, v2, prec):
     # get values shared between v1, v2 within tol
     return v1[np.argwhere(np.abs(v1[:, None] - v2) < prec)[:, 0]]
-
-
-if __name__ == '__main__':
-    pass

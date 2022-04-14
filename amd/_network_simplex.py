@@ -26,9 +26,9 @@ def network_simplex(source_demands, sink_demands, network_costs):
            optimization.
            INFOR 17(1):16--34. 1979.
     """
-    
+
     network_costs = network_costs.ravel()
-    
+
     # Constant used throughout for conversions from floating point to integer
     fp_multiplier = np.array([1000000], dtype=np.int64)
 
@@ -48,23 +48,22 @@ def network_simplex(source_demands, sink_demands, network_costs):
     # FP conversion error correction
     source_sum = np.sum(source_d_int)
     sink_sum = np.sum(sink_d_int)
-    
+
     if  source_sum < sink_sum:
         source_ind = np.argmax(source_d_int)
         source_d_int[source_ind] += sink_sum - source_sum
-
     elif sink_sum < source_sum:
         sink_ind = np.argmax(sink_d_int)
         sink_d_int[sink_ind] += source_sum - sink_sum
 
     # Create demands array
     demands = np.concatenate((-source_d_int, sink_d_int)).astype(np.int64)
-    n_sources, n_sinks = len(sources), len(sinks)
-    
+    n_sources, n_sinks = sources.shape[0], sinks.shape[0]
+
     # Create fully connected arcs between all sources and sinks
     conn_tails = np.array([i for i in range(n_sources) for _ in range(n_sinks)], 
                           dtype=np.int64)
-    conn_heads = np.array([j + sources.shape[0] for _ in range(n_sources) for j in range(n_sinks)], 
+    conn_heads = np.array([j + n_sources for _ in range(n_sources) for j in range(n_sinks)], 
                           dtype=np.int64)
 
     # Add arcs to and from the dummy node
@@ -85,9 +84,9 @@ def network_simplex(source_demands, sink_demands, network_costs):
 
     # Create costs and capacities for the arcs between nodes
     network_costs = network_costs * fp_multiplier
-    network_capac = np.array([np.array([source_demands[i], sink_demands[j]]).min() 
-                              for i in range(n_sources) 
-                              for j in range(n_sinks)], 
+    network_capac = np.array([np.array([source_demands[i], sink_demands[j]]).min()
+                              for i in range(n_sources)
+                              for j in range(n_sinks)],
                              dtype=np.float64) * fp_multiplier
 
     # TODO finish?
@@ -99,9 +98,9 @@ def network_simplex(source_demands, sink_demands, network_costs):
     # inf_arr = (np.sum(network_capac.astype(np.int64)), np.sum(np.absolute(network_costs)), np.max(np.absolute(demands)))
 
     # Set a suitably high integer for infinity
-    faux_inf = 3 * np.max(np.array((np.sum(network_capac.astype(np.int64)), 
-                                    np.sum(np.absolute(network_costs)), 
-                                    np.max(np.absolute(demands))), 
+    faux_inf = 3 * np.max(np.array((np.sum(network_capac.astype(np.int64)),
+                                    np.sum(np.absolute(network_costs)),
+                                    np.max(np.absolute(demands))),
                                    dtype=np.int64))
 
     # Add the costs and capacities to the dummy nodes
@@ -120,9 +119,9 @@ def network_simplex(source_demands, sink_demands, network_costs):
     parent = np.concatenate((np.ones(n) * -1, np.array([-2]))).astype(np.int64)
     edge = np.arange(e, e+n).astype(np.int64)
     size = np.concatenate((np.ones(n), np.array([n + 1]))).astype(np.int64)
-    next = np.concatenate((np.arange(1, n), np.array([-1, 0]))).astype(np.int64)
-    prev = np.arange(-1, n)          # previous nodes in depth-first thread
-    last = np.concatenate((np.arange(n), np.array([n - 1]))).astype(np.int64)  # last descendants in depth-first thread
+    next_node = np.concatenate((np.arange(1, n), np.array([-1, 0]))).astype(np.int64)
+    prev_node = np.arange(-1, n)          # previous nodes in depth-first thread
+    last_node = np.concatenate((np.arange(n), np.array([n - 1]))).astype(np.int64)  # last descendants in depth-first thread
 
     ###########################################################################
     # Main Pivot loop
@@ -149,10 +148,10 @@ def network_simplex(source_demands, sink_demands, network_costs):
                 # Ensure that q is in the subtree rooted at t.
                 p, q = q, p
 
-            remove_edge(s, t, size, prev, last, next, parent, edge)
-            make_root(q, parent, size, last, prev, next, edge)
-            add_edge(i, p, q, next, prev, last, size, parent, edge)
-            update_potentials(i, p, q, heads, potentials, costs, last, next)
+            remove_edge(s, t, size, prev_node, last_node, next_node, parent, edge)
+            make_root(q, parent, size, last_node, prev_node, next_node, edge)
+            add_edge(i, p, q, next_node, prev_node, last_node, size, parent, edge)
+            update_potentials(i, p, q, heads, potentials, costs, last_node, next_node)
 
     flow_cost = 0
     final_flows = flows[:e].astype(np.float64)
@@ -162,9 +161,9 @@ def network_simplex(source_demands, sink_demands, network_costs):
     for arc_ind, flow in np.ndenumerate(final_flows):
         flow_cost += flow * edge_costs[arc_ind]
 
-    final = flow_cost / fp_multiplier 
+    final = flow_cost / fp_multiplier
     final = final.astype(np.float64)
-    final = final / fp_multiplier 
+    final = final / fp_multiplier
 
     final_flows = final_flows / fp_multiplier
 
@@ -346,42 +345,42 @@ def augment_flow(cycle_nodes, cycle_edges, f, tails, flows):
     """Augment f units of flow along a cycle representing Wn with cycle_edges.
     """
     for i, p in zip(cycle_edges, cycle_nodes):
-        if tails[int(i)] == np.int64(p):
-            flows[int(i)] += f
+        if tails[np.int64(i)] == np.int64(p):
+            flows[np.int64(i)] += f
         else:
-            flows[int(i)] -= f
+            flows[np.int64(i)] -= f
 
 
 @numba.njit(cache=True)
-def trace_subtree(p, last, next):
+def trace_subtree(p, last_node, next_node):
     """Yield the nodes in the subtree rooted at a node p.
     """
     tree = []
     tree.append(p)
 
-    l = last[p]
+    l = last_node[p]
     while p != l:
-        p = next[p]
+        p = next_node[p]
         tree.append(p)
 
     return np.array(tree, dtype=np.int64)
 
 
 @numba.njit(cache=True)
-def remove_edge(s, t, size, prev, last, next, parent, edge):
+def remove_edge(s, t, size, prev, last, next_node, parent, edge):
     """Remove an edge (s, t) where parent[t] == s from the spanning tree.
     """
     size_t = size[t]
     prev_t = prev[t]
     last_t = last[t]
-    next_last_t = next[last_t]
+    next_last_t = next_node[last_t]
     # Remove (s, t).
     parent[t] = -2
     edge[t] = -2
     # Remove the subtree rooted at t from the depth-first thread.
-    next[prev_t] = next_last_t
+    next_node[prev_t] = next_last_t
     prev[next_last_t] = prev_t
-    next[last_t] = t
+    next_node[last_t] = t
     prev[t] = last_t
 
     # Update the subtree sizes and last descendants of the (old) ancestors
@@ -394,7 +393,7 @@ def remove_edge(s, t, size, prev, last, next, parent, edge):
 
 
 @numba.njit(cache=True)
-def make_root(q, parent, size, last, prev, next, edge):
+def make_root(q, parent, size, last, prev, next_node, edge):
     """
     Make a node q the root of its containing subtree.
     """
@@ -413,7 +412,7 @@ def make_root(q, parent, size, last, prev, next, edge):
         last_p = last[p]
         prev_q = prev[q]
         last_q = last[q]
-        next_last_q = next[last_q]
+        next_last_q = next_node[last_q]
 
         # Make p a child of q.
         parent[p] = q
@@ -424,9 +423,9 @@ def make_root(q, parent, size, last, prev, next, edge):
         size[q] = size_p
 
         # Remove the subtree rooted at q from the depth-first thread.
-        next[prev_q] = next_last_q
+        next_node[prev_q] = next_last_q
         prev[next_last_q] = prev_q
-        next[last_q] = q
+        next_node[last_q] = q
         prev[q] = last_q
 
         if last_p == last_q:
@@ -436,29 +435,29 @@ def make_root(q, parent, size, last, prev, next, edge):
         # Add the remaining parts of the subtree rooted at p as a subtree
         # of q in the depth-first thread.
         prev[p] = last_q
-        next[last_q] = p
-        next[last_p] = q
+        next_node[last_q] = p
+        next_node[last_p] = q
         prev[q] = last_p
         last[q] = last_p
 
 
 @numba.njit(cache=True)
-def add_edge(i, p, q, next, prev, last, size, parent, edge):
+def add_edge(i, p, q, next_node, prev_node, last, size, parent, edge):
     """Add an edge (p, q) to the spanning tree where q is the root of a
     subtree.
     """
     last_p = last[p]
-    next_last_p = next[last_p]
+    next_last_p = next_node[last_p]
     size_q = size[q]
     last_q = last[q]
     # Make q a child of p.
     parent[q] = p
     edge[q] = i
     # Insert the subtree rooted at q into the depth-first thread.
-    next[last_p] = q
-    prev[q] = last_p
-    prev[next_last_p] = last_q
-    next[last_q] = next_last_p
+    next_node[last_p] = q
+    prev_node[q] = last_p
+    prev_node[next_last_p] = last_q
+    next_node[last_q] = next_last_p
 
     # Update the subtree sizes and last descendants of the (new) ancestors
     # of q.
@@ -470,7 +469,7 @@ def add_edge(i, p, q, next, prev, last, size, parent, edge):
 
 
 @numba.njit(cache=True)
-def update_potentials(i, p, q, heads, potentials, costs, last, next):
+def update_potentials(i, p, q, heads, potentials, costs, last_node, next_node):
     """Update the potentials of the nodes in the subtree rooted at a node
     q connected to its parent p by an edge i.
     """
@@ -479,6 +478,6 @@ def update_potentials(i, p, q, heads, potentials, costs, last, next):
     else:
         d = potentials[p] + costs[i] - potentials[q]
 
-    tree = trace_subtree(q, last, next)
-    for q in tree:
-        potentials[q] += d
+    tree = trace_subtree(q, last_node, next_node)
+    for q_ in tree:
+        potentials[q_] += d

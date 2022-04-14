@@ -45,16 +45,16 @@ class _Reader:
 
     First make a new method for _Reader converting object to PeriodicSet
     (e.g. named _X_to_PSet). Then make this class outline:
-    
+
     class XReader(_Reader):
         def __init__(self, ..., **kwargs):
-            
+
         super().__init__(**kwargs)
-        
+
         # setup and checks
-        
+
         # make 'iterable' which yields objects to be converted (e.g. CIFBlock, Entry)
-        
+
         # set self._generator like this
         self._generator = self._read(iterable, self._X_to_PSet)
     """
@@ -79,9 +79,9 @@ class _Reader:
         '_space_group_symop_operation_xyz',
         '_space_group_symop.operation_xyz',
         '_symmetry_equiv_pos_as_xyz',]
-    
+
     equiv_site_tol = 1e-3
-    
+
     def __init__(
             self,
             remove_hydrogens=False,
@@ -90,11 +90,11 @@ class _Reader:
             show_warnings=True,
             extract_data=None,
             include_if=None):
-        
+
         # settings
         if disorder not in _Reader.disorder_options:
             raise ValueError(f'disorder parameter {disorder} must be one of {_Reader.disorder_options}')
-        
+
         if extract_data:
             if not isinstance(extract_data, dict):
                 raise ValueError('extract_data must be a dict with callable values')
@@ -108,7 +108,7 @@ class _Reader:
             for func in include_if:
                 if not callable(func):
                     raise ValueError('include_if must be a list of callables')
-        
+
         self.remove_hydrogens = remove_hydrogens
         self.disorder = disorder
         self.heaviest_component = heaviest_component
@@ -117,14 +117,14 @@ class _Reader:
         self.show_warnings = show_warnings
         self.current_identifier = None
         self.current_filename = None
-    
+
     def __iter__(self):
         yield from self._generator
 
     def read_one(self):
         """Read the next (or first) item."""
         return next(iter(self._generator))
-    
+
     # basically the builtin map, but skips items if the function returned None.
     # The object returned by this function (Iterable of PeriodicSets) is set to
     # self._generator; then iterating over the Reader iterates over
@@ -134,7 +134,7 @@ class _Reader:
         """Iterates over iterable, passing items through parser and
         yielding the result if it is not None.
         """
-        
+
         for item in iterable:
             res = func(item)
             if res is not None:
@@ -156,25 +156,25 @@ class _Reader:
         asym_unit = [0]
         multiplicities = []
         inverses = []
-        
+
         for inv, site in enumerate(asym_frac_motif):
             multiplicity = 0
-            
+
             for rot, trans in zip(rotations, translations):
                 site_ = np.mod(np.dot(rot, site) + trans, 1)
-                
+
                 if not all_sites:
                     all_sites.append(site_)
                     inverses.append(inv)
                     multiplicity += 1
                     continue
-                
+
                 diffs1 = np.abs(site_ - all_sites)
                 diffs2 = np.abs(diffs1 - 1)
                 mask = np.all(np.logical_or(diffs1 <= _Reader.equiv_site_tol,
                                             diffs2 <= _Reader.equiv_site_tol),
                               axis=-1)
-                
+
                 if np.any(mask):
                     where_equal = np.argwhere(mask).flatten()
                     for ind in where_equal:
@@ -192,15 +192,15 @@ class _Reader:
             if multiplicity > 0:
                 multiplicities.append(multiplicity)
                 asym_unit.append(len(all_sites))
-        
+
         frac_motif = np.array(all_sites)
         asym_unit = np.array(asym_unit[:-1])
         multiplicities = np.array(multiplicities)
         return frac_motif, asym_unit, multiplicities, inverses
-    
+
     def _CIFBlock_to_PeriodicSet(self, block) -> PeriodicSet:
         """ase.io.cif.CIFBlock --> PeriodicSet. Returns None for a "bad" set."""
-        
+
         # skip if structure does not pass checks in include_if
         if self.include_if:
             if not all(check(block) for check in self.include_if):
@@ -271,7 +271,7 @@ class _Reader:
             for i, j in np.argwhere(overlapping):
                 if asym_is_disordered[i] or asym_is_disordered[j]:
                     overlapping[i, j] = False
-    
+
         if overlapping.any():
             if self.show_warnings:
                 warnings.warn(
@@ -317,17 +317,16 @@ class _Reader:
                 kwargs[key] = self.extract_data[key](block)
 
         periodic_set = PeriodicSet(motif, cell, **kwargs)
-        
         return periodic_set
     
     def _Entry_to_PeriodicSet(self, entry) -> PeriodicSet:
         """ccdc.entry.Entry --> PeriodicSet. Returns None for a "bad" set."""
-        
+
         # skip if structure does not pass checks in include_if
         if self.include_if:
             if not all(check(entry) for check in self.include_if):
                 return None
-        
+
         self.current_identifier = entry.identifier
         # structure must pass this test 
         if not entry.has_3d_structure:
@@ -335,14 +334,14 @@ class _Reader:
                 warnings.warn(
                     f'Skipping {self.current_identifier} as entry has no 3D structure')
             return None
-    
+
         try:
             crystal = entry.crystal
         except RuntimeError as e:
             if self.show_warnings:
                 warnings.warn(f'Skipping {self.current_identifier}: {e}')
             return None
-        
+
         # first disorder check, if skipping. If occ == 1 for all atoms but the entry
         # or crystal is listed as having disorder, skip (can't know where disorder is).
         # If occ != 1 for any atoms, we wait to see if we remove them before skipping.
@@ -350,7 +349,7 @@ class _Reader:
         if self.disorder == 'ordered_sites':
             molecule.remove_atoms(
                 a for a in molecule.atoms if a.label.endswith('?'))
-        
+
         may_have_disorder = False
         if self.disorder == 'skip':
             for a in molecule.atoms:
@@ -358,18 +357,18 @@ class _Reader:
                 if _atom_has_disorder(a.label, occ):
                     may_have_disorder = True
                     break
-                
+
             if not may_have_disorder:
                 if crystal.has_disorder or entry.has_disorder:
                     if self.show_warnings:
                         warnings.warn(
                             f'Skipping {self.current_identifier} as structure is disordered')
                     return None
-            
+
         if self.remove_hydrogens:
             molecule.remove_atoms(
                 a for a in molecule.atoms if a.atomic_symbol in 'HD')
-            
+
         # heaviest component (removes all but the heaviest component of the asym unit)
         # intended for removing solvents. probably doesn't play well with disorder
         if self.heaviest_component:
@@ -386,9 +385,9 @@ class _Reader:
                     component_weights.append(weight)
                 largest_component_arg = np.argmax(np.array(component_weights))
                 molecule = molecule.components[largest_component_arg]
-            
+
         crystal.molecule = molecule
-        
+
         # by here all atoms to be removed have been (except via ordered_sites).
         # If disorder == 'skip' and there were atom(s) with occ < 1 found 
         # eariler, we check if all such atoms were removed. If not, skip.
@@ -400,7 +399,7 @@ class _Reader:
                         warnings.warn(
                             f'Skipping {self.current_identifier} as structure is disordered')
                     return None
-        
+
         # if disorder is all_sites, we need to know where disorder is to ignore overlaps
         asym_is_disordered = []     # True/False list same length as asym unit
         if self.disorder == 'all_sites':
@@ -418,27 +417,27 @@ class _Reader:
                 warnings.warn(
                     f'Skipping {self.current_identifier} as some atoms do not have sites')
             return None
-        
+
         # get cell & asymmetric unit
         cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
         asym_frac_motif = np.array([tuple(a.fractional_coordinates) 
                                     for a in crystal.asymmetric_unit_molecule.atoms])
         asym_frac_motif = np.mod(asym_frac_motif, 1)
         asym_symbols = [a.atomic_symbol for a in crystal.asymmetric_unit_molecule.atoms]
-        
+
         # if there are overlapping sites in asym unit, warn and keep only one
         site_diffs1 = np.abs(asym_frac_motif[:, None] - asym_frac_motif)
         site_diffs2 = np.abs(site_diffs1 - 1)
         overlapping = np.triu(np.all((site_diffs1 <= _Reader.equiv_site_tol) | 
                                      (site_diffs2 <= _Reader.equiv_site_tol), 
                                      axis=-1), 1)
-        
+
         # don't remove overlapping sites if one is disordered and disorder='all_sites'
         if self.disorder == 'all_sites':
             for i, j in np.argwhere(overlapping):
                 if asym_is_disordered[i] or asym_is_disordered[j]:
                     overlapping[i, j] = False
-        
+
         if overlapping.any():
             if self.show_warnings:
                 warnings.warn(
@@ -454,14 +453,14 @@ class _Reader:
                 warnings.warn(
                     f'Skipping {self.current_identifier} as there are no sites with coordinates')
             return None
-        
+
         # get symmetries, expand the asymmetric unit to full motif + multiplicities
         sitesym = crystal.symmetry_operators
         if not sitesym: 
             sitesym = ('x,y,z', )
         frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym)
         motif = frac_motif @ cell
-        
+
         # construct PeriodicSet
         kwargs = {
             'name':                     self.current_identifier, 
@@ -470,7 +469,8 @@ class _Reader:
             'types':                    [asym_symbols[i] for i in inverses],
         }
 
-        if self.current_filename: kwargs['filename'] = self.current_filename
+        if self.current_filename: 
+            kwargs['filename'] = self.current_filename
 
         if self.extract_data is not None:
             entry.crystal.molecule = crystal.disordered_molecule
@@ -478,7 +478,6 @@ class _Reader:
                 kwargs[key] = self.extract_data[key](entry)
 
         periodic_set = PeriodicSet(motif, cell, **kwargs)
-        
         return periodic_set
 
 
@@ -487,24 +486,24 @@ class CifReader(_Reader):
     (``csd-python-api`` only), yielding  :class:`.periodicset.PeriodicSet`
     objects which can be passed to :func:`.calculate.AMD` or
     :func:`.calculate.PDD`.
-    
+
     Examples:
 
         ::
         
             # Put all crystals in a .CIF in a list
             structures = list(amd.CifReader('mycif.cif'))
-            
+
             # Reads just one if the .CIF has just one crystal
             periodic_set = amd.CifReader('mycif.cif').read_one()
-            
+
             # If a folder has several .CIFs each with one crystal, use
             structures = list(amd.CifReader('path/to/folder', folder=True))
-            
+
             # Make list of AMDs (with k=100) of crystals in a .CIF
             amds = [amd.AMD(periodic_set, 100) for periodic_set in amd.CifReader('mycif.cif')]
     """
-    
+
     @_extend_signature(_Reader.__init__)
     def __init__(
             self, 
@@ -512,9 +511,9 @@ class CifReader(_Reader):
             reader='ase', 
             folder=False, 
             **kwargs):
-        
+
         super().__init__(**kwargs)
-        
+
         if reader not in ('ase', 'ccdc'):
             raise ValueError(
                 f'Invalid reader {reader}; must be ase or ccdc.')
@@ -536,12 +535,12 @@ class CifReader(_Reader):
             extensions = ccdc.io.EntryReader.known_suffixes
             file_parser = ccdc.io.EntryReader
             pset_converter = self._Entry_to_PeriodicSet
-            
+
         if folder:
             generator = self._folder_generator(path, file_parser, extensions)
         else:
             generator = file_parser(path)
-            
+
         self._generator = self._map(pset_converter, generator)
 
     def _folder_generator(self, path, file_parser, extensions):
@@ -554,31 +553,31 @@ class CifReader(_Reader):
 
 class CSDReader(_Reader):
     """Read Entries from the CSD, yielding :class:`.periodicset.PeriodicSet` objects.
-    
+
     The CSDReader returns :class:`.periodicset.PeriodicSet` objects which can be passed
     to :func:`.calculate.AMD` or :func:`.calculate.PDD`.
-    
+
     Examples:
-    
+
         Get crystals with refcodes in a list::
 
             refcodes = ['DEBXIT01', 'DEBXIT05', 'HXACAN01']
             structures = list(amd.CSDReader(refcodes))
-            
+
         Read refcode families (any whose refcode starts with strings in the list)::
-        
+
             refcodes = ['ACSALA', 'HXACAN']
             structures = list(amd.CSDReader(refcodes, families=True))
-        
+
         Create a generic reader, read crystals by name with :meth:`CSDReader.entry()`::
-        
+
             reader = amd.CSDReader()
             debxit01 = reader.entry('DEBXIT01')
-            
+
             # looping over this generic reader will yield all CSD entries
             for periodic_set in reader:
                 ...
-        
+
         Make list of AMD (with k=100) for crystals in these families::
 
             refcodes = ['ACSALA', 'HXACAN']
@@ -608,7 +607,7 @@ class CSDReader(_Reader):
             families = False
         else:
             refcodes = [refcodes] if isinstance(refcodes, str) else list(refcodes)
-        
+
         # families parameter reads all crystals with ids starting with passed refcodes
         if families:
             all_refcodes = []
@@ -628,10 +627,10 @@ class CSDReader(_Reader):
         self._generator = self._map(
             self._Entry_to_PeriodicSet,
             self._ccdc_generator(refcodes))
-    
+
     def _ccdc_generator(self, refcodes):
         """Generates ccdc Entries from CSD refcodes"""
-        
+
         if refcodes is None:
             for entry in self._entry_reader:
                 yield entry
@@ -646,7 +645,7 @@ class CSDReader(_Reader):
 
     def entry(self, refcode: str) -> PeriodicSet:
         """Read a PeriodicSet given any CSD refcode."""
-        
+
         entry = self._entry_reader.entry(refcode)
         periodic_set = self._Entry_to_PeriodicSet(entry)
         return periodic_set
@@ -655,36 +654,36 @@ class CSDReader(_Reader):
 class SetWriter:
     """Write several :class:`.periodicset.PeriodicSet` objects to a .hdf5 file. 
     Reading the .hdf5 is much faster than parsing a .CIF file.
-    
+
     Examples:
-    
+
         Write the crystals in mycif.cif to a .hdf5 file::
 
             with amd.SetWriter('crystals.hdf5') as writer:
-            
+
                 for periodic_set in amd.CifReader('mycif.cif'):
                     writer.write(periodic_set)
-                
+
                 # use iwrite to write straight from an iterator
                 # below is equivalent to the above loop
                 writer.iwrite(amd.CifReader('mycif.cif'))
-    
+
     Read the crystals back from the file with :class:`SetReader`. 
     """
 
     _str_dtype = h5py.vlen_dtype(str)
-    
+
     def __init__(self, filename: str):
-        
+
         self.file = h5py.File(filename, 'w', track_order=True)
-        
+
     def write(self, periodic_set: PeriodicSet, name: Optional[str] = None):
         """Write a PeriodicSet object to file."""
-        
+
         if not isinstance(periodic_set, PeriodicSet):
             raise ValueError(
                 f'Object type {periodic_set.__class__.__name__} cannot be written with SetWriter')
-        
+
         # need a name to store or you can't access items by key
         if name is None:
             if periodic_set.name is None:
@@ -692,18 +691,18 @@ class SetWriter:
                     'Periodic set must have a name to be written. Either set the name '
                     'attribute of the PeriodicSet or pass a name to SetWriter.write()')
             name = periodic_set.name
-        
+
         # this group is the PeriodicSet
         group = self.file.create_group(name)
-        
+
         # datasets in the group for motif and cell
         group.create_dataset('motif', data=periodic_set.motif)
         group.create_dataset('cell',  data=periodic_set.cell)
-        
+
         if periodic_set.tags:
             # a subgroup contains tags that are lists or ndarrays
             tags_group = group.create_group('tags')
-            
+
             for tag in periodic_set.tags:
                 data = periodic_set.tags[tag]
 
@@ -727,16 +726,16 @@ class SetWriter:
                 else:
                     raise ValueError(
                         f'Cannot store tag of type {type(data)} with SetWriter')
-    
+
     def iwrite(self, periodic_sets: Iterable[PeriodicSet]):
         """Write :class:`.periodicset.PeriodicSet` objects from an iterable to file."""
         for periodic_set in periodic_sets:
             self.write(periodic_set)
-        
+
     def close(self):
         """Close the :class:`SetWriter`."""
         self.file.close()
-        
+
     def __enter__(self):
         return self
 
@@ -747,64 +746,64 @@ class SetWriter:
 
 class SetReader:
     """Read :class:`.periodicset.PeriodicSet` objects from a .hdf5 file written
-    with :class:`SetWriter`. Acts like a read-only dict that can be iterated 
+    with :class:`SetWriter`. Acts like a read-only dict that can be iterated
     over (preserves write order).
-    
+
     Examples:
-    
+
         Get PDDs (k=100) of crystals in crystals.hdf5::
 
             pdds = []
             with amd.SetReader('crystals.hdf5') as reader:
                 for periodic_set in reader:
                     pdds.append(amd.PDD(periodic_set, 100))
-            
+
             # above is equivalent to:
             pdds = [amd.PDD(pset, 100) for pset in amd.SetReader('crystals.hdf5')]
     """
     
     def __init__(self, filename: str):
-        
+
         self.file = h5py.File(filename, 'r', track_order=True)
 
     def _get_set(self, name: str) -> PeriodicSet:
         # take a name in the set and return the PeriodicSet   
         group = self.file[name]
         periodic_set = PeriodicSet(group['motif'][:], group['cell'][:], name=name)
-        
+
         if 'tags' in group:
             for tag in group['tags']:
                 data = group['tags'][tag][:]
-                     
+
                 if any(isinstance(d, (bytes, bytearray)) for d in data):
                     periodic_set.tags[tag] = [d.decode() for d in data]
                 else:
                     periodic_set.tags[tag] = data
-        
+
             for attr in group['tags'].attrs:
                 data = group['tags'].attrs[attr]
                 periodic_set.tags[attr] = None if data == '__None' else data
 
         return periodic_set
-    
+
     def close(self):
         """Close the :class:`SetReader`."""
         self.file.close()
-    
+
     def family(self, refcode: str) -> Iterable[PeriodicSet]:
         """Yield any :class:`.periodicset.PeriodicSet` whose name starts with 
         input refcode."""
         for name in self.keys():
             if name.startswith(refcode):
                 yield self._get_set(name)
-    
+
     def __getitem__(self, name):
         # index by name. Not found exc?
         return self._get_set(name)
-    
+
     def __len__(self):
         return len(self.keys())
-    
+
     def __iter__(self):
         # interface to loop over the SetReader; does not close the SetReader when done
         for name in self.keys():
@@ -815,11 +814,11 @@ class SetReader:
             return True
         else:
             return False
-        
+
     def keys(self):
         """Yield names of items in the :class:`SetReader`."""
         return self.file['/'].keys()
-    
+
     def __enter__(self):
         return self
 
@@ -832,25 +831,25 @@ def crystal_to_periodicset(crystal):
     """ccdc.crystal.Crystal --> amd.periodicset.PeriodicSet.
     Ignores disorder, missing sites/coords, checks & no options.
     Is a stripped-down version of the function used in CifReader."""
-    
+
     cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
-        
+
     # asymmetric unit fractional coordinates
     asym_frac_motif = np.array([tuple(a.fractional_coordinates) 
                                 for a in crystal.asymmetric_unit_molecule.atoms])
     asym_frac_motif = np.mod(asym_frac_motif, 1)
-    
+
     # if the above removed everything, skip this structure
     if asym_frac_motif.shape[0] == 0:
         raise ValueError(f'{crystal.identifier} has no coordinates')
-    
+
     sitesym = crystal.symmetry_operators
     if not sitesym: sitesym = ('x,y,z', )
     r = _Reader()
     r.current_identifier = crystal.identifier
     frac_motif, asym_unit, multiplicities, _ = r._expand(asym_frac_motif, sitesym)
     motif = frac_motif @ cell
-    
+
     kwargs = {
         'name': crystal.identifier, 
         'asymmetric_unit': asym_unit,
@@ -858,7 +857,6 @@ def crystal_to_periodicset(crystal):
     }
 
     periodic_set = PeriodicSet(motif, cell, **kwargs)
-
     return periodic_set
 
 
@@ -866,33 +864,33 @@ def cifblock_to_periodicset(block):
     """ase.io.cif.CIFBlock --> amd.periodicset.PeriodicSet.
     Ignores disorder, missing sites/coords, checks & no options.
     Is a stripped-down version of the function used in CifReader."""
-    
+
     cell = block.get_cell().array
     asym_frac_motif = [block.get(name) for name in _Reader.atom_site_fract_tags]
-    
+
     if None in asym_frac_motif:
         asym_motif = [block.get(name) for name in _Reader.atom_site_cartn_tags]
         if None in asym_motif:
             warnings.warn(
                 f'Skipping {block.name} as coordinates were not found')
             return None
-            
+
         asym_frac_motif = np.array(asym_motif) @ np.linalg.inv(cell)
-        
+
     asym_frac_motif = np.mod(np.array(asym_frac_motif).T, 1)
-    
+
     if asym_frac_motif.shape[0] == 0:
         raise ValueError(f'{block.name} has no coordinates')
-    
+
     sitesym = ('x,y,z', )
     for tag in _Reader.symop_tags:
         if tag in block:
             sitesym = block[tag]
             break
-        
+
     if isinstance(sitesym, str):
         sitesym = [sitesym]
-        
+
     dummy_reader = _Reader()
     dummy_reader.current_identifier = block.name
     frac_motif, asym_unit, multiplicities, _ = dummy_reader._expand(asym_frac_motif, sitesym)
@@ -903,6 +901,6 @@ def cifblock_to_periodicset(block):
         'asymmetric_unit': asym_unit,
         'wyckoff_multiplicities': multiplicities
     }
-    
+
     periodic_set = PeriodicSet(motif, cell, **kwargs)
     return periodic_set

@@ -17,36 +17,36 @@ class PeriodicSet:
     single point in the center of every atom. A periodic set is defined by a basis
     (unit cell) and collection of points (motif) which repeats according to the basis.
     Has attributes motif, cell and name (which can be :const:`None`). 
-    
+
     :class:`PeriodicSet` objects are returned by the readers in the :mod:`.io` module.
     Instances of this object can be passed to :func:`.calculate.AMD` or 
     :func:`.calculate.PDD`.
     """
 
     def __init__(
-            self, 
-            motif: np.ndarray, 
-            cell: np.ndarray, 
-            name: Optional[str] = None, 
+            self,
+            motif: np.ndarray,
+            cell: np.ndarray,
+            name: Optional[str] = None,
             **kwargs):
-        
+
         self.motif = motif
         self.cell  = cell
         self.name  = name
         self.tags = kwargs
-    
+
     def __str__(self):
-        
+
         m, dims = self.motif.shape
         return f"PeriodicSet({self.name}: {m} motif points in {dims} dimensions)"
-    
+
     def __repr__(self):
         return f"PeriodicSet(name: {self.name}, cell: {self.cell}, motif: {self.motif}, tags: {self.tags})"
-    
+
     # used for debugging, checks if the motif/cell agree point for point
     # (disregarding order), NOT up to isometry. 
     def __eq__(self, other):
-        
+
         if self.cell.shape != other.cell.shape or self.motif.shape != other.motif.shape:
             return False
 
@@ -58,7 +58,7 @@ class PeriodicSet:
         diffs = np.amax(np.abs(other.motif[:, None] - self.motif), axis=-1)
         if not np.all((np.amin(diffs, axis=0) <= 1e-6) & (np.amin(diffs, axis=-1) <= 1e-6)):
             return False
-        
+
         shared_tags = set(self.tags.keys()).intersection(set(other.tags.keys()))
         for tag in shared_tags:
             if np.isscalar(self.tags[tag]):
@@ -73,22 +73,22 @@ class PeriodicSet:
                         return False
 
         return True
-    
+
     def __getattr__(self, attr):
-        
+
         if 'tags' not in self.__dict__:
             self.tags = {}
         if attr in self.tags:
             return self.tags[attr]
         else:
             raise AttributeError(f"{self.__class__.__name__} object has no attribute or tag {attr}")
-    
+
     def __ne__(self, other):
         return not self.__eq__(other)
-    
+
     def copy(self):
         return PeriodicSet(self.motif, self.cell, name=self.name, **self.tags)
-    
+
     def astype(self, dtype):
         """Returns copy of the :class:`PeriodicSet` with ``.motif`` 
         and ``.cell`` casted to ``dtype``."""
