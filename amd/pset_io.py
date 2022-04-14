@@ -185,4 +185,3 @@ class SetReader:
     # handle exceptions?
     def __exit__(self, exc_type, exc_value, tb):
         self.file.close()
-

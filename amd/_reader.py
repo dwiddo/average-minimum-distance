@@ -1,3 +1,7 @@
+"""Contains base reader class for the io module. 
+This class implements the converters from CifBlock, Entry to PeriodicSets.
+"""
+
 import warnings
 from typing import Callable, Iterable, Sequence, Tuple
 
@@ -14,9 +18,6 @@ def _warning(message, category, filename, lineno, *args, **kwargs):
 
 warnings.formatwarning = _warning
 
-
-def _atom_has_disorder(label, occupancy):
-    return label.endswith('?') or (np.isscalar(occupancy) and occupancy < 1)
 
 class _Reader:
     """Base Reader class. Contains parsers for converting ase CifBlock
@@ -78,13 +79,7 @@ class _Reader:
             raise ValueError(f'disorder parameter {disorder} must be one of {_Reader.disorder_options}')
 
         if extract_data:
-            if not isinstance(extract_data, dict):
-                raise ValueError('extract_data must be a dict with callable values')
-            for key in extract_data:
-                if not callable(extract_data[key]):
-                    raise ValueError('extract_data must be a dict with callable values')
-                if key in _Reader.reserved_tags:
-                    raise ValueError(f'extract_data includes reserved key {key}')
+            _validate_extract_data(extract_data)
 
         if include_if:
             for func in include_if:
@@ -246,7 +241,7 @@ class _Reader:
             molecule.remove_atoms(a for a in molecule.atoms if a.atomic_symbol in 'HD')
 
         if self.heaviest_component:
-            molecule = _Reader._heaviest_component(molecule)
+            molecule = _heaviest_component(molecule)
 
         crystal.molecule = molecule
 
@@ -417,21 +412,33 @@ class _Reader:
 
         return PeriodicSet(motif, cell, **kwargs)
 
-    def _heaviest_component(molecule):
-        """Heaviest component (removes all but the heaviest component of the asym unit).
-        Intended for removing solvents. Probably doesn't play well with disorder"""
-        if len(molecule.components) > 1:
-            component_weights = []
-            for component in molecule.components:
-                weight = 0
-                for a in component.atoms:
-                    if isinstance(a.atomic_weight, (float, int)):
-                        if isinstance(a.occupancy, (float, int)):
-                            weight += a.occupancy * a.atomic_weight
-                        else:
-                            weight += a.atomic_weight
-                component_weights.append(weight)
-            largest_component_arg = np.argmax(np.array(component_weights))
-            molecule = molecule.components[largest_component_arg]
+def _heaviest_component(molecule):
+    """Heaviest component (removes all but the heaviest component of the asym unit).
+    Intended for removing solvents. Probably doesn't play well with disorder"""
+    if len(molecule.components) > 1:
+        component_weights = []
+        for component in molecule.components:
+            weight = 0
+            for a in component.atoms:
+                if isinstance(a.atomic_weight, (float, int)):
+                    if isinstance(a.occupancy, (float, int)):
+                        weight += a.occupancy * a.atomic_weight
+                    else:
+                        weight += a.atomic_weight
+            component_weights.append(weight)
+        largest_component_arg = np.argmax(np.array(component_weights))
+        molecule = molecule.components[largest_component_arg]
 
-        return molecule
+    return molecule
+
+def _atom_has_disorder(label, occupancy):
+    return label.endswith('?') or (np.isscalar(occupancy) and occupancy < 1)
+
+def _validate_extract_data(extract_data):
+    if not isinstance(extract_data, dict):
+        raise ValueError('extract_data must be a dict with callable values')
+    for key in extract_data:
+        if not callable(extract_data[key]):
+            raise ValueError('extract_data must be a dict with callable values')
+        if key in _Reader.reserved_tags:
+            raise ValueError(f'extract_data includes reserved key {key}')

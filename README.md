@@ -5,6 +5,7 @@
 [![Read the Docs](https://img.shields.io/readthedocs/average-minimum-distance)](https://average-minimum-distance.readthedocs.io)
 [![MATCH Paper](https://img.shields.io/badge/DOI-10.46793%2Fmatch.87--3.529W-blue)](https://doi.org/10.46793/match.87-3.529W)
 [![CC-0 license](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-blue.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+[![Code Quality](https://scrutinizer-ci.com/g/dwiddo/average-minimum-distance/badges/quality-score.png?b=master)](https://scrutinizer-ci.com/g/dwiddo/average-minimum-distance/)
 
 Implements fingerprints (*isometry invariants*) of crystals based on geometry: average minimum distances (AMD) and point-wise distance distributions (PDD). Includes .cif reading functionality.
 

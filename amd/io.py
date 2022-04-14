@@ -11,6 +11,7 @@ import os
 import warnings
 
 import numpy as np
+import ase.io.cif
 
 from .periodicset import PeriodicSet
 from .utils import _extend_signature, cellpar_to_cell
@@ -54,12 +55,7 @@ class CifReader(_Reader):
     """
 
     @_extend_signature(_Reader.__init__)
-    def __init__(
-            self,
-            path,
-            reader='ase',
-            folder=False,
-            **kwargs):
+    def __init__(self, path, reader='ase', folder=False, **kwargs):
 
         super().__init__(**kwargs)
 
@@ -132,11 +128,7 @@ class CSDReader(_Reader):
     """
 
     @_extend_signature(_Reader.__init__)
-    def __init__(
-            self,
-            refcodes=None,
-            families=False,
-            **kwargs):
+    def __init__(self, refcodes=None, families=False, **kwargs):
 
         if not _CCDC_ENABLED:
             raise ImportError("Failed to import csd-python-api; check it is installed and licensed.")
