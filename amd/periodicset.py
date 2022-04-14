@@ -1,10 +1,10 @@
-"""Implements the class :class:`PeriodicSet` representing a periodic set, 
+"""Implements the class :class:`PeriodicSet` representing a periodic set,
 defined by a motif and unit cell.
 
-This is the object type yielded by the readers :class:`.io.CifReader` and 
-:class:`.io.CSDReader`. The :class:`PeriodicSet` can be passed as the first argument 
+This is the object type yielded by the readers :class:`.io.CifReader` and
+:class:`.io.CSDReader`. The :class:`PeriodicSet` can be passed as the first argument
 to :func:`.calculate.AMD` or :func:`.calculate.PDD` to calculate its invariants.
-They can be written to a file with :class:`.io.SetWriter` which can be read with 
+They can be written to a file with :class:`.io.SetWriter` which can be read with
 :class:`.io.SetReader`.
 """
 
@@ -16,10 +16,10 @@ class PeriodicSet:
     """A periodic set is the mathematical representation of a crystal by putting a
     single point in the center of every atom. A periodic set is defined by a basis
     (unit cell) and collection of points (motif) which repeats according to the basis.
-    Has attributes motif, cell and name (which can be :const:`None`). 
+    Has attributes motif, cell and name (which can be :const:`None`).
 
     :class:`PeriodicSet` objects are returned by the readers in the :mod:`.io` module.
-    Instances of this object can be passed to :func:`.calculate.AMD` or 
+    Instances of this object can be passed to :func:`.calculate.AMD` or
     :func:`.calculate.PDD`.
     """
 
@@ -31,8 +31,8 @@ class PeriodicSet:
             **kwargs):
 
         self.motif = motif
-        self.cell  = cell
-        self.name  = name
+        self.cell = cell
+        self.name = name
         self.tags = kwargs
 
     def __str__(self):
@@ -44,7 +44,7 @@ class PeriodicSet:
         return f"PeriodicSet(name: {self.name}, cell: {self.cell}, motif: {self.motif}, tags: {self.tags})"
 
     # used for debugging, checks if the motif/cell agree point for point
-    # (disregarding order), NOT up to isometry. 
+    # (disregarding order), NOT up to isometry.
     def __eq__(self, other):
 
         if self.cell.shape != other.cell.shape or self.motif.shape != other.motif.shape:
@@ -80,20 +80,21 @@ class PeriodicSet:
             self.tags = {}
         if attr in self.tags:
             return self.tags[attr]
-        else:
-            raise AttributeError(f"{self.__class__.__name__} object has no attribute or tag {attr}")
+
+        raise AttributeError(f"{self.__class__.__name__} object has no attribute or tag {attr}")
 
     def __ne__(self, other):
         return not self.__eq__(other)
 
     def copy(self):
+        """Return copy of the PeriodicSet."""
         return PeriodicSet(self.motif, self.cell, name=self.name, **self.tags)
 
     def astype(self, dtype):
-        """Returns copy of the :class:`PeriodicSet` with ``.motif`` 
+        """Returns copy of the :class:`PeriodicSet` with ``.motif``
         and ``.cell`` casted to ``dtype``."""
-        
-        return PeriodicSet(self.motif.astype(dtype), 
+
+        return PeriodicSet(self.motif.astype(dtype),
                            self.cell.astype(dtype),
                            name=self.name,
                            **self.tags)

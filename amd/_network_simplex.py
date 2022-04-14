@@ -1,6 +1,6 @@
 """An implementation of the Wasserstein metric between two compositional vectors.
 
-Copyright (C) 2020 Cameron Hargreaves. This code is part of the Element Movers 
+Copyright (C) 2020 Cameron Hargreaves. This code is part of the Element Movers
 Distance project https://github.com/lrcfmd/ElMD.
 """
 
@@ -61,9 +61,9 @@ def network_simplex(source_demands, sink_demands, network_costs):
     n_sources, n_sinks = sources.shape[0], sinks.shape[0]
 
     # Create fully connected arcs between all sources and sinks
-    conn_tails = np.array([i for i in range(n_sources) for _ in range(n_sinks)], 
+    conn_tails = np.array([i for i in range(n_sources) for _ in range(n_sinks)],
                           dtype=np.int64)
-    conn_heads = np.array([j + n_sources for _ in range(n_sources) for j in range(n_sinks)], 
+    conn_heads = np.array([j + n_sources for _ in range(n_sources) for j in range(n_sinks)],
                           dtype=np.int64)
 
     # Add arcs to and from the dummy node
@@ -479,5 +479,5 @@ def update_potentials(i, p, q, heads, potentials, costs, last_node, next_node):
         d = potentials[p] + costs[i] - potentials[q]
 
     tree = trace_subtree(q, last_node, next_node)
-    for q_ in tree:
-        potentials[q_] += d
+    for q in tree:
+        potentials[q] += d

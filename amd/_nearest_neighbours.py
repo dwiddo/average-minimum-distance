@@ -26,7 +26,7 @@ def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
     ndarray
         Yields arrays of integer points in dims dimensional Euclidean space.
     """
-    
+
     @numba.njit()
     def _dist(xy, z):
         s = 0
@@ -76,7 +76,7 @@ def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
 
 
 def generate_concentric_cloud(
-        motif: np.ndarray,  
+        motif: np.ndarray,
         cell: np.ndarray
 ) -> Iterable[np.ndarray]:
     """
@@ -96,7 +96,7 @@ def generate_concentric_cloud(
 
     Yields
     -------
-    ndarray 
+    ndarray
         Yields arrays of points from the periodic set.
     """
 
@@ -113,7 +113,7 @@ def nearest_neighbours(
         k: int,
         asymmetric_unit: Optional[np.ndarray] = None):
     """
-    Given a periodic set represented by (motif, cell) and an integer k, find 
+    Given a periodic set represented by (motif, cell) and an integer k, find
     the k nearest neighbours of the motif points in the periodic set.
 
     Note that cloud and inds are not used yet but may be in the future.
@@ -136,12 +136,12 @@ def nearest_neighbours(
         point to its k nearest neighbours in order. Points do not count
         as their own nearest neighbour. E.g. the distance to the n-th
         nearest neighbour of the m-th motif point is pdd[m][n].
-    cloud : ndarray 
+    cloud : ndarray
         The collection of points in the periodic set that were generated
         during the nearest neighbour search.
     inds : ndarray
-        An array shape (motif.shape[0], k) containing the indices of  
-        nearest neighbours in cloud. E.g. the n-th nearest neighbour to 
+        An array shape (motif.shape[0], k) containing the indices of
+        nearest neighbours in cloud. E.g. the n-th nearest neighbour to
         the m-th motif point is cloud[inds[m][n]].
     """
 
@@ -161,18 +161,18 @@ def nearest_neighbours(
     cloud = np.concatenate(cloud)
 
     tree = scipy.spatial.KDTree(cloud,
-                                compact_nodes=False, 
+                                compact_nodes=False,
                                 balanced_tree=False)
     pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
     pdd = np.empty_like(pdd_)
 
     while not np.allclose(pdd, pdd_, atol=0, rtol=1e-12):
         pdd = pdd_
-        cloud = np.vstack((cloud, 
-                           next(cloud_generator), 
+        cloud = np.vstack((cloud,
+                           next(cloud_generator),
                            next(cloud_generator)))
-        tree = scipy.spatial.KDTree(cloud, 
-                                    compact_nodes=False, 
+        tree = scipy.spatial.KDTree(cloud,
+                                    compact_nodes=False,
                                     balanced_tree=False)
         pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
 
@@ -180,7 +180,7 @@ def nearest_neighbours(
 
 
 def nearest_neighbours_minval(motif, cell, min_val):
-    """PDD large enough to be reconstructed from 
+    """PDD large enough to be reconstructed from
     (such that last col values all > 2 * diam(cell))."""
 
     cloud_generator = generate_concentric_cloud(motif, cell)
@@ -190,8 +190,8 @@ def nearest_neighbours_minval(motif, cell, min_val):
         cloud.append(next(cloud_generator))
 
     cloud = np.concatenate(cloud)
-    tree = scipy.spatial.KDTree(cloud, 
-                                compact_nodes=False, 
+    tree = scipy.spatial.KDTree(cloud,
+                                compact_nodes=False,
                                 balanced_tree=False)
     pdd_, _ = tree.query(motif, k=cloud.shape[0], workers=-1)
     pdd = np.empty_like(pdd_)
@@ -203,21 +203,14 @@ def nearest_neighbours_minval(motif, cell, min_val):
                 break
 
         pdd = pdd_
-        cloud = np.vstack((cloud, 
-                           next(cloud_generator), 
+        cloud = np.vstack((cloud,
+                           next(cloud_generator),
                            next(cloud_generator)))
-        tree = scipy.spatial.KDTree(cloud, 
-                                    compact_nodes=False, 
+        tree = scipy.spatial.KDTree(cloud,
+                                    compact_nodes=False,
                                     balanced_tree=False)
         pdd_, _ = tree.query(motif, k=cloud.shape[0], workers=-1)
 
     k = np.argwhere(np.all(pdd >= min_val, axis=0))[0][0]
 
     return pdd[:, 1:k+1]
-
-
-if __name__ == '__main__':
-    motif = np.array([[0,0,0],[0.1,0.1,0.1]])
-    cell = np.identity(3)
-    cloud, pdd, inds = nearest_neighbours(motif, cell, 10)
-    print(pdd)

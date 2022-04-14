@@ -1,4 +1,4 @@
-"""Functions for calculating AMDs and PDDs (and SDDs) of periodic and finite sets. 
+"""Functions for calculating AMDs and PDDs (and SDDs) of periodic and finite sets.
 """
 
 from typing import Union, Tuple
@@ -22,7 +22,7 @@ def AMD(periodic_set: PSET_TYPE, k: int) -> np.ndarray:
     Parameters
     ----------
     periodic_set : :class:`.periodicset.PeriodicSet` or tuple of ndarrays
-        A periodic set represented by a :class:`.periodicset.PeriodicSet` or 
+        A periodic set represented by a :class:`.periodicset.PeriodicSet` or
         by a tuple (motif, cell) with coordinates in Cartesian form.
     k : int
         Length of AMD returned.
@@ -59,10 +59,10 @@ def AMD(periodic_set: PSET_TYPE, k: int) -> np.ndarray:
     return np.average(pdd, axis=0, weights=multiplicities)
 
 def PDD(
-        periodic_set: PSET_TYPE, 
+        periodic_set: PSET_TYPE,
         k: int,
-        lexsort: bool = True, 
-        collapse: bool = True, 
+        lexsort: bool = True,
+        collapse: bool = True,
         collapse_tol: float = 1e-4
 ) -> np.ndarray:
     """The PDD up to `k` of a periodic set.
@@ -70,10 +70,10 @@ def PDD(
     Parameters
     ----------
     periodic_set : :class:`.periodicset.PeriodicSet` or tuple of ndarrays
-        A periodic set represented by a :class:`.periodicset.PeriodicSet` or 
+        A periodic set represented by a :class:`.periodicset.PeriodicSet` or
         by a tuple (motif, cell) with coordinates in Cartesian form.
     k : int
-        Number of columns in the PDD (the returned matrix has an additional first 
+        Number of columns in the PDD (the returned matrix has an additional first
         column containing weights).
     lexsort : bool, optional
         Whether or not to lexicographically order the rows. Default True.
@@ -95,14 +95,14 @@ def PDD(
         pdds = []
         for periodic_set in amd.CifReader('mycif.cif'):
             # do not lexicographically order rows
-            pdds.append(amd.PDD(periodic_set, 100, lexsort=False))    
+            pdds.append(amd.PDD(periodic_set, 100, lexsort=False))
 
     Make list of PDDs with ``k=10`` for crystals in these CSD refcode families::
 
         pdds = []
         for periodic_set in amd.CSDReader(['HXACAN', 'ACSALA'], families=True):
             # do not collapse rows
-            pdds.append(amd.PDD(periodic_set, 10, collapse=False))  
+            pdds.append(amd.PDD(periodic_set, 10, collapse=False))
 
     Manually pass a periodic set as a tuple (motif, cell)::
 
@@ -137,7 +137,7 @@ def PDD_to_AMD(pdd: np.ndarray) -> np.ndarray:
     Parameters
     ----------
     pdd : np.ndarray
-        The PDD of a periodic set. 
+        The PDD of a periodic set.
 
     Returns
     -------
@@ -160,7 +160,7 @@ def AMD_finite(motif: np.ndarray) -> np.ndarray:
     -------
     ndarray
         An vector length len(motif) - 1, the AMD of ``motif``.
- 
+
     Examples
     --------
     Find AMD distance between finite trapezium and kite point sets::
@@ -179,8 +179,8 @@ def AMD_finite(motif: np.ndarray) -> np.ndarray:
 
 def PDD_finite(
         motif: np.ndarray,
-        lexsort: bool = True, 
-        collapse: bool = True, 
+        lexsort: bool = True,
+        collapse: bool = True,
         collapse_tol: float = 1e-4
 ) -> np.ndarray:
     """The PDD of a finite point set (up to k = `len(motif) - 1`).
@@ -231,13 +231,13 @@ def PDD_finite(
     return pdd
 
 def SDD(
-        motif: np.ndarray, 
+        motif: np.ndarray,
         order: int = 1,
-        lexsort: bool = True, 
-        collapse: bool = True, 
+        lexsort: bool = True,
+        collapse: bool = True,
         collapse_tol: float = 1e-4):
     """The SSD (simplex-wise distance distribution) of a finite point set,
-    with `len(motif) - 1` columns. The SDD with order h considers h-sized collection 
+    with `len(motif) - 1` columns. The SDD with order h considers h-sized collection
     of points in the motif; the first-order SDD is equivalent to the PDD for finite sets.
 
     Parameters
@@ -257,7 +257,7 @@ def SDD(
     Returns
     -------
     tuple of ndarrays
-        The h-order SDD of ``motif``. A tuple of 3 arrays is returned, 
+        The h-order SDD of ``motif``. A tuple of 3 arrays is returned,
         ``weights``, ``dist`` and ``sdd``. If order=1, dist is None.
 
     Examples
@@ -286,77 +286,76 @@ def SDD(
 
         return weights, None, sdd
 
-    else:
-        if motif.shape[0] <= order:
-            raise ValueError(f'The higher order SDD is only defined when the order ({order}) is smaller than the number of points ({motif.shape[0]})')
+    if motif.shape[0] <= order:
+        raise ValueError(f'The higher order SDD is only defined when the order ({order}) is smaller than the number of points ({motif.shape[0]})')
 
-        dm = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(motif))
-        m = motif.shape[0]
-        inds = np.argsort(dm, axis=-1)
-        dists = np.take_along_axis(dm, inds, axis=-1)[:, 1:]
-        inds = inds[:, 1:]
-        n_rows = scipy.special.comb(motif.shape[0], order, exact=True)
-        weights = np.full((n_rows, ), 1 / n_rows)
-        dist = []
-        sdd = []
+    dm = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(motif))
+    m = motif.shape[0]
+    inds = np.argsort(dm, axis=-1)
+    dists = np.take_along_axis(dm, inds, axis=-1)[:, 1:]
+    inds = inds[:, 1:]
+    n_rows = scipy.special.comb(motif.shape[0], order, exact=True)
+    weights = np.full((n_rows, ), 1 / n_rows)
+    dist = []
+    sdd = []
 
-        for points in itertools.combinations(range(motif.shape[0]), order):
-            points = np.array(points)
-            done = set(points)
-            pointers = [0] * order
-            row = []
-            for _ in range(m - order):
-                for i in range(order):
-                    while int(inds[points[i]][pointers[i]]) in done:
-                        if pointers[i] < m - order:
-                            pointers[i] += 1
-                        else:
-                            break
+    for points in itertools.combinations(range(motif.shape[0]), order):
+        points = np.array(points)
+        done = set(points)
+        pointers = [0] * order
+        row = []
+        for _ in range(m - order):
+            for i in range(order):
+                while int(inds[points[i]][pointers[i]]) in done:
+                    if pointers[i] < m - order:
+                        pointers[i] += 1
+                    else:
+                        break
 
-                _, closest_i = min(((dists[points[i]][pointers[i]], i) for i in range(order)), key=lambda x: x[0])
-                point = inds[points[closest_i]][pointers[closest_i]]
-                row.append(sorted(np.linalg.norm(motif[points[i]] - motif[point]) for i in range(order)))
-                done.add(int(point))
-                if pointers[closest_i] < m - order:
-                    pointers[closest_i] += 1
+            _, closest_i = min(((dists[points[i]][pointers[i]], i) for i in range(order)), key=lambda x: x[0])
+            point = inds[points[closest_i]][pointers[closest_i]]
+            row.append(sorted(np.linalg.norm(motif[points[i]] - motif[point]) for i in range(order)))
+            done.add(int(point))
+            if pointers[closest_i] < m - order:
+                pointers[closest_i] += 1
 
-            sdd.append(row)
+        sdd.append(row)
 
-            if order == 2:
-                dist.append(np.linalg.norm(motif[points[0]] - motif[points[1]]))
-            else:
-                dist.append(PDD_finite(motif[points], collapse=False)[:, 1:])
+        if order == 2:
+            dist.append(np.linalg.norm(motif[points[0]] - motif[points[1]]))
+        else:
+            dist.append(PDD_finite(motif[points], collapse=False)[:, 1:])
 
-        sdd, dist = np.array(sdd), np.array(dist)
+    sdd, dist = np.array(sdd), np.array(dist)
 
-        if collapse:
-            dist_diffs = np.abs(dist[:, None] - dist) <= collapse_tol
+    if collapse:
+        dist_diffs = np.abs(dist[:, None] - dist) <= collapse_tol
 
-            if dist.ndim == 1:
-                dist_overlapping = dist_diffs
-            else:
-                dist_overlapping = np.all(np.all(dist_diffs, axis=-1), axis=-1)
+        if dist.ndim == 1:
+            dist_overlapping = dist_diffs
+        else:
+            dist_overlapping = np.all(np.all(dist_diffs, axis=-1), axis=-1)
 
-            sdd_overlapping = np.all(np.all(np.abs(sdd[:, None] - sdd) <= collapse_tol, axis=-1), axis=-1)
-            overlapping = np.logical_and(sdd_overlapping, dist_overlapping)
-            res = _group_overlapping_and_sum_weights(weights, overlapping)
-            if res is not None:
-                weights, dist, sdd = res[0], dist[res[1]], sdd[res[1]]
+        sdd_overlapping = np.all(np.all(np.abs(sdd[:, None] - sdd) <= collapse_tol, axis=-1), axis=-1)
+        overlapping = np.logical_and(sdd_overlapping, dist_overlapping)
+        res = _group_overlapping_and_sum_weights(weights, overlapping)
+        if res is not None:
+            weights, dist, sdd = res[0], dist[res[1]], sdd[res[1]]
 
-        if lexsort:
-            if order == 2:
-                flat_sdd = np.hstack((dist[:, None], sdd.reshape((sdd.shape[0], sdd.shape[1] * sdd.shape[2]))))
-                args = np.lexsort(np.rot90(flat_sdd))
-            else:
-                flat_dist = dist.reshape((dist.shape[0], dist.shape[1] * dist.shape[2]))
-                flat_sdd = sdd.reshape((sdd.shape[0], sdd.shape[1] * sdd.shape[2]))
-                args = np.lexsort(np.rot90(np.hstack((flat_dist, flat_sdd))))
-            weights, dist, sdd = weights[args], dist[args], sdd[args]
+    if lexsort:
+        if order == 2:
+            flat_sdd = np.hstack((dist[:, None], sdd.reshape((sdd.shape[0], sdd.shape[1] * sdd.shape[2]))))
+            args = np.lexsort(np.rot90(flat_sdd))
+        else:
+            flat_dist = dist.reshape((dist.shape[0], dist.shape[1] * dist.shape[2]))
+            flat_sdd = sdd.reshape((sdd.shape[0], sdd.shape[1] * sdd.shape[2]))
+            args = np.lexsort(np.rot90(np.hstack((flat_dist, flat_sdd))))
+        weights, dist, sdd = weights[args], dist[args], sdd[args]
 
-        return weights, dist, sdd
+    return weights, dist, sdd
 
 def PDD_reconstructable(
-        periodic_set: PSET_TYPE, 
+        periodic_set: PSET_TYPE,
         lexsort: bool = True
 ) -> np.ndarray:
     """The PDD of a periodic set with `k` (no of columns) large enough such that
@@ -365,7 +364,7 @@ def PDD_reconstructable(
     Parameters
     ----------
     periodic_set : :class:`.periodicset.PeriodicSet` or tuple of ndarrays
-        A periodic set represented by a :class:`.periodicset.PeriodicSet` or 
+        A periodic set represented by a :class:`.periodicset.PeriodicSet` or
         by a tuple (motif, cell) with coordinates in Cartesian form.
     k : int
         Number of columns in the PDD, plus one for the first column of weights.
@@ -398,7 +397,7 @@ def PDD_reconstructable(
         pdds = []
         for periodic_set in amd.CSDReader(['HXACAN', 'ACSALA'], families=True):
             # do not collapse rows
-            pdds.append(amd.PDD(periodic_set, 10, collapse=False))  
+            pdds.append(amd.PDD(periodic_set, 10, collapse=False))
 
     Manually pass a periodic set as a tuple (motif, cell)::
 
@@ -408,7 +407,7 @@ def PDD_reconstructable(
         cubic_amd = amd.PDD((motif, cell), 100)
     """
 
-    motif, cell, _, _ = _extract_motif_and_cell(periodic_set) 
+    motif, cell, _, _ = _extract_motif_and_cell(periodic_set)
     dims = cell.shape[0]
 
     if dims not in (2, 3):
@@ -426,11 +425,11 @@ def PDD_reconstructable(
 def PPC(periodic_set: PSET_TYPE) -> float:
     r"""The point packing coefficient (PPC) of ``periodic_set``.
 
-    The PPC is a constant of any periodic set determining the 
-    asymptotic behaviour of its AMD or PDD as :math:`k \rightarrow \infty`. 
+    The PPC is a constant of any periodic set determining the
+    asymptotic behaviour of its AMD or PDD as :math:`k \rightarrow \infty`.
 
     As :math:`k \rightarrow \infty`, the ratio :math:`\text{AMD}_k / \sqrt[n]{k}`
-    approaches the PPC (as does any row of its PDD). 
+    approaches the PPC (as does any row of its PDD).
 
     For a unit cell :math:`U` and :math:`m` motif points in :math:`n` dimensions,
 
@@ -442,7 +441,7 @@ def PPC(periodic_set: PSET_TYPE) -> float:
 
     Parameters
     ----------
-    periodic_set : :class:`.periodicset.PeriodicSet` or tuple of 
+    periodic_set : :class:`.periodicset.PeriodicSet` or tuple of
         ndarrays (motif, cell) representing the periodic set in Cartesian form.
 
     Returns
@@ -482,7 +481,7 @@ def AMD_estimate(periodic_set: PSET_TYPE, k: int) -> np.ndarray:
 
 def _extract_motif_and_cell(periodic_set: PSET_TYPE):
     """`periodic_set` is either a :class:`.periodicset.PeriodicSet`, or
-    a tuple of ndarrays (motif, cell). If possible, extracts the asymmetric unit 
+    a tuple of ndarrays (motif, cell). If possible, extracts the asymmetric unit
     and wyckoff multiplicities and returns them, otherwise returns None.
     """
 
@@ -504,8 +503,8 @@ def _extract_motif_and_cell(periodic_set: PSET_TYPE):
 
 
 def _collapse_rows(weights, dists, collapse_tol):
-    """Given a vector `weights`, matrix `dists` and tolerance `collapse_tol`, collapse 
-    the identical rows of dists (if all entries in a row are within  `collapse_tol`) 
+    """Given a vector `weights`, matrix `dists` and tolerance `collapse_tol`, collapse
+    the identical rows of dists (if all entries in a row are within  `collapse_tol`)
     and collapse the same entires of `weights` (adding entries that merge).
     """
 
@@ -529,7 +528,7 @@ def _group_overlapping_and_sum_weights(weights, overlapping):
             if i not in groups:
                 groups[i] = group
                 group += 1
-            
+
             for j in np.argwhere(row).T[0]:
                 groups[j] = groups[i]
 

@@ -6,6 +6,7 @@ import time
 import datetime
 import inspect
 
+import scipy.spatial
 import numpy as np
 
 def neighbours_from_distance_matrix(
@@ -24,12 +25,12 @@ def neighbours_from_distance_matrix(
     Returns
     -------
     tuple of ndarrays (nn_dm, inds)
-        For item ``i``, ``nn_dm[i][j]`` is the distance from item ``i`` to its ``j+1`` st 
+        For item ``i``, ``nn_dm[i][j]`` is the distance from item ``i`` to its ``j+1`` st
         nearest neighbour, and ``inds[i][j]`` is the index of this neighbour (``j+1`` since
         index 0 is the first nearest neighbour).
     """
-
-    import scipy.spatial
+    
+    inds = None
 
     # 2D distance matrix
     if len(dm.shape) == 2:
@@ -98,12 +99,12 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     cy = (cos_alpha - cos_beta * cos_gamma) / sin_gamma
     cz_sqr = 1. - cos_beta ** 2 - cy ** 2
     if cz_sqr < 0:
-        raise RuntimeError(f'Could not create unit cell from parameters ' + \
+        raise RuntimeError('Could not create unit cell from parameters ' + \
                            f'a={a},b={b},c={c},α={alpha},β={beta},γ={gamma}')
 
-    return np.array([[a,           0,           0], 
+    return np.array([[a, 0, 0],
                      [b*cos_gamma, b*sin_gamma, 0],
-                     [c*cos_beta,  c*cy,        c*np.sqrt(cz_sqr)]])
+                     [c*cos_beta, c*cy, c*np.sqrt(cz_sqr)]])
 
 
 def cellpar_to_cell_2D(a, b, alpha):
@@ -114,29 +115,33 @@ def cellpar_to_cell_2D(a, b, alpha):
 
 
 def lattice_cubic(scale=1, dims=3):
-    """Return a pair (motif, cell) representing a cubic lattice, passable to 
+    """Return a pair (motif, cell) representing a cubic lattice, passable to
     ``amd.AMD()`` or ``amd.PDD()``."""
     return (np.zeros((1, dims)), np.identity(dims) * scale)
 
 
 def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
     """Random unit cell."""
+    
     lengths = [random.uniform(*length_bounds) for _ in range(dims)]
+    
     if dims == 3:
         angles = [random.uniform(*angle_bounds) for _ in range(dims)]
         return cellpar_to_cell(*lengths, *angles)
-    elif dims == 2:
+    
+    if dims == 2:
         alpha = random.uniform(*angle_bounds)
         return cellpar_to_cell_2D(*lengths, alpha)
-    else:
-        raise ValueError(f'random_cell only implimented for dimensions 2 and 3 (passed {dims})')
+    
+    raise ValueError(f'random_cell only implimented for dimensions 2 and 3 (passed {dims})')
 
 
 class ETA:
-    """Pass total amount to do, then call .update() on every loop. 
+    """Pass total amount to do, then call .update() on every loop.
     This object will estimate an ETA and print it to the terminal."""
 
-    _moving_average_factor = 0.3    # epochtime_{n+1} = factor * epochtime + (1-factor) * epochtime_{n}
+    # epochtime_{n+1} = factor * epochtime + (1-factor) * epochtime_{n}
+    _moving_average_factor = 0.3
 
     def __init__(self, to_do, update_rate=100):
         self.to_do = to_do
@@ -149,13 +154,16 @@ class ETA:
 
     def update(self):
         """Call when one item is finished."""
+
         self.counter += 1
+        
         if self.counter == self.to_do:
             msg = self._finished()
             print(msg, end='\r\n')
             self.done = True
             return
-        elif self.counter > self.to_do:
+        
+        if self.counter > self.to_do:
             return
 
         if not self.counter % self.update_rate:
@@ -179,6 +187,7 @@ class ETA:
         return f'{percent}%, ETA {eta}' + ' ' * 30
 
     def _finished(self):
+        
         total = time.perf_counter() - self.start_time
         msg = f'Total time: {round(total, 2)}s, ' \
               f'n passes: {self.counter} ' \

@@ -15,8 +15,8 @@ def reconstruct(pdd, cell):
     """Reconstruct a motif from a PDD and unit cell.
     This function will only work if pdd has enough columns, such that the last column
     has all values larger than 2 times the diameter of the unit cell. It also expects
-    an uncollapsed PDD with no weights column. Do not use amd.PDD to compute the PDD 
-    for this function, instead use amd.PDD_reconstructable which returns a version of 
+    an uncollapsed PDD with no weights column. Do not use amd.PDD to compute the PDD
+    for this function, instead use amd.PDD_reconstructable which returns a version of
     the PDD which is passable to this function.
     Currently quite slow and has variable run times.
 
@@ -24,8 +24,8 @@ def reconstruct(pdd, cell):
     ----------
     pdd : ndarray
         The PDD of the periodic set to reconstruct. Needs `k` at least large enough so
-        all values in the last column of pdd are greater than 2 * diameter(cell), and 
-        needs to be uncollapsed without weights. Use amd.PDD_reconstructable to get a 
+        all values in the last column of pdd are greater than 2 * diameter(cell), and
+        needs to be uncollapsed without weights. Use amd.PDD_reconstructable to get a
         PDD which is acceptable for this argument.
     cell : ndarray
         Unit cell of the periodic set to reconstruct.
@@ -93,7 +93,7 @@ def reconstruct(pdd, cell):
         return motif
 
     for row in pdd[2:, :]:
-        row_reduced   = _remove_values_within_tol(row, lattice_dists, PREC)
+        row_reduced = _remove_values_within_tol(row, lattice_dists, PREC)
         shared_dists1 = _shared_values_within_tol(row1_reduced, row_reduced, PREC)
         shared_dists2 = _shared_values_within_tol(row2_reduced, row_reduced, PREC)
         shared_dists1 = _unique_within_tol(shared_dists1, PREC)
@@ -116,7 +116,7 @@ def _find_second_point(shared_dists, bases, cloud, prec):
 
     for distance_tup in itertools.combinations(shared_dists[1:], dims):
         for basis in bases:
-
+            res = None
             if dims == 2:
                 res = _bilaterate(*basis, *distance_tup, abs_q, prec)
             elif dims == 3:
@@ -136,9 +136,9 @@ def _find_further_point(shared_dists1, shared_dists2, bases, cloud, q, prec):
 
     # try all ordered subsequences of distances shared between first and further row,
     # with all combinations of the vectors in the neighbour set forming a basis
-    for distance_tup in itertools.combinations(shared_dists1[1:], dims):  
+    for distance_tup in itertools.combinations(shared_dists1[1:], dims):
         for basis in bases:
-
+            res = None
             if dims == 2:
                 res = _bilaterate(*basis, *distance_tup, abs_q_, prec)
             elif dims == 3:
@@ -158,7 +158,7 @@ def _neighbour_set(cell, prec):
     """(superset of) the neighbour set of origin for a lattice"""
 
     k_ = 5
-    coeffs = np.array(list(itertools.product((-1,0,1), repeat=cell.shape[0])))
+    coeffs = np.array(list(itertools.product((-1, 0, 1), repeat=cell.shape[0])))
     coeffs = coeffs[coeffs.any(axis=-1)]    # remove (0,0,0)
 
     # half of all combinations of basis vectors
@@ -170,19 +170,19 @@ def _neighbour_set(cell, prec):
     origin = np.zeros((1, cell.shape[0]))
     cloud_generator = generate_concentric_cloud(origin, cell)
     cloud = np.concatenate((next(cloud_generator), next(cloud_generator)))
-    tree = scipy.spatial.cKDTree(cloud, 
-                                 compact_nodes=False, 
+    tree = scipy.spatial.cKDTree(cloud,
+                                 compact_nodes=False,
                                  balanced_tree=False)
     dists, inds = tree.query(vecs, k=k_, workers=-1)
     dists_ = np.empty_like(dists)
 
     while not np.allclose(dists, dists_, atol=0, rtol=1e-12):
         dists = dists_
-        cloud = np.vstack((cloud, 
-                           next(cloud_generator), 
+        cloud = np.vstack((cloud,
+                           next(cloud_generator),
                            next(cloud_generator)))
-        tree = scipy.spatial.cKDTree(cloud, 
-                                     compact_nodes=False, 
+        tree = scipy.spatial.cKDTree(cloud,
+                                     compact_nodes=False,
                                      balanced_tree=False)
         dists_, inds = tree.query(vecs, k=k_, workers=-1)
 
@@ -201,7 +201,7 @@ def _neighbour_set(cell, prec):
 
     # Do I need to + PREC?
     # inds of voronoi neighbours in cloud
-    voronoi_neighbours = np.all(halves_to_lattice_dists - halves_norms + prec >= 0, axis=-1)    
+    voronoi_neighbours = np.all(halves_to_lattice_dists - halves_norms + prec >= 0, axis=-1)
     neighbour_set = neighbour_set[voronoi_neighbours]
     return neighbour_set
 
@@ -240,24 +240,23 @@ def _bilaterate(p1, p2, r1, r2, abs_val, prec):
     if d == 0 and r1 == r2: # coincident circles
         return None
 
-    else:
-        a = (r1 ** 2 - r2 ** 2 + d ** 2) / (2 * d)
-        h = np.sqrt(r1 ** 2 - a ** 2)
-        x2 = p1[0] + a * v[0]
-        y2 = p1[1] + a * v[1] 
-        x3 = x2 + h * v[1] 
-        y3 = y2 - h * v[0] 
-        x4 = x2 - h * v[1]
-        y4 = y2 + h * v[0]
-        q1 = np.array((x3, y3))
-        q2 = np.array((x4, y4))
+    a = (r1 ** 2 - r2 ** 2 + d ** 2) / (2 * d)
+    h = np.sqrt(r1 ** 2 - a ** 2)
+    x2 = p1[0] + a * v[0]
+    y2 = p1[1] + a * v[1]
+    x3 = x2 + h * v[1]
+    y3 = y2 - h * v[0]
+    x4 = x2 - h * v[1]
+    y4 = y2 + h * v[0]
+    q1 = np.array((x3, y3))
+    q2 = np.array((x4, y4))
 
-        if np.abs(np.sqrt(x3 ** 2 + y3 ** 2) - abs_val) < prec:
-            return q1
-        elif np.abs(np.sqrt(x4 ** 2 + y4 ** 2) - abs_val) < prec:
-            return q2
-        else:
-            return None
+    if np.abs(np.sqrt(x3 ** 2 + y3 ** 2) - abs_val) < prec:
+        return q1
+    elif np.abs(np.sqrt(x4 ** 2 + y4 ** 2) - abs_val) < prec:
+        return q2
+    else:
+        return None
 
 
 @numba.njit()
@@ -266,7 +265,7 @@ def _trilaterate(p1, p2, p3, r1, r2, r3, abs_val, prec):
     temp1 = p2 - p1
     d = np.linalg.norm(temp1)
     e_x = temp1 / d
-    temp2 = p3 - p1                                        
+    temp2 = p3 - p1
     i = np.core.dot(e_x, temp2)
     temp3 = temp2 - i * e_x
     e_y = temp3 / np.linalg.norm(temp3)
@@ -286,10 +285,10 @@ def _trilaterate(p1, p2, p3, r1, r2, r3, abs_val, prec):
 
     if np.abs(np.linalg.norm(p_12_a) - abs_val) < prec:
         return p_12_a
-    elif np.abs(np.linalg.norm(p_12_b) - abs_val) < prec:
+    if np.abs(np.linalg.norm(p_12_b) - abs_val) < prec:
         return p_12_b
-    else:
-        return None
+    
+    return None
 
 
 def _unique_within_tol(arr, prec):
