@@ -2,17 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.8] - 25/03/2022
+## [1.1.8] - 14/04/2022
 
 ### Added
 
 - Reconstructing periodic sets from PDDs added. Recently it was shown the PDD is complete in a general position and it is possible to reconstruct a periodic set from its PDD with large enough k. The first (inefficient) implementation of this algorithm has be added in the module amd.reconstruct.
   
+- Higher-order PDDs (the order parameter of `amd.PDD()` and `amd.PDD_finite()`) are removed and replaced with `amd.SDD()` (simplex-wise distance distribution). This invariant is only appropriate for finite sets, but first-order SDDs are equivalent to PDDs. Comparing SDDs is possible with `amd.compare.SDD_EMD()`.
+
 - amd.CifReader can now read a folder of .cifs or other files with the optional folder argument (True/False).
 
 ### Changed
-
-- Higher-order PDDs (the order parameter of `amd.PDD()` and `amd.PDD_finite()`) are removed and replaced with `amd.SDD()` (simplex distance distribution). This invariant is only appropriate for finite sets, but first-order SDDs are equivalent to PDDs.
 
 - `amd.finite_AMD` and `amd.finite_PDD` changed to `amd.AMD_finite` and `amd.PDD_finite` for easier autocompletion.
 
@@ -22,7 +22,9 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 
-- Removed several functions added from last few versions. These have been moved to a private package as they were just cluttering this one. List of removed functions/modules: `amd.auto`, `amd.ccdc_utils`, `amd.periodicset.PeriodicSet.to_dict`, `amd.io.SetReader.extract_tags`, `amd.compare.mst_from_distance_matrix`, `amd.compare.AMD_mst`, `amd.compare.PDD_mst`, `amd.utils.extract_tags`, `amd.utils.neighbours_df_dict`.
+- Higher-order PDDs (the order parameter of `amd.PDD()` and `amd.PDD_finite()`) are removed and replaced with `amd.SDD()` (simplex-wise distance distribution). This invariant is only appropriate for finite sets, but first-order SDDs are equivalent to PDDs.
+
+- Removed several functions which were bloating the package. List of removed functions/modules: `amd.auto`, `amd.ccdc_utils`, `amd.periodicset.PeriodicSet.to_dict`, `amd.io.SetReader.extract_tags`, `amd.compare.mst_from_distance_matrix`, `amd.compare.AMD_mst`, `amd.compare.PDD_mst`, `amd.utils.extract_tags`, `amd.utils.neighbours_df_dict`.
 
 ## [1.1.7] - 01/02/2022
 

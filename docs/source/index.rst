@@ -1,7 +1,7 @@
 Welcome to average-minimum-distance's documentation!
 ====================================================
 
-Read below to get started with amd, or follow the links below for
+Read below to get started with amd, or follow these links for
 more details about specific tasks.
 
 .. toctree::

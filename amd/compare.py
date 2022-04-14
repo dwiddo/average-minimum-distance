@@ -13,10 +13,10 @@ from .utils import ETA
 
 
 def EMD(
-        pdd:  np.ndarray, 
-        pdd_: np.ndarray, 
+        pdd:  np.ndarray,
+        pdd_: np.ndarray,
         metric: Optional[str] = 'chebyshev',
-        return_transport: Optional[bool] = False, 
+        return_transport: Optional[bool] = False,
         **kwargs):
     r"""Earth mover's distance (EMD) between two PDDs, also known as
     the Wasserstein metric.

@@ -7,8 +7,6 @@ import datetime
 import inspect
 
 import numpy as np
-import scipy.spatial
-
 
 def neighbours_from_distance_matrix(
         n: int, 
@@ -30,6 +28,8 @@ def neighbours_from_distance_matrix(
         nearest neighbour, and ``inds[i][j]`` is the index of this neighbour (``j+1`` since
         index 0 is the first nearest neighbour).
     """
+    
+    import scipy.spatial
     
     # 2D distance matrix
     if len(dm.shape) == 2:
