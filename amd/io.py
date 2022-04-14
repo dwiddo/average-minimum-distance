@@ -26,7 +26,7 @@ try:
 except (ImportError, RuntimeError) as exception:
     _CCDC_ENABLED = False
 
- 
+
 def _warning(message, category, filename, lineno, *args, **kwargs):
     return f'{filename}:{lineno}: {category.__name__}: {message}\n'
 
@@ -117,7 +117,7 @@ class _Reader:
         self.show_warnings = show_warnings
         self.current_identifier = None
         self.current_filename = None
-        self._generator = None
+        self._generator = []
 
     def __iter__(self):
         yield from self._generator
@@ -717,8 +717,7 @@ class SetWriter:
                                                   dtype=SetWriter._str_dtype)
                     else:    # other lists must be castable to ndarray
                         data = np.asarray(data)
-                        tags_group.create_dataset(tag,
-                                                  data=np.array(data))      
+                        tags_group.create_dataset(tag, data=np.array(data))
                 else:
                     raise ValueError(
                         f'Cannot store tag of type {type(data)} with SetWriter')
@@ -837,7 +836,7 @@ def crystal_to_periodicset(crystal):
         raise ValueError(f'{crystal.identifier} has no coordinates')
 
     sitesym = crystal.symmetry_operators
-    if not sitesym: 
+    if not sitesym:
         sitesym = ('x,y,z', )
     r = _Reader()
     r.current_identifier = crystal.identifier
