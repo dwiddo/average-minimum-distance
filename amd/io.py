@@ -23,7 +23,7 @@ try:
     import ccdc.io       # EntryReader
     import ccdc.search   # TextNumericSearch
     _CCDC_ENABLED = True
-except (ImportError, RuntimeError) as e:
+except (ImportError, RuntimeError) as exception:
     _CCDC_ENABLED = False
 
 
@@ -40,9 +40,9 @@ def _atom_has_disorder(label, occupancy):
 class _Reader:
     """Base Reader class. Contains parsers for converting ase CifBlock
     and ccdc Entry objects to PeriodicSets.
-    
+
     Intended use:
-    
+
     First make a new method for _Reader converting object to PeriodicSet
     (e.g. named _X_to_PSet). Then make this class outline:
     
@@ -412,7 +412,8 @@ class _Reader:
                     asym_is_disordered.append(False)
 
         # check all atoms have coords. option/default remove unknown sites?
-        if not molecule.all_atoms_have_sites or any(a.fractional_coordinates is None for a in molecule.atoms):
+        if not molecule.all_atoms_have_sites or \
+           any(a.fractional_coordinates is None for a in molecule.atoms):
             if self.show_warnings:
                 warnings.warn(
                     f'Skipping {self.current_identifier} as some atoms do not have sites')
