@@ -128,11 +128,11 @@ def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
     if dims == 3:
         angles = [random.uniform(*angle_bounds) for _ in range(dims)]
         return cellpar_to_cell(*lengths, *angles)
-    
+
     if dims == 2:
         alpha = random.uniform(*angle_bounds)
         return cellpar_to_cell_2D(*lengths, alpha)
-    
+
     raise ValueError(f'random_cell only implimented for dimensions 2 and 3 (passed {dims})')
 
 
@@ -156,13 +156,13 @@ class ETA:
         """Call when one item is finished."""
 
         self.counter += 1
-        
+
         if self.counter == self.to_do:
             msg = self._finished()
             print(msg, end='\r\n')
             self.done = True
             return
-        
+
         if self.counter > self.to_do:
             return
 
@@ -187,7 +187,6 @@ class ETA:
         return f'{percent}%, ETA {eta}' + ' ' * 30
 
     def _finished(self):
-        
         total = time.perf_counter() - self.start_time
         msg = f'Total time: {round(total, 2)}s, ' \
               f'n passes: {self.counter} ' \

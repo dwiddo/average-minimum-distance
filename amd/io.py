@@ -26,8 +26,8 @@ try:
 except (ImportError, RuntimeError) as exception:
     _CCDC_ENABLED = False
 
-
-def _warning(message, category, filename, lineno, file=None, line=None):
+ 
+def _warning(message, category, filename, lineno, *args, **kwargs):
     return f'{filename}:{lineno}: {category.__name__}: {message}\n'
 
 warnings.formatwarning = _warning
@@ -117,6 +117,7 @@ class _Reader:
         self.show_warnings = show_warnings
         self.current_identifier = None
         self.current_filename = None
+        self._generator = None
 
     def __iter__(self):
         yield from self._generator
@@ -140,7 +141,7 @@ class _Reader:
             if res is not None:
                 yield res
 
-    def _expand(
+    def expand(
             self,
             asym_frac_motif: np.ndarray,
             sitesym: Sequence[str]
@@ -262,9 +263,9 @@ class _Reader:
         site_diffs1 = np.abs(asym_frac_motif[:, None] - asym_frac_motif)
         site_diffs2 = np.abs(site_diffs1 - 1)
         overlapping = np.triu(np.all(
-                                (site_diffs1 <= _Reader.equiv_site_tol) |
-                                (site_diffs2 <= _Reader.equiv_site_tol),
-                                axis=-1), 1)
+            (site_diffs1 <= _Reader.equiv_site_tol) |
+            (site_diffs2 <= _Reader.equiv_site_tol), 
+            axis=-1), 1)
 
         # don't remove overlapping sites if one is disordered and disorder='all_sites'
         if self.disorder == 'all_sites':
@@ -298,7 +299,7 @@ class _Reader:
             sitesym = [sitesym]
 
         # expand the asymmetric unit to full motif + multiplicities
-        frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym)
+        frac_motif, asym_unit, multiplicities, inverses = self.expand(asym_frac_motif, sitesym)
         motif = frac_motif @ cell
 
         # construct PeriodicSet
@@ -428,9 +429,10 @@ class _Reader:
         # if there are overlapping sites in asym unit, warn and keep only one
         site_diffs1 = np.abs(asym_frac_motif[:, None] - asym_frac_motif)
         site_diffs2 = np.abs(site_diffs1 - 1)
-        overlapping = np.triu(np.all((site_diffs1 <= _Reader.equiv_site_tol) |
-                                     (site_diffs2 <= _Reader.equiv_site_tol),
-                                     axis=-1), 1)
+        overlapping = np.triu(np.all(
+            (site_diffs1 <= _Reader.equiv_site_tol) |
+            (site_diffs2 <= _Reader.equiv_site_tol),
+            axis=-1), 1)
 
         # don't remove overlapping sites if one is disordered and disorder='all_sites'
         if self.disorder == 'all_sites':
@@ -458,7 +460,7 @@ class _Reader:
         sitesym = crystal.symmetry_operators
         if not sitesym:
             sitesym = ('x,y,z', )
-        frac_motif, asym_unit, multiplicities, inverses = self._expand(asym_frac_motif, sitesym)
+        frac_motif, asym_unit, multiplicities, inverses = self.expand(asym_frac_motif, sitesym)
         motif = frac_motif @ cell
 
         # construct PeriodicSet
@@ -839,7 +841,7 @@ def crystal_to_periodicset(crystal):
         sitesym = ('x,y,z', )
     r = _Reader()
     r.current_identifier = crystal.identifier
-    frac_motif, asym_unit, multiplicities, _ = r._expand(asym_frac_motif, sitesym)
+    frac_motif, asym_unit, multiplicities, _ = r.expand(asym_frac_motif, sitesym)
     motif = frac_motif @ cell
 
     kwargs = {
@@ -885,7 +887,7 @@ def cifblock_to_periodicset(block):
 
     dummy_reader = _Reader()
     dummy_reader.current_identifier = block.name
-    frac_motif, asym_unit, multiplicities, _ = dummy_reader._expand(asym_frac_motif, sitesym)
+    frac_motif, asym_unit, multiplicities, _ = dummy_reader.expand(asym_frac_motif, sitesym)
     motif = frac_motif @ cell
 
     kwargs = {

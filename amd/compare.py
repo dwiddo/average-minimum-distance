@@ -286,14 +286,14 @@ def PDD_cdist(
     n, m = len(pdds), len(pdds_)
     t = None if k is None else k + 1
     dm = np.empty((n, m))
-    if verbose: 
+    if verbose:
         eta = ETA(n * m)
 
     for i in range(n):
         pdd = pdds[i]
         for j in range(m):
             dm[i, j] = EMD(pdd[:, :t], pdds_[j][:, :t], metric=metric, **kwargs)
-            if verbose: 
+            if verbose:
                 eta.update()
 
     return dm
@@ -338,13 +338,13 @@ def PDD_pdist(
     m = len(pdds)
     t = None if k is None else k + 1
     cdm = np.empty((m * (m - 1)) // 2, dtype=np.double)
-    if verbose: 
+    if verbose:
         eta = ETA((m * (m - 1)) // 2)
     inds = ((i, j) for i in range(0, m - 1) for j in range(i + 1, m))
 
     for r, (i, j) in enumerate(inds):
         cdm[r] = EMD(pdds[i][:, :t], pdds[j][:, :t], metric=metric, **kwargs)
-        if verbose: 
+        if verbose:
             eta.update()
 
     return cdm
@@ -434,7 +434,7 @@ def PDD_cdist_AMD_filter(
                 warnings.warn(
                     "Using only allowed metric 'chebyshev' for low_memory",
                     UserWarning)
-            if verbose: 
+            if verbose:
                 eta = ETA(len(amds))
             inds = []
             for i, amd_vec in enumerate(amds):
@@ -442,7 +442,7 @@ def PDD_cdist_AMD_filter(
                 inds_row = np.argpartition(dists, n+1)[:n+1]
                 inds_row = inds_row[inds_row != i][:n]
                 inds.append(inds_row)
-                if verbose: 
+                if verbose:
                     eta.update()
             inds = np.array(inds)
         else:
@@ -464,27 +464,27 @@ def PDD_cdist_AMD_filter(
                 warnings.warn(
                     "Using only allowed metric 'chebyshev' for low_memory",
                     UserWarning)
-            if verbose: 
+            if verbose:
                 eta = ETA(len(amds) * len(amds_))
             inds = []
             for i, amd_vec in enumerate(amds):
                 row = np.amax(np.abs(amds_ - amd_vec), axis=-1)
                 inds.append(np.argpartition(row, n)[:n])
-                if verbose: 
+                if verbose:
                     eta.update()
         else:
             amd_dm = AMD_cdist(amds, amds_, low_memory=low_memory, **kwargs)
             inds = np.array([np.argpartition(row, n)[:n] for row in amd_dm])
 
     dm = np.empty(inds.shape)
-    if verbose: 
+    if verbose:
         eta = ETA(inds.shape[0] * inds.shape[1])
     t = None if k is None else k + 1
 
     for i, row in enumerate(inds):
         for i_, j in enumerate(row):
             dm[i, i_] = EMD(pdds[i][:, :t], pdds_[j][:, :t], **metric_kwargs)
-            if verbose: 
+            if verbose:
                 eta.update()
 
     sorted_inds = np.argsort(dm, axis=-1)
