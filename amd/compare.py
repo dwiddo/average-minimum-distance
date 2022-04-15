@@ -1,7 +1,6 @@
 """Functions for comparing AMDs and PDDs of crystals.
 """
 
-from turtle import update
 from typing import List, Tuple, Optional, Union
 import warnings
 
@@ -13,12 +12,16 @@ from ._network_simplex import network_simplex
 from .utils import ETA
 
 
+_VERBOSE = False
+_VERBOSE_UPDATE_RATE = 100
+
 def set_verbose(setting, update_rate=100):
+    """Pass True/False to turn on/off an ETA where relevant."""
     global _VERBOSE
     global _VERBOSE_UPDATE_RATE
     _VERBOSE = setting
     _VERBOSE_UPDATE_RATE = update_rate
-    
+
 set_verbose(False)
 
 def EMD(
@@ -335,7 +338,7 @@ def emd(
         pdd: np.ndarray,
         pdd_: np.ndarray,
         metric: Optional[str] = 'chebyshev',
-        return_transport: Optional[bool] = False, 
+        return_transport: Optional[bool] = False,
         **kwargs):
     """Alias for amd.emd()."""
     return EMD(pdd, pdd_, metric=metric, return_transport=return_transport, **kwargs)
@@ -395,7 +398,7 @@ def PDD_cdist_AMD_filter(
         else:
             amds_ = np.array([np.average(pdd[:, 1:], weights=pdd[:, 0], axis=0)
                               for pdd in pdds_])
-            inds = _amd_cdist_nns_low_memory(amds, amds_, n) 
+            inds = _amd_cdist_nns_low_memory(amds, amds_, n)
     else:
         if pdds_ is None:
             inds = _amd_pdist_nns(amds, n, **kwargs)
@@ -459,5 +462,4 @@ def _emd_nns_from_nn_inds(pdds, pdds_, inds, **kwargs):
     sorted_inds = np.argsort(dm, axis=-1)
     inds = np.take_along_axis(inds, sorted_inds, axis=-1)
     dm = np.take_along_axis(dm, sorted_inds, axis=-1)
-    
     return dm, inds
