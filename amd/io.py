@@ -21,7 +21,7 @@ try:
     import ccdc.io       # EntryReader
     import ccdc.search   # TextNumericSearch
     _CCDC_ENABLED = True
-except (ImportError, RuntimeError) as exception:
+except (ImportError, RuntimeError) as _:
     _CCDC_ENABLED = False
 
 

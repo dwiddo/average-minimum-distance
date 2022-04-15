@@ -1,5 +1,17 @@
 from setuptools import setup, find_packages
 
+description = (
+    'Implements fingerprints (isometry invariants) of crystals '
+    'based on geometry: average minimum distances (AMD) and '
+    'point-wise distance distributions (PDD). '
+    'Includes .cif reading tools.'
+)
+
+license = 'Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License'
+
+keywords = 'isometry, invariant, crystal, amd, pdd, similarity, average, ' \
+           'minimum, distance, point-wise, distribution, cif'
+
 classifiers = [
     'Development Status :: 3 - Alpha',
     'Intended Audience :: Science/Research',
@@ -35,13 +47,13 @@ project_urls = {
 kw = {
     'name':             			 'average-minimum-distance',
     'version':          			 '1.1.8a1',
-    'description':      			 'For calculation and comparison of AMD/PDD isometric invariants of periodic sets. Includes .cif reading functionality.',
+    'description':      			 description,
     'long_description': 			 open('README.md').read(),
     'long_description_content_type': 'text/markdown',
     'author':           			 'Daniel Widdowson',
     'author_email':     			 'sgdwiddo@liverpool.ac.uk',
-    'license':          			 'Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License',
-    'keywords':         			 'isometry, invariant, cif, crystal, amd, pdd, similarity, average, minimum, distance, point-wise, distribution',
+    'license':          			 license,
+    'keywords':         			 keywords,
     'url':              			 'https://github.com/dwiddo/average-minimum-distance',
     'project_urls':					 project_urls,
     'classifiers':      			 classifiers,

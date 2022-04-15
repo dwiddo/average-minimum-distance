@@ -18,6 +18,8 @@ All notable changes to this project will be documented in this file.
 
 - Function `amd.compare.neighbours_from_distance_matrix` moved to `amd.utils.neighbours_from_distance_matrix`.
 
+- Changed how the readers handle disorder to be simpler. Now, if `disorder='skip'` then any disorder means the structure is skipped, even if the disordered atom(s) would have been removed e.g. by remove_hydrogens. If `disorder='all_sites'`, no warnings are printed for any overlapping sites in the stucture.
+
 ### Removed
 
 - Higher-order PDDs (the order parameter of `amd.PDD()` and `amd.PDD_finite()`) are removed and replaced with `amd.SDD()` (simplex-wise distance distribution). This invariant is only appropriate for finite sets, but first-order SDDs are equivalent to PDDs.

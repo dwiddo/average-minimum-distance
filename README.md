@@ -7,7 +7,7 @@
 [![CC-0 license](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-blue.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Code Quality](https://scrutinizer-ci.com/g/dwiddo/average-minimum-distance/badges/quality-score.png?b=master)](https://scrutinizer-ci.com/g/dwiddo/average-minimum-distance/)
 
-Implements fingerprints (*isometry invariants*) of crystals based on geometry: average minimum distances (AMD) and point-wise distance distributions (PDD). Includes .cif reading functionality.
+Implements fingerprints (*isometry invariants*) of crystals based on geometry: average minimum distances (AMD) and point-wise distance distributions (PDD). Includes .cif reading tools.
 
 - **Papers:** https://doi.org/10.46793/match.87-3.529W or on arXiv at https://arxiv.org/abs/2009.02488
 - **PyPI project:** https://pypi.org/project/average-minimum-distance/
@@ -93,9 +93,10 @@ plt.show()
 
 ## Example: Finding n nearest neighbours in one set from another
 
-Here is an example showing how to read two sets of crystals from .CIFs ```set1.cif``` and ```set2.cif``` and find the 10 nearest PDD-neighbours in set 2 for every crystal in set 1. This can be done with the handy function ```amd.neighbours_from_distance_matrix```, which also accepts condensed distance matrices.
+Here is an example showing how to read two sets of crystals from .CIFs ```set1.cif``` and ```set2.cif``` and find the 10 nearest PDD-neighbours in set 2 for every crystal in set 1.
 
 ```py
+import numpy as np
 import amd
 
 n = 10
@@ -109,11 +110,18 @@ set2_pdds = [amd.PDD(s, k) for s in set2]
 
 dm = amd.PDD_cdist(set1_pdds, set2_pdds)
 
-# amd.neighbours_from_distance_matrix calculates nearest neighbours for you
+# the following uses np.argpartiton (like argsort but not for the whole list)
+# and np.take_along_axis to find nearest neighbours of each item given the
+# distance matrix.
 # nn_dists[i][j] = distance from set1[i] to its (j+1)st nearest neighbour in set2 
 # nn_inds[i][j] = index of set1[i]'s (j+1)st nearest neighbour in set2
 # it's (j+1)st as index 0 refers to the first nearest neighbour
-nn_dists, nn_inds = amd.neighbours_from_distance_matrix(n, dm)
+
+nn_inds = np.array([np.argpartition(row, n)[:n] for row in dm])
+nn_dists = np.take_along_axis(dm, nn_inds, axis=-1)
+sorted_inds = np.argsort(nn_dists, axis=-1)
+nn_inds = np.take_along_axis(nn_inds, sorted_inds, axis=-1)
+nn_dists = np.take_along_axis(nn_dists, sorted_inds, axis=-1)
 
 # now to print the names of these nearest neighbours and their distances:
 set1_names = [s.name for s in set1]
@@ -130,6 +138,7 @@ for i in range(len(set1)):
 
 The arXiv paper for this package is [here](arxiv.org/abs/2009.02488). Use the following bib reference to cite us:
 
+```bibtex
 @article{widdowson2022average,
   title={Average Minimum Distances of periodic point sets - fundamental invariants for mapping all periodic crystals},
   author={Daniel Widdowson and Marco M Mosca and Angeles Pulido and Vitaliy Kurlin and Andrew I Cooper},
@@ -139,3 +148,4 @@ The arXiv paper for this package is [here](arxiv.org/abs/2009.02488). Use the fo
   pages={529-559},
   year={2022}
 }
+```

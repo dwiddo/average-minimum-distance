@@ -117,49 +117,36 @@ class _Reader:
     def _cifblock_to_periodicset(self, block) -> PeriodicSet:
         """ase.io.cif.CIFBlock --> PeriodicSet. Returns None for a "bad" set."""
 
+        data = {key: func(block) for key, func in self.extract_data.items()}
         self.current_name = block.name
         asym_unit, asym_symbols, sitesym, cell = self._asym_unit_from_cifblock(block)
-
-        # indices of sites to remove
-        remove = []
-        if self.remove_hydrogens:
-            remove.extend((i for i, sym in enumerate(asym_symbols) if sym in 'HD'))
-
-        # find disordered sites
-        asym_is_disordered = []
         occupancies = block.get('_atom_site_occupancy')
         labels = block.get('_atom_site_label')
+        remove_sites = []
+
         if occupancies is not None:
-            disordered = []     # indices where there is disorder
-            for i, (occ, label) in enumerate(zip(occupancies, labels)):
-                if _atom_has_disorder(label, occ):
-                    if i not in remove:
-                        disordered.append(i)
-                        asym_is_disordered.append(True)
-                else:
-                    asym_is_disordered.append(False)
+            if self.disorder == 'skip':
+                if any(_atom_has_disorder(lab, occ) for lab, occ in zip(labels, occupancies)):
+                    warnings.warn(f'Skipping {self.current_name} as structure is disordered')
+                    return None
 
-            if self.disorder == 'skip' and len(disordered) > 0:
-                warnings.warn(f'Skipping {self.current_name} as structure is disordered')
-                return None
+            elif self.disorder == 'ordered_sites':
+                remove_sites.extend(
+                    (i for i, (lab, occ) in enumerate(zip(labels, occupancies)) 
+                     if _atom_has_disorder(lab, occ)))
 
-            if self.disorder == 'ordered_sites':
-                remove.extend(disordered)
+        if self.remove_hydrogens:
+            remove_sites.extend((i for i, sym in enumerate(asym_symbols) if sym in 'HD'))
 
-        # remove sites
-        asym_unit = np.delete(asym_unit, remove, axis=0)
-        asym_symbols = [s for i, s in enumerate(asym_symbols) if i not in remove]
-        asym_is_disordered = [v for i, v in enumerate(asym_is_disordered) if i not in remove]
+        asym_unit = np.delete(asym_unit, remove_sites, axis=0)
+        asym_symbols = [s for i, s in enumerate(asym_symbols) if i not in remove_sites]
 
-        keep_sites = self._validate_sites(asym_unit, asym_is_disordered)
-        if keep_sites is not None:
-            asym_unit = asym_unit[keep_sites]
-            asym_symbols = [sym for sym, keep in zip(asym_symbols, keep_sites) if keep]
+        if not self.disorder == 'all_sites':
+            asym_unit, asym_symbols = self._validate_sites(asym_unit, asym_symbols)
 
         if self._has_no_valid_sites(asym_unit):
             return None
 
-        data = {key: func(block) for key, func in self.extract_data.items()}
         periodic_set = self._construct_periodic_set(asym_unit, asym_symbols, sitesym, cell, **data)
         return periodic_set
 
@@ -196,6 +183,7 @@ class _Reader:
     def _entry_to_periodicset(self, entry) -> PeriodicSet:
         """ccdc.entry.Entry --> PeriodicSet. Returns None for a "bad" set."""
 
+        data = {key: func(entry) for key, func in self.extract_data.items()}
         self.current_name = entry.identifier
         crystal = entry.crystal
 
@@ -203,54 +191,23 @@ class _Reader:
             warnings.warn(f'Skipping {self.current_name} as entry has no 3D structure')
             return None
 
-        # first disorder check, if skipping. If occ == 1 for all atoms but the entry
-        # or crystal is listed as having disorder, skip (can't know where disorder is).
-        # If occ != 1 for any atoms, we wait to see if we remove them before skipping.
-        molecule = crystal.disordered_molecule
-        if self.disorder == 'ordered_sites':
-            molecule.remove_atoms(a for a in molecule.atoms if a.label.endswith('?'))
+        molecule = crystal.disordered_molecule   
 
-        may_have_disorder = False
         if self.disorder == 'skip':
-            for a in molecule.atoms:
-                occ = a.occupancy
-                if _atom_has_disorder(a.label, occ):
-                    may_have_disorder = True
-                    break
+            if crystal.has_disorder or entry.has_disorder or \
+               any(_atom_has_disorder(a.label, a.occupancy) for a in molecule.atoms):
+                warnings.warn(f'Skipping {self.current_name} as structure is disordered')
+                return None
 
-            if not may_have_disorder:
-                if crystal.has_disorder or entry.has_disorder:
-                    warnings.warn(f'Skipping {self.current_name} as structure is disordered')
-                    return None
+        elif self.disorder == 'ordered_sites':
+            molecule.remove_atoms(a for a in molecule.atoms 
+                                  if _atom_has_disorder(a.label, a.occupancy))
 
-        # make same as cifblock version??
         if self.remove_hydrogens:
             molecule.remove_atoms(a for a in molecule.atoms if a.atomic_symbol in 'HD')
 
         if self.heaviest_component and len(molecule.components) > 1:
             molecule = _heaviest_component(molecule)
-
-        crystal.molecule = molecule
-
-        # by here all atoms to be removed have been (except via ordered_sites).
-        # If disorder == 'skip' and there were atom(s) with occ < 1 found
-        # eariler, we check if all such atoms were removed. If not, skip.
-        if self.disorder == 'skip' and may_have_disorder:
-            for a in crystal.disordered_molecule.atoms:
-                occ = a.occupancy
-                if _atom_has_disorder(a.label, occ):
-                    warnings.warn(f'Skipping {self.current_name} as structure is disordered')
-                    return None
-
-        # if disorder is all_sites, we need to know where disorder is to ignore overlaps
-        asym_is_disordered = []     # True/False list same length as asym unit
-        if self.disorder == 'all_sites':
-            for a in crystal.asymmetric_unit_molecule.atoms:
-                occ = a.occupancy
-                if _atom_has_disorder(a.label, occ):
-                    asym_is_disordered.append(True)
-                else:
-                    asym_is_disordered.append(False)
 
         # check all atoms have coords. option/default remove unknown sites?
         if not molecule.all_atoms_have_sites or \
@@ -258,19 +215,15 @@ class _Reader:
             warnings.warn(f'Skipping {self.current_name} as some atoms do not have sites')
             return None
 
+        crystal.molecule = molecule
         asym_unit, asym_symbols, sitesym, cell = self._asym_unit_from_crystal(crystal)
 
-        # remove overlapping sites, check sites exist
-        keep_sites = self._validate_sites(asym_unit, asym_is_disordered)
-        if keep_sites is not None:
-            asym_unit = asym_unit[keep_sites]
-            asym_symbols = [sym for sym, keep in zip(asym_symbols, keep_sites) if keep]
+        if not self.disorder == 'all_sites':
+            asym_unit, asym_symbols = self._validate_sites(asym_unit, asym_symbols)
 
         if self._has_no_valid_sites(asym_unit):
             return None
 
-        entry.crystal.molecule = crystal.disordered_molecule
-        data = {key: func(entry) for key, func in self.extract_data.items()}
         periodic_set = self._construct_periodic_set(asym_unit, asym_symbols, sitesym, cell, **data)
         return periodic_set
 
@@ -308,7 +261,7 @@ class _Reader:
         else:
             return False
 
-    def _validate_sites(self, asym_unit, asym_is_disordered):
+    def _validate_sites(self, asym_unit, asym_symbols):
         site_diffs1 = np.abs(asym_unit[:, None] - asym_unit)
         site_diffs2 = np.abs(site_diffs1 - 1)
         overlapping = np.triu(np.all(
@@ -316,16 +269,14 @@ class _Reader:
             (site_diffs2 <= _Reader.equiv_site_tol),
             axis=-1), 1)
 
-        if self.disorder == 'all_sites':
-            for i, j in np.argwhere(overlapping):
-                if asym_is_disordered[i] or asym_is_disordered[j]:
-                    overlapping[i, j] = False
-
         if overlapping.any():
             warnings.warn(
                 f'{self.current_name} may have overlapping sites; duplicates will be removed')
             keep_sites = ~overlapping.any(0)
-            return keep_sites
+            asym_unit = asym_unit[keep_sites]
+            asym_symbols = [sym for sym, keep in zip(asym_symbols, keep_sites) if keep]
+
+        return asym_unit, asym_symbols
 
     def _has_no_valid_sites(self, motif):
         if motif.shape[0] == 0:
