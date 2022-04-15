@@ -315,7 +315,8 @@ def PDD_pdist(
     cdm_len = (m * (m - 1)) // 2
     cdm = np.empty(cdm_len, dtype=np.double)
     if verbose:
-        eta = ETA(cdm_len, update_rate = cdm_len // 10000)
+        update_rate = cdm_len // 10000
+        eta = ETA(cdm_len, update_rate=update_rate)
     inds = ((i, j) for i in range(0, m - 1) for j in range(i + 1, m))
 
     for r, (i, j) in enumerate(inds):
