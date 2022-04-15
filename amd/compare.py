@@ -1,7 +1,7 @@
 """Functions for comparing AMDs and PDDs of crystals.
 """
 
-from typing import List, Tuple, Optional, Union
+from typing import List, Optional, Union
 import warnings
 
 import numpy as np
@@ -10,19 +10,6 @@ import scipy.optimize   # linear_sum_assignment
 
 from ._network_simplex import network_simplex
 from .utils import ETA
-
-
-_VERBOSE = False
-_VERBOSE_UPDATE_RATE = 100
-
-def set_verbose(setting, update_rate=100):
-    """Pass True/False to turn on/off an ETA where relevant."""
-    global _VERBOSE
-    global _VERBOSE_UPDATE_RATE
-    _VERBOSE = setting
-    _VERBOSE_UPDATE_RATE = update_rate
-
-set_verbose(False)
 
 
 def EMD(
@@ -247,6 +234,7 @@ def PDD_cdist(
         pdds: List[np.ndarray],
         pdds_: List[np.ndarray],
         metric: str = 'chebyshev',
+        verbose=False,
         **kwargs
 ) -> np.ndarray:
     r"""Compare two sets of PDDs with each other, returning a distance matrix.
@@ -280,14 +268,15 @@ def PDD_cdist(
 
     n, m = len(pdds), len(pdds_)
     dm = np.empty((n, m))
-    if _VERBOSE:
-        eta = ETA(n * m, update_rate=_VERBOSE_UPDATE_RATE)
+    if verbose:
+        update_rate = (n * m) // 10000
+        eta = ETA(n * m, update_rate=update_rate)
 
     for i in range(n):
         pdd = pdds[i]
         for j in range(m):
             dm[i, j] = EMD(pdd, pdds_[j], metric=metric, **kwargs)
-            if _VERBOSE:
+            if verbose:
                 eta.update()
 
     return dm
@@ -296,6 +285,7 @@ def PDD_cdist(
 def PDD_pdist(
         pdds: List[np.ndarray],
         metric: str = 'chebyshev',
+        verbose=False,
         **kwargs
 ) -> np.ndarray:
     """Compare a set of PDDs pairwise, returning a condensed distance matrix.
@@ -322,14 +312,15 @@ def PDD_pdist(
             pdds = [pdds]
 
     m = len(pdds)
-    cdm = np.empty((m * (m - 1)) // 2, dtype=np.double)
-    if _VERBOSE:
-        eta = ETA((m * (m - 1)) // 2, update_rate=_VERBOSE_UPDATE_RATE)
+    cdm_len = (m * (m - 1)) // 2
+    cdm = np.empty(cdm_len, dtype=np.double)
+    if verbose:
+        eta = ETA(cdm_len, update_rate = cdm_len // 10000)
     inds = ((i, j) for i in range(0, m - 1) for j in range(i + 1, m))
 
     for r, (i, j) in enumerate(inds):
         cdm[r] = EMD(pdds[i], pdds[j], metric=metric, **kwargs)
-        if _VERBOSE:
+        if verbose:
             eta.update()
 
     return cdm

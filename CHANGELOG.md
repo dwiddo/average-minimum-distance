@@ -6,11 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- Reconstructing periodic sets from PDDs added. Recently it was shown the PDD is complete in a general position and it is possible to reconstruct a periodic set from its PDD with large enough k. The first (inefficient) implementation of this algorithm has be added in the module amd.reconstruct.
+- Reconstructing periodic sets from PDDs added. Recently it was shown the PDD is complete in a general position and it is possible to reconstruct a periodic set from its PDD with large enough k. The first (inefficient) implementation of this algorithm has be added in the `reconstruct` module.
   
 - Higher-order PDDs (the order parameter of `amd.PDD()` and `amd.PDD_finite()`) are removed and replaced with `amd.SDD()` (simplex-wise distance distribution). This invariant is only appropriate for finite sets, but first-order SDDs are equivalent to PDDs. Comparing SDDs is possible with `amd.compare.SDD_EMD()`.
 
-- amd.CifReader can now read a folder of .cifs or other files with the optional folder argument (True/False).
+- `CifReader` can now read a folder of .cifs or other files with the optional folder argument (True/False).
 
 ### Changed
 
@@ -28,7 +28,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- Higher-order PDDs added. The parameter `order` of `amd.PDD` selects the PDD order (changed from before when it controlled lexsorting the rows, which has been changed to `lexsort`), it can be any int, default `order=1`, the regular PDD. This infinite sequence of invariants grow in complexity but contain more information.
+- Higher-order PDDs added. The parameter `order` of `amd.PDD` selects the PDD order (changed from before when it controlled lexicographically sorting the rows, which has been changed to `lexsort`), it can be any int, default `order=1`, the regular PDD. This infinite sequence of invariants grow in complexity but contain more information.
 
 - AMD and PDD functions for finite point sets, `amd.finite_AMD()` and `amd.finite_PDD()`. `amd.finite_PDD()` accepts the new `order` parameter.
 
@@ -38,7 +38,7 @@ All notable changes to this project will be documented in this file.
 
 - Parameter `order` of `amd.PDD` no longer refers to lexicographically ordering the rows, this has been changed to `lexsort`. Higher-order PDDs are now implemented and `order` refers to the order of the PDD (default 1).
 
-- Fixed/reworked the ccdc Reader (especially for disorder). The disorder option 'ordered_sites' now does not remove all atoms with partial occupancy; rather it essentially (for the ccdc reader) uses the motif of entry.molecule instead of entry.disordered_molecule (removes atoms whose label ends with ?), so the result should look like some feasible ordered structure.
+- Fixed/reworked the `ccdc` Reader (especially for disorder). The disorder option 'ordered_sites' now does not remove all atoms with partial occupancy; rather it essentially (for the `ccdc` reader) uses the motif of entry.molecule instead of entry.disordered_molecule (removes atoms whose label ends with ?), so the result should look like some feasible ordered structure.
 
 ## [1.1.6] - 29/11/2021
 
@@ -50,13 +50,13 @@ All notable changes to this project will be documented in this file.
 
 - To compliment the addition of `.to_dict()`, the `CifReader` and `CSDReader` now have ways to extract additional data from `ccdc.entry.Entry` objects (later `ase` CifBlocks). The parameter `extract_data` can be passed as a dictionary with data (column) titles as keys and callable functions as values, which take the Entry object and return the data. E.g. if the custom function `get_density()` takes the entry and returns the density, use `extract_data={'Density': get_density}`, then the PeriodicSets will have the tag 'Density' with a value given by get_density(entry). This approach is flexible to any function, but some common ones are included in `amd.io.ccdc_utils`.
 
-- `CifReader` and `CSDReader` accept `include_if` parameter, which can be `None` or a list of callables. This can be used to discard structures with specific properties. If `include_if` is a list, the Entry/CifBlock is passed to each callable and is skipped if any do not return `True`.
+- `CifReader` and `CSDReader` accept `include_if` parameter, which can be `None` or a list of callable objects. This can be used to discard structures with specific properties. If `include_if` is a list, the `Entry`/`CifBlock` is passed to each callable and is skipped if any do not return `True`.
 
 ### Changed
 
 - The main README has been simplified; the old one read more like documentation than an introduction to the package. Details in the old README have moved to dedicated documentation.
 
-- Bug fixes: infinite recursion in PeriodicSet.__getattr__; undetected equivalent sites with ase reader.
+- Bug fixes: infinite recursion in `PeriodicSet.__getattr__`; undetected equivalent sites with `ase` reader.
 
 ### Removed
 
@@ -84,7 +84,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- **Functions `amd.amd()` and `amd.pdd()` are deprecated, replaced with `amd.AMD()` and `amd.PDD()`. The 'amd' and 'pdd' in the names of all functions have been capitalized and old versions deprecated**. It was a bad idea to have a function named amd in a package of the same name.
+- **Functions `amd.amd()` and `amd.pdd()` are deprecated, replaced with `amd.AMD()` and `amd.PDD()`. The 'amd' and 'pdd' in the names of all functions have been capitalized and old versions deprecated**. It was a bad idea to have a function named `amd` in a package of the same name.
 
 - The earth mover's distance algorithm no longer incorrectly divides by 1e+6. All earth mover's distances from this update will be 1e+6 times larger than before.
 
