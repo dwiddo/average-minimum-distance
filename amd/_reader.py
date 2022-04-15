@@ -141,7 +141,7 @@ class _Reader:
         asym_unit = np.delete(asym_unit, remove_sites, axis=0)
         asym_symbols = [s for i, s in enumerate(asym_symbols) if i not in remove_sites]
 
-        if not self.disorder == 'all_sites':
+        if self.disorder != 'all_sites':
             asym_unit, asym_symbols = self._validate_sites(asym_unit, asym_symbols)
 
         if self._has_no_valid_sites(asym_unit):
@@ -153,7 +153,7 @@ class _Reader:
     def _asym_unit_from_cifblock(self, block):
         """ase.io.cif.CIFBlock --> 
         asymmetric unit (frac coords), asym_symbols, cell, symops (as strings)"""
-        
+
         cell = block.get_cell().array
         asym_unit = [block.get(name) for name in _Reader.atom_site_fract_tags]
         if None in asym_unit:
@@ -191,7 +191,7 @@ class _Reader:
             warnings.warn(f'Skipping {self.current_name} as entry has no 3D structure')
             return None
 
-        molecule = crystal.disordered_molecule   
+        molecule = crystal.disordered_molecule
 
         if self.disorder == 'skip':
             if crystal.has_disorder or entry.has_disorder or \
@@ -200,7 +200,7 @@ class _Reader:
                 return None
 
         elif self.disorder == 'ordered_sites':
-            molecule.remove_atoms(a for a in molecule.atoms 
+            molecule.remove_atoms(a for a in molecule.atoms
                                   if _atom_has_disorder(a.label, a.occupancy))
 
         if self.remove_hydrogens:
@@ -218,7 +218,7 @@ class _Reader:
         crystal.molecule = molecule
         asym_unit, asym_symbols, sitesym, cell = self._asym_unit_from_crystal(crystal)
 
-        if not self.disorder == 'all_sites':
+        if self.disorder != 'all_sites':
             asym_unit, asym_symbols = self._validate_sites(asym_unit, asym_symbols)
 
         if self._has_no_valid_sites(asym_unit):
