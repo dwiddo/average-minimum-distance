@@ -16,15 +16,13 @@ All notable changes to this project will be documented in this file.
 
 - `amd.finite_AMD` and `amd.finite_PDD` changed to `amd.AMD_finite` and `amd.PDD_finite` for easier autocompletion.
 
-- `amd.compare.filter` changed to `amd.compare.PDD_cdist_AMD_filter` so it is not confused with the built-in function `filter()`.
-
 - Function `amd.compare.neighbours_from_distance_matrix` moved to `amd.utils.neighbours_from_distance_matrix`.
 
 ### Removed
 
 - Higher-order PDDs (the order parameter of `amd.PDD()` and `amd.PDD_finite()`) are removed and replaced with `amd.SDD()` (simplex-wise distance distribution). This invariant is only appropriate for finite sets, but first-order SDDs are equivalent to PDDs.
 
-- Removed several functions which were bloating the package. List of removed functions/modules: `amd.auto`, `amd.ccdc_utils`, `amd.periodicset.PeriodicSet.to_dict`, `amd.io.SetReader.extract_tags`, `amd.compare.mst_from_distance_matrix`, `amd.compare.AMD_mst`, `amd.compare.PDD_mst`, `amd.utils.extract_tags`, `amd.utils.neighbours_df_dict`. Also removed parameter `k` in functions in `amd.compare`, and the `verbose` parameter (instead controlled by amd.compare.set_verbose()).
+- Removed several functions which were bloating the package. List of removed functions/modules: `auto`, `ccdc_utils`, `periodicset.PeriodicSet.to_dict`, `io.SetReader.extract_tags`, `compare.mst_from_distance_matrix`, `compare.filter`, `compare.AMD_mst`, `compare.PDD_mst`, `utils.extract_tags`, `utils.neighbours_df_dict`. Also removed parameter `k` in functions in `compare`, and the `verbose` parameter (instead controlled by `compare.set_verbose()`).
 
 ## [1.1.7] - 01/02/2022
 

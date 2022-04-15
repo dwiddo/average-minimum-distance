@@ -13,10 +13,10 @@ from ._nearest_neighbours import nearest_neighbours, nearest_neighbours_minval
 from .periodicset import PeriodicSet
 from .utils import diameter
 
-PSET_TYPE = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
+PSET_OR_TUPLE = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
 
 
-def AMD(periodic_set: PSET_TYPE, k: int) -> np.ndarray:
+def AMD(periodic_set: PSET_OR_TUPLE, k: int) -> np.ndarray:
     """The AMD up to `k` of a periodic set.
 
     Parameters
@@ -59,7 +59,7 @@ def AMD(periodic_set: PSET_TYPE, k: int) -> np.ndarray:
     return np.average(pdd, axis=0, weights=multiplicities)
 
 def PDD(
-        periodic_set: PSET_TYPE,
+        periodic_set: PSET_OR_TUPLE,
         k: int,
         lexsort: bool = True,
         collapse: bool = True,
@@ -355,7 +355,7 @@ def SDD(
     return weights, dist, sdd
 
 def PDD_reconstructable(
-        periodic_set: PSET_TYPE,
+        periodic_set: PSET_OR_TUPLE,
         lexsort: bool = True
 ) -> np.ndarray:
     """The PDD of a periodic set with `k` (no of columns) large enough such that
@@ -422,7 +422,7 @@ def PDD_reconstructable(
     return pdd
 
 
-def PPC(periodic_set: PSET_TYPE) -> float:
+def PPC(periodic_set: PSET_OR_TUPLE) -> float:
     r"""The point packing coefficient (PPC) of ``periodic_set``.
 
     The PPC is a constant of any periodic set determining the
@@ -462,7 +462,7 @@ def PPC(periodic_set: PSET_TYPE) -> float:
     return (det / (m * V)) ** (1./n)
 
 
-def AMD_estimate(periodic_set: PSET_TYPE, k: int) -> np.ndarray:
+def AMD_estimate(periodic_set: PSET_OR_TUPLE, k: int) -> np.ndarray:
     r"""Calculates an estimate of AMD based on the PPC, using the fact that
 
     .. math::
@@ -479,7 +479,7 @@ def AMD_estimate(periodic_set: PSET_TYPE, k: int) -> np.ndarray:
     return np.array([(x ** (1. / n)) * c for x in range(1, k + 1)])
 
 
-def _extract_motif_and_cell(periodic_set: PSET_TYPE):
+def _extract_motif_and_cell(periodic_set: PSET_OR_TUPLE):
     """`periodic_set` is either a :class:`.periodicset.PeriodicSet`, or
     a tuple of ndarrays (motif, cell). If possible, extracts the asymmetric unit
     and wyckoff multiplicities and returns them, otherwise returns None.
