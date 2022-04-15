@@ -24,7 +24,7 @@ All notable changes to this project will be documented in this file.
 
 - Higher-order PDDs (the order parameter of `amd.PDD()` and `amd.PDD_finite()`) are removed and replaced with `amd.SDD()` (simplex-wise distance distribution). This invariant is only appropriate for finite sets, but first-order SDDs are equivalent to PDDs.
 
-- Removed several functions which were bloating the package. List of removed functions/modules: `amd.auto`, `amd.ccdc_utils`, `amd.periodicset.PeriodicSet.to_dict`, `amd.io.SetReader.extract_tags`, `amd.compare.mst_from_distance_matrix`, `amd.compare.AMD_mst`, `amd.compare.PDD_mst`, `amd.utils.extract_tags`, `amd.utils.neighbours_df_dict`.
+- Removed several functions which were bloating the package. List of removed functions/modules: `amd.auto`, `amd.ccdc_utils`, `amd.periodicset.PeriodicSet.to_dict`, `amd.io.SetReader.extract_tags`, `amd.compare.mst_from_distance_matrix`, `amd.compare.AMD_mst`, `amd.compare.PDD_mst`, `amd.utils.extract_tags`, `amd.utils.neighbours_df_dict`. Also removed parameter `k` in functions in `amd.compare`, and the `verbose` parameter (instead controlled by amd.compare.set_verbose()).
 
 ## [1.1.7] - 01/02/2022
 

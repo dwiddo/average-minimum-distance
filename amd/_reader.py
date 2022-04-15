@@ -108,10 +108,11 @@ class _Reader:
             if not self.show_warnings:
                 warnings.simplefilter('ignore')
             for item in iterable:
-                if all(check(item) for check in self.include_if):
-                    res = func(item)
-                    if res is not None:
-                        yield res
+                if any(not check(item) for check in self.include_if):
+                    continue
+                res = func(item)
+                if res is not None:
+                    yield res
 
     def _cifblock_to_periodicset(self, block) -> PeriodicSet:
         """ase.io.cif.CIFBlock --> PeriodicSet. Returns None for a "bad" set."""
@@ -175,12 +176,12 @@ class _Reader:
                 return None
             asym_unit = np.array(asym_motif) @ np.linalg.inv(cell)
         asym_unit = np.mod(np.array(asym_unit).T, 1)
-        
+
         try:
             asym_symbols = block.get_symbols()
         except ase.io.cif.NoStructureData as _:
             asym_symbols = ['Unknown' for _ in range(len(asym_unit))]
-        
+
         sitesym = ['x,y,z', ]
         for tag in _Reader.symop_tags:
             if tag in block:
@@ -189,7 +190,7 @@ class _Reader:
 
         if isinstance(sitesym, str):
             sitesym = [sitesym]
-        
+
         return asym_unit, asym_symbols, sitesym, cell
 
     def _entry_to_periodicset(self, entry) -> PeriodicSet:
@@ -276,7 +277,7 @@ class _Reader:
     def _crystal_to_asym_unit(self, crystal):
         """ase.io.cif.CIFBlock -->
         asymmetric unit (frac coords), asym_symbols, symops, cell"""
-        
+
         asym_atoms = crystal.asymmetric_unit_molecule.atoms
         asym_unit = np.array([tuple(a.fractional_coordinates) for a in asym_atoms])
         asym_unit = np.mod(asym_unit, 1)
@@ -291,9 +292,9 @@ class _Reader:
         """Return True (and warn) if new_site overlaps with a site in all_sites."""
         diffs1 = np.abs(new_site - all_sites)
         diffs2 = np.abs(diffs1 - 1)
-        mask = np.all(np.logical_or(diffs1 <= _Reader.equiv_site_tol,
-                                    diffs2 <= _Reader.equiv_site_tol),
-                        axis=-1)
+        mask = np.all((diffs1 <= _Reader.equiv_site_tol) |
+                      (diffs2 <= _Reader.equiv_site_tol),
+                    axis=-1)
 
         if np.any(mask):
             where_equal = np.argwhere(mask).flatten()

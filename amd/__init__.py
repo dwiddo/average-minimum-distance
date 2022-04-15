@@ -25,7 +25,7 @@ Using any of these subpackages requires an explicit import. For example,
 from .io import *
 from .pset_io import *
 from .calculate import *
-from .compare import *
+from .compare import EMD, SDD_EMD, emd, set_verbose
 from .utils import *
 from .periodicset import PeriodicSet
 from .reconstruct import reconstruct

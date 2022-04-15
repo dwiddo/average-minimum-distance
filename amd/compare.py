@@ -1,6 +1,7 @@
 """Functions for comparing AMDs and PDDs of crystals.
 """
 
+from turtle import update
 from typing import List, Tuple, Optional, Union
 import warnings
 
@@ -11,6 +12,14 @@ import scipy.optimize   # linear_sum_assignment
 from ._network_simplex import network_simplex
 from .utils import ETA
 
+
+def set_verbose(setting, update_rate=100):
+    global _VERBOSE
+    global _VERBOSE_UPDATE_RATE
+    _VERBOSE = setting
+    _VERBOSE_UPDATE_RATE = update_rate
+    
+set_verbose(False)
 
 def EMD(
         pdd: np.ndarray,
@@ -135,7 +144,6 @@ def SDD_EMD(sdd, sdd_, return_transport: Optional[bool] = False):
 def AMD_cdist(
         amds: Union[np.ndarray, List[np.ndarray]],
         amds_: Union[np.ndarray, List[np.ndarray]],
-        k: Optional[int] = None,
         metric: str = 'chebyshev',
         low_memory: bool = False,
         **kwargs
@@ -148,14 +156,12 @@ def AMD_cdist(
         A list of AMDs.
     amds\_ : array_like
         A list of AMDs.
-    k : int, optional
-        Truncate the AMDs to this value of ``k`` before comparing.
-    low_memory : bool, optional
-        Use a slower but more memory efficient method for
-        large collections of AMDs (Chebyshev/l-inf distance only).
     metric : str or callable, optional
         Usually AMDs are compared with the Chebyshev/l-infinity distance.
         Can take any metric + kwargs accepted by ``scipy.spatial.distance.cdist``.
+    low_memory : bool, optional
+        Use a slower but more memory efficient method for
+        large collections of AMDs (Chebyshev/l-inf distance only).
 
     Returns
     -------
@@ -165,8 +171,7 @@ def AMD_cdist(
         and ``amds[j]`` given by the ``metric``.
     """
 
-    amds = np.asarray(amds)
-    amds_ = np.asarray(amds_)
+    amds, amds_ = np.asarray(amds), np.asarray(amds_)
 
     if len(amds.shape) == 1:
         amds = np.array([amds])
@@ -181,16 +186,15 @@ def AMD_cdist(
         for i, amd_vec in enumerate(amds):
             dm[i] = np.amax(np.abs(amds_ - amd_vec), axis=-1)
     else:
-        dm = scipy.spatial.distance.cdist(amds[:, :k], amds_[:, :k], metric=metric, **kwargs)
+        dm = scipy.spatial.distance.cdist(amds, amds_, metric=metric, **kwargs)
 
     return dm
 
 
 def AMD_pdist(
         amds: Union[np.ndarray, List[np.ndarray]],
-        k: Optional[int] = None,
-        low_memory: bool = False,
         metric: str = 'chebyshev',
+        low_memory: bool = False,
         **kwargs
 ) -> np.ndarray:
     """Compare a set of AMDs pairwise, returning a condensed distance matrix.
@@ -199,15 +203,12 @@ def AMD_pdist(
     ----------
     amds : array_like
         An array/list of AMDs.
-    k : int, optional
-        If :const:`None`, compare whole AMDs (largest ``k``). Set ``k``
-        to an int to compare for a specific ``k`` (less than the maximum).
-    low_memory : bool, optional
-        Optionally use a slightly slower but more memory efficient method for
-        large collections of AMDs (Chebyshev/l-inf distance only).
     metric : str or callable, optional
         Usually AMDs are compared with the Chebyshev/l-infinity distance.
         Can take any metric + kwargs accepted by ``scipy.spatial.distance.cdist``.
+    low_memory : bool, optional
+        Optionally use a slightly slower but more memory efficient method for
+        large collections of AMDs (Chebyshev/l-inf distance only).
 
     Returns
     -------
@@ -233,7 +234,7 @@ def AMD_pdist(
             cdm[ind:ind_] = np.amax(np.abs(amds[i+1:] - amds[i]), axis=-1)
             ind = ind_
     else:
-        cdm = scipy.spatial.distance.pdist(amds[:, :k], metric=metric, **kwargs)
+        cdm = scipy.spatial.distance.pdist(amds, metric=metric, **kwargs)
 
     return cdm
 
@@ -241,9 +242,7 @@ def AMD_pdist(
 def PDD_cdist(
         pdds: List[np.ndarray],
         pdds_: List[np.ndarray],
-        k: Optional[int] = None,
         metric: str = 'chebyshev',
-        verbose: bool = False,
         **kwargs
 ) -> np.ndarray:
     r"""Compare two sets of PDDs with each other, returning a distance matrix.
@@ -254,16 +253,10 @@ def PDD_cdist(
         A list of PDDs.
     pdds\_ : list of ndarrays
         A list of PDDs.
-    k : int, optional
-        If :const:`None`, compare whole PDDs (largest ``k``). Set ``k`` to
-        an int to compare for a specific ``k`` (less than the maximum).
     metric : str or callable, optional
         Usually PDD rows are compared with the Chebyshev/l-infinity distance.
         Can take any metric + kwargs accepted by
         ``scipy.spatial.distance.cdist``.
-    verbose : bool, optional
-        Optionally print an ETA to terminal as large collections can take
-        some time.
 
     Returns
     -------
@@ -282,16 +275,15 @@ def PDD_cdist(
             pdds_ = [pdds_]
 
     n, m = len(pdds), len(pdds_)
-    t = None if k is None else k + 1
     dm = np.empty((n, m))
-    if verbose:
-        eta = ETA(n * m)
+    if _VERBOSE:
+        eta = ETA(n * m, update_rate=_VERBOSE_UPDATE_RATE)
 
     for i in range(n):
         pdd = pdds[i]
         for j in range(m):
-            dm[i, j] = EMD(pdd[:, :t], pdds_[j][:, :t], metric=metric, **kwargs)
-            if verbose:
+            dm[i, j] = EMD(pdd, pdds_[j], metric=metric, **kwargs)
+            if _VERBOSE:
                 eta.update()
 
     return dm
@@ -299,9 +291,7 @@ def PDD_cdist(
 
 def PDD_pdist(
         pdds: List[np.ndarray],
-        k: Optional[int] = None,
         metric: str = 'chebyshev',
-        verbose: bool = False,
         **kwargs
 ) -> np.ndarray:
     """Compare a set of PDDs pairwise, returning a condensed distance matrix.
@@ -310,15 +300,9 @@ def PDD_pdist(
     ----------
     pdds : list of ndarrays
         A list of PDDs.
-    k : int, optional
-        If :const:`None`, compare whole PDDs (largest ``k``). Set ``k`` to an int
-        to compare for a specific ``k`` (less than the maximum).
     metric : str or callable, optional
         Usually PDD rows are compared with the Chebyshev/l-infinity distance.
         Can take any metric + kwargs accepted by ``scipy.spatial.distance.cdist``.
-    verbose : bool, optional
-        Optionally print an ETA to terminal as large collections can take
-        some time.
 
     Returns
     -------
@@ -334,15 +318,14 @@ def PDD_pdist(
             pdds = [pdds]
 
     m = len(pdds)
-    t = None if k is None else k + 1
     cdm = np.empty((m * (m - 1)) // 2, dtype=np.double)
-    if verbose:
-        eta = ETA((m * (m - 1)) // 2)
+    if _VERBOSE:
+        eta = ETA((m * (m - 1)) // 2, update_rate=_VERBOSE_UPDATE_RATE)
     inds = ((i, j) for i in range(0, m - 1) for j in range(i + 1, m))
 
     for r, (i, j) in enumerate(inds):
-        cdm[r] = EMD(pdds[i][:, :t], pdds[j][:, :t], metric=metric, **kwargs)
-        if verbose:
+        cdm[r] = EMD(pdds[i], pdds[j], metric=metric, **kwargs)
+        if _VERBOSE:
             eta.update()
 
     return cdm
@@ -362,10 +345,8 @@ def PDD_cdist_AMD_filter(
         n: int,
         pdds: List[np.ndarray],
         pdds_: Optional[List[np.ndarray]] = None,
-        k: Optional[int] = None,
         low_memory: bool = False,
         metric: str = 'chebyshev',
-        verbose: bool = False,
         **kwargs
 ) -> Tuple[np.ndarray, np.ndarray]:
     r"""For each item in ``pdds``, get the ``n`` nearest items in ``pdds_`` by AMD,
@@ -383,17 +364,12 @@ def PDD_cdist_AMD_filter(
         A list of PDDs.
     pdds\_ : list of ndarrays, optional
         A list of PDDs.
-    k : int, optional
-        If :const:`None`, compare entire PDDs. Set ``k`` to an int
-        to compare for a specific ``k`` (less than the maximum).
     low_memory : bool, optional
         Optionally use a slightly slower but more memory efficient method for
         large collections of AMDs (Chebyshev/l-inf distance only).
     metric : str or callable, optional
         Usually PDD rows are compared with the Chebyshev/l-infinity distance.
         Can take any metric + kwargs accepted by ``scipy.spatial.distance.cdist``.
-    verbose : bool, optional
-        Optionally print an ETA to terminal as large collections can take some time.
 
     Returns
     -------
@@ -404,89 +380,84 @@ def PDD_cdist_AMD_filter(
         ``indices[i][j]`` is the index of said neighbour in ``pdds_``.
     """
 
-    metric_kwargs = {'metric': metric, **kwargs}
-    kwargs = {'k': k, 'metric': metric, **kwargs}
-
-    comparison_set_size = len(pdds) if pdds_ is None else len(pdds_)
-
-    if n >= comparison_set_size:
-
-        if pdds_ is None:
-            pdd_cdm = PDD_pdist(pdds, verbose=verbose, **kwargs)
-            dm = scipy.spatial.distance.squareform(pdd_cdm)
-        else:
-            dm = PDD_cdist(pdds, pdds_, verbose=verbose, **kwargs)
-
-        inds = np.argsort(dm, axis=-1)
-        dm = np.take_along_axis(dm, inds, axis=-1)
-        return dm, inds
-
-    amds = np.array([np.average(pdd[:, 1:], weights=pdd[:, 0], axis=0)[:k]
+    kwargs = {'metric': metric, **kwargs}
+    amds = np.array([np.average(pdd[:, 1:], weights=pdd[:, 0], axis=0)
                      for pdd in pdds])
 
-    # one set, pairwise
-    if pdds_ is None:
-        pdds_ = pdds
-        if low_memory:
-            if metric != 'chebyshev':
-                warnings.warn(
-                    "Using only allowed metric 'chebyshev' for low_memory",
-                    UserWarning)
-            if verbose:
-                eta = ETA(len(amds))
-            inds = []
-            for i, amd_vec in enumerate(amds):
-                dists = np.amax(np.abs(amds - amd_vec), axis=-1)
-                inds_row = np.argpartition(dists, n+1)[:n+1]
-                inds_row = inds_row[inds_row != i][:n]
-                inds.append(inds_row)
-                if verbose:
-                    eta.update()
-            inds = np.array(inds)
+    if low_memory:
+        if metric != 'chebyshev':
+            warnings.warn(
+                "Using only allowed metric 'chebyshev' for low_memory",
+                UserWarning)
+        if pdds_ is None:
+            inds = _amd_pdist_nns_low_memory(amds, n)
+            pdds_ = pdds
         else:
-            amd_cdm = AMD_pdist(amds, **kwargs)
-            amd_dm = scipy.spatial.distance.squareform(amd_cdm)
-            inds = []
-            for i, row in enumerate(amd_dm):
-                inds_row = np.argpartition(row, n+1)[:n+1]
-                inds_row = inds_row[inds_row != i][:n]
-                inds.append(inds_row)
-            inds = np.array(inds)
-
-    # one set v another
+            amds_ = np.array([np.average(pdd[:, 1:], weights=pdd[:, 0], axis=0)
+                              for pdd in pdds_])
+            inds = _amd_cdist_nns_low_memory(amds, amds_, n) 
     else:
-        amds_ = np.array([np.average(pdd[:, 1:], weights=pdd[:, 0], axis=0)[:k]
-                          for pdd in pdds_])
-        if low_memory:
-            if metric != 'chebyshev':
-                warnings.warn(
-                    "Using only allowed metric 'chebyshev' for low_memory",
-                    UserWarning)
-            if verbose:
-                eta = ETA(len(amds) * len(amds_))
-            inds = []
-            for i, amd_vec in enumerate(amds):
-                row = np.amax(np.abs(amds_ - amd_vec), axis=-1)
-                inds.append(np.argpartition(row, n)[:n])
-                if verbose:
-                    eta.update()
+        if pdds_ is None:
+            inds = _amd_pdist_nns(amds, n, **kwargs)
         else:
             amd_dm = AMD_cdist(amds, amds_, low_memory=low_memory, **kwargs)
             inds = np.array([np.argpartition(row, n)[:n] for row in amd_dm])
 
+    dm, inds = _emd_nns_from_nn_inds(pdds, pdds_, inds, **kwargs)
+    return dm, inds
+
+
+def _amd_pdist_nns(amds, n, **kwargs):
+    amd_cdm = AMD_pdist(amds, **kwargs)
+    amd_dm = scipy.spatial.distance.squareform(amd_cdm)
+    inds = []
+    for i, row in enumerate(amd_dm):
+        inds_row = np.argpartition(row, n+1)[:n+1]
+        inds_row = inds_row[inds_row != i][:n]
+        inds.append(inds_row)
+    inds = np.array(inds)
+    return inds
+
+
+def _amd_pdist_nns_low_memory(amds, n):
+    inds = []
+    if _VERBOSE:
+        eta = ETA(len(amds), update_rate=_VERBOSE_UPDATE_RATE)
+    for i, amd_vec in enumerate(amds):
+        dists = np.amax(np.abs(amds - amd_vec), axis=-1)
+        inds_row = np.argpartition(dists, n+1)[:n+1]
+        inds_row = inds_row[inds_row != i][:n]
+        inds.append(inds_row)
+        if _VERBOSE:
+            eta.update()
+    return np.array(inds)
+
+
+def _amd_cdist_nns_low_memory(amds, amds_, n):
+    inds = []
+    if _VERBOSE:
+        eta = ETA(len(amds) * len(amds_), update_rate=_VERBOSE_UPDATE_RATE)
+    for amd_vec in amds:
+        row = np.amax(np.abs(amds_ - amd_vec), axis=-1)
+        inds.append(np.argpartition(row, n)[:n])
+        if _VERBOSE:
+            eta.update()
+    return np.array(inds)
+
+
+def _emd_nns_from_nn_inds(pdds, pdds_, inds, **kwargs):
     dm = np.empty(inds.shape)
-    if verbose:
-        eta = ETA(inds.shape[0] * inds.shape[1])
-    t = None if k is None else k + 1
+    if _VERBOSE:
+        eta = ETA(inds.shape[0] * inds.shape[1], update_rate=_VERBOSE_UPDATE_RATE)
 
     for i, row in enumerate(inds):
         for i_, j in enumerate(row):
-            dm[i, i_] = EMD(pdds[i][:, :t], pdds_[j][:, :t], **metric_kwargs)
-            if verbose:
+            dm[i, i_] = EMD(pdds[i], pdds_[j], **kwargs)
+            if _VERBOSE:
                 eta.update()
 
     sorted_inds = np.argsort(dm, axis=-1)
     inds = np.take_along_axis(inds, sorted_inds, axis=-1)
     dm = np.take_along_axis(dm, sorted_inds, axis=-1)
-
+    
     return dm, inds
