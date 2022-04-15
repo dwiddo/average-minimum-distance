@@ -102,7 +102,6 @@ def SDD_EMD(sdd, sdd_, return_transport: Optional[bool] = False):
         dist, dist_ = sdd[1], sdd_[1]
 
         # take EMDs between finite PDDs in dist column
-        """
         weights = np.full((order, ), 1 / order)
         dist_cdist = np.empty((n, m), dtype=np.float64)
         for i in range(n):
@@ -110,14 +109,13 @@ def SDD_EMD(sdd, sdd_, return_transport: Optional[bool] = False):
                 finite_pdd_dm = scipy.spatial.distance.cdist(dist[i], dist_[j], metric='chebyshev')
                 dists_emd, _ = network_simplex(weights, weights, finite_pdd_dm)
                 dist_cdist[i, j] = dists_emd
-        """
 
         # flatten and compare by linf
-        flat_dist = dist.reshape((n, order * (order - 1)))
-        flat_dist_ = dist_.reshape((m, order * (order - 1)))
-        flat_dist = np.sort(flat_dist, axis=-1)
-        flat_dist_ = np.sort(flat_dist_, axis=-1)
-        dist_cdist = scipy.spatial.distance.cdist(flat_dist, flat_dist_, metric='chebyshev')
+        # flat_dist = dist.reshape((n, order * (order - 1)))
+        # flat_dist_ = dist_.reshape((m, order * (order - 1)))
+        # flat_dist = np.sort(flat_dist, axis=-1)
+        # flat_dist_ = np.sort(flat_dist_, axis=-1)
+        # dist_cdist = scipy.spatial.distance.cdist(flat_dist, flat_dist_, metric='chebyshev')
 
     dm = np.empty((n, m), dtype=np.float64)
     for i in range(n):

@@ -13,12 +13,6 @@ from .periodicset import PeriodicSet
 from .utils import cellpar_to_cell
 
 
-def _warning(message, category, filename, lineno, *args, **kwargs):
-    return f'{filename}:{lineno}: {category.__name__}: {message}\n'
-
-warnings.formatwarning = _warning
-
-
 class _Reader:
     """Base Reader class. Contains parsers for converting ase CifBlock
     and ccdc Entry objects to PeriodicSets.
@@ -74,23 +68,25 @@ class _Reader:
             extract_data=None,
             include_if=None):
 
-        # settings
         if disorder not in _Reader.disorder_options:
             raise ValueError(f'disorder parameter {disorder} must be one of {_Reader.disorder_options}')
 
-        if extract_data:
+        if extract_data is None:
+            self.extract_data = {}
+        else:
             _validate_extract_data(extract_data)
+            self.extract_data = extract_data
 
-        if include_if:
-            for func in include_if:
-                if not callable(func):
-                    raise ValueError('include_if must be a list of callables')
-
+        if include_if is None:
+            self.include_if = ()
+        elif not all(callable(func) for func in include_if):
+            raise ValueError('include_if must be a list of callables')
+        else:
+            self.include_if = include_if
+        
         self.remove_hydrogens = remove_hydrogens
         self.disorder = disorder
         self.heaviest_component = heaviest_component
-        self.extract_data = extract_data
-        self.include_if = include_if
         self.show_warnings = show_warnings
         self.current_identifier = None
         self.current_filename = None
@@ -107,35 +103,32 @@ class _Reader:
     # The object returned by this function (Iterable of PeriodicSets) is set to
     # self._generator; then iterating over the Reader iterates over
     # self._generator.
-    @staticmethod
-    def _map(func: Callable, iterable: Iterable) -> Iterable[PeriodicSet]:
+    def _map(self, func: Callable, iterable: Iterable) -> Iterable[PeriodicSet]:
         """Iterates over iterable, passing items through parser and
         yielding the result if it is not None.
         """
         
-        for item in iterable:
-            res = func(item)
-            if res is not None:
-                yield res
-
-    def _CIFBlock_to_PeriodicSet(self, block) -> PeriodicSet:
+        with warnings.catch_warnings():
+            if not self.show_warnings:
+                warnings.simplefilter('ignore')
+            for item in iterable:
+                res = func(item)
+                if res is not None:
+                    yield res
+    
+    def _cifblock_to_periodicset(self, block) -> PeriodicSet:
         """ase.io.cif.CIFBlock --> PeriodicSet. Returns None for a "bad" set."""
 
-        # skip if structure does not pass checks in include_if
-        if self.include_if:
-            if not all(check(block) for check in self.include_if):
-                return None
+        if not all(check(block) for check in self.include_if):
+            return None
 
-        # read name, cell, asym motif and atomic symbols
         self.current_identifier = block.name
         cell = block.get_cell().array
         asym_frac_motif = [block.get(name) for name in _Reader.atom_site_fract_tags]
         if None in asym_frac_motif:
             asym_motif = [block.get(name) for name in _Reader.atom_site_cartn_tags]
             if None in asym_motif:
-                if self.show_warnings:
-                    warnings.warn(
-                        f'Skipping {self.current_identifier} as coordinates were not found')
+                warnings.warn(f'Skipping {self.current_identifier} as coordinates were not found')
                 return None
             asym_frac_motif = np.array(asym_motif) @ np.linalg.inv(cell)
         asym_frac_motif = np.array(asym_frac_motif).T
@@ -165,9 +158,7 @@ class _Reader:
                     asym_is_disordered.append(False)
 
             if self.disorder == 'skip' and len(disordered) > 0:
-                if self.show_warnings:
-                    warnings.warn(
-                        f'Skipping {self.current_identifier} as structure is disordered')
+                warnings.warn(f'Skipping {self.current_identifier} as structure is disordered')
                 return None
 
             if self.disorder == 'ordered_sites':
@@ -194,27 +185,24 @@ class _Reader:
 
         if isinstance(sitesym, str):
             sitesym = [sitesym]
-        
-        return self._construct_periodic_set(block, asym_frac_motif, asym_symbols, sitesym, cell)
 
+        data = {key: func(block) for key, func in self.extract_data.items()}
+        periodic_set = self._construct_periodic_set(asym_frac_motif, asym_symbols, sitesym, cell, **data)
+        return periodic_set
 
-    def _Entry_to_PeriodicSet(self, entry) -> PeriodicSet:
+    def _entry_to_periodicset(self, entry) -> PeriodicSet:
         """ccdc.entry.Entry --> PeriodicSet. Returns None for a "bad" set."""
 
-        # skip if structure does not pass checks in include_if
-        if self.include_if:
-            if not all(check(entry) for check in self.include_if):
-                return None
-
-        self.current_identifier = entry.identifier
-        # structure must pass this test
-        if not entry.has_3d_structure:
-            if self.show_warnings:
-                warnings.warn(
-                    f'Skipping {self.current_identifier} as entry has no 3D structure')
+        if not all(check(entry) for check in self.include_if):
             return None
 
         crystal = entry.crystal
+        self.current_identifier = entry.identifier
+        cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
+
+        if not entry.has_3d_structure:
+            warnings.warn(f'Skipping {self.current_identifier} as entry has no 3D structure')
+            return None
 
         # first disorder check, if skipping. If occ == 1 for all atoms but the entry
         # or crystal is listed as having disorder, skip (can't know where disorder is).
@@ -233,14 +221,13 @@ class _Reader:
 
             if not may_have_disorder:
                 if crystal.has_disorder or entry.has_disorder:
-                    if self.show_warnings:
-                        warnings.warn(f'Skipping {self.current_identifier} as structure is disordered')
+                    warnings.warn(f'Skipping {self.current_identifier} as structure is disordered')
                     return None
 
         if self.remove_hydrogens:
             molecule.remove_atoms(a for a in molecule.atoms if a.atomic_symbol in 'HD')
 
-        if self.heaviest_component:
+        if self.heaviest_component and len(molecule.components) > 1:
             molecule = _heaviest_component(molecule)
 
         crystal.molecule = molecule
@@ -252,9 +239,7 @@ class _Reader:
             for a in crystal.disordered_molecule.atoms:
                 occ = a.occupancy
                 if _atom_has_disorder(a.label, occ):
-                    if self.show_warnings:
-                        warnings.warn(
-                            f'Skipping {self.current_identifier} as structure is disordered')
+                    warnings.warn(f'Skipping {self.current_identifier} as structure is disordered')
                     return None
 
         # if disorder is all_sites, we need to know where disorder is to ignore overlaps
@@ -270,13 +255,9 @@ class _Reader:
         # check all atoms have coords. option/default remove unknown sites?
         if not molecule.all_atoms_have_sites or \
            any(a.fractional_coordinates is None for a in molecule.atoms):
-            if self.show_warnings:
-                warnings.warn(
-                    f'Skipping {self.current_identifier} as some atoms do not have sites')
+            warnings.warn(f'Skipping {self.current_identifier} as some atoms do not have sites')
             return None
 
-        # get cell & asymmetric unit
-        cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
         asym_frac_motif = np.array([tuple(a.fractional_coordinates)
                                     for a in crystal.asymmetric_unit_molecule.atoms])
         asym_frac_motif = np.mod(asym_frac_motif, 1)
@@ -295,9 +276,75 @@ class _Reader:
         if not sitesym:
             sitesym = ['x,y,z', ]
 
-        entry.crystal.molecule = crystal.disordered_molecule    # for extract_data. remove?
+        entry.crystal.molecule = crystal.disordered_molecule
+        data = {key: func(entry) for key, func in self.extract_data.items()}
+        periodic_set = self._construct_periodic_set(asym_frac_motif, asym_symbols, sitesym, cell, **data)
+        return periodic_set
 
-        return self._construct_periodic_set(entry, asym_frac_motif, asym_symbols, sitesym, cell)
+    def _is_site_overlapping(self, new_site, all_sites, inverses, inv):
+        """Return True (and warn) if new_site overlaps with a site in all_sites."""
+        diffs1 = np.abs(new_site - all_sites)
+        diffs2 = np.abs(diffs1 - 1)
+        mask = np.all(np.logical_or(diffs1 <= _Reader.equiv_site_tol,
+                                    diffs2 <= _Reader.equiv_site_tol),
+                        axis=-1)
+
+        if np.any(mask):
+            where_equal = np.argwhere(mask).flatten()
+            for ind in where_equal:
+                if inverses[ind] == inv:
+                    pass
+                else:
+                    warnings.warn(
+                        f'{self.current_identifier} has equivalent positions {inverses[ind]} and {inv}')
+            return True
+        else:
+            return False
+
+    def _validate_sites(self, asym_frac_motif, asym_is_disordered):
+        site_diffs1 = np.abs(asym_frac_motif[:, None] - asym_frac_motif)
+        site_diffs2 = np.abs(site_diffs1 - 1)
+        overlapping = np.triu(np.all(
+            (site_diffs1 <= _Reader.equiv_site_tol) |
+            (site_diffs2 <= _Reader.equiv_site_tol),
+            axis=-1), 1)
+
+        if self.disorder == 'all_sites':
+            for i, j in np.argwhere(overlapping):
+                if asym_is_disordered[i] or asym_is_disordered[j]:
+                    overlapping[i, j] = False
+
+        if overlapping.any():
+            warnings.warn(
+                f'{self.current_identifier} may have overlapping sites; duplicates will be removed')
+            keep_sites = ~overlapping.any(0)
+            return keep_sites
+
+    def _has_no_valid_sites(self, motif):
+        if motif.shape[0] == 0:
+            warnings.warn(
+                f'Skipping {self.current_identifier} as there are no sites with coordinates')
+            return True
+        return False
+
+    def _construct_periodic_set(self, asym_frac_motif, asym_symbols, sitesym, cell, **kwargs):
+        """Asym motif + symbols + sitesym + cell (+kwargs) --> PeriodicSet"""
+        frac_motif, asym_unit, multiplicities, inverses = self.expand(asym_frac_motif, sitesym)
+        full_types = [asym_symbols[i] for i in inverses]
+        motif = frac_motif @ cell
+
+        tags = {
+            'name': self.current_identifier,
+            'asymmetric_unit': asym_unit,
+            'wyckoff_multiplicities': multiplicities,
+            'types': full_types,
+            **kwargs
+        }
+
+        if self.current_filename:
+            tags['filename'] = self.current_filename
+
+        return PeriodicSet(motif, cell, **tags)
 
     def expand(
             self,
@@ -342,103 +389,35 @@ class _Reader:
         multiplicities = np.array(multiplicities)
         return frac_motif, asym_unit, multiplicities, inverses
 
-    def _is_site_overlapping(self, new_site, all_sites, inverses, inv):
-        """Return True (and warn) if new_site overlaps with a site in all_sites."""
-        diffs1 = np.abs(new_site - all_sites)
-        diffs2 = np.abs(diffs1 - 1)
-        mask = np.all(np.logical_or(diffs1 <= _Reader.equiv_site_tol,
-                                    diffs2 <= _Reader.equiv_site_tol),
-                        axis=-1)
-
-        if np.any(mask):
-            where_equal = np.argwhere(mask).flatten()
-            for ind in where_equal:
-                if inverses[ind] == inv:
-                    pass
-                else:
-                    if self.show_warnings:
-                        warnings.warn(
-                            f'{self.current_identifier} has equivalent positions {inverses[ind]} and {inv}')
-            return True
-        else:
-            return False
-
-    def _validate_sites(self, asym_frac_motif, asym_is_disordered):
-        site_diffs1 = np.abs(asym_frac_motif[:, None] - asym_frac_motif)
-        site_diffs2 = np.abs(site_diffs1 - 1)
-        overlapping = np.triu(np.all(
-            (site_diffs1 <= _Reader.equiv_site_tol) |
-            (site_diffs2 <= _Reader.equiv_site_tol),
-            axis=-1), 1)
-
-        if self.disorder == 'all_sites':
-            for i, j in np.argwhere(overlapping):
-                if asym_is_disordered[i] or asym_is_disordered[j]:
-                    overlapping[i, j] = False
-
-        if overlapping.any():
-            if self.show_warnings:
-                warnings.warn(
-                    f'{self.current_identifier} may have overlapping sites; duplicates will be removed')
-            keep_sites = ~overlapping.any(0)
-            return keep_sites
-
-    def _has_no_valid_sites(self, motif):
-        if motif.shape[0] == 0:
-            if self.show_warnings:
-                warnings.warn(
-                    f'Skipping {self.current_identifier} as there are no sites with coordinates')
-            return True
-        return False
-
-    def _construct_periodic_set(self, raw_item, asym_frac_motif, asym_symbols, sitesym, cell):
-        frac_motif, asym_unit, multiplicities, inverses = self.expand(asym_frac_motif, sitesym)
-        full_types = [asym_symbols[i] for i in inverses]
-        motif = frac_motif @ cell
-
-        kwargs = {
-            'name': self.current_identifier,
-            'asymmetric_unit': asym_unit,
-            'wyckoff_multiplicities': multiplicities,
-            'types': full_types,
-        }
-
-        if self.current_filename:
-            kwargs['filename'] = self.current_filename
-
-        if self.extract_data is not None:
-            for key in self.extract_data:
-                kwargs[key] = self.extract_data[key](raw_item)
-
-        return PeriodicSet(motif, cell, **kwargs)
-
-def _heaviest_component(molecule):
-    """Heaviest component (removes all but the heaviest component of the asym unit).
-    Intended for removing solvents. Probably doesn't play well with disorder"""
-    if len(molecule.components) > 1:
-        component_weights = []
-        for component in molecule.components:
-            weight = 0
-            for a in component.atoms:
-                if isinstance(a.atomic_weight, (float, int)):
-                    if isinstance(a.occupancy, (float, int)):
-                        weight += a.occupancy * a.atomic_weight
-                    else:
-                        weight += a.atomic_weight
-            component_weights.append(weight)
-        largest_component_arg = np.argmax(np.array(component_weights))
-        molecule = molecule.components[largest_component_arg]
-
-    return molecule
 
 def _atom_has_disorder(label, occupancy):
     return label.endswith('?') or (np.isscalar(occupancy) and occupancy < 1)
 
+def _heaviest_component(molecule):
+    """Heaviest component (removes all but the heaviest component of the asym unit).
+    Intended for removing solvents. Probably doesn't play well with disorder"""
+    component_weights = []
+    for component in molecule.components:
+        weight = 0
+        for a in component.atoms:
+            if isinstance(a.atomic_weight, (float, int)):
+                if isinstance(a.occupancy, (float, int)):
+                    weight += a.occupancy * a.atomic_weight
+                else:
+                    weight += a.atomic_weight
+        component_weights.append(weight)
+    largest_component_arg = np.argmax(np.array(component_weights))
+    molecule = molecule.components[largest_component_arg]
+    return molecule
+
 def _validate_extract_data(extract_data):
     if not isinstance(extract_data, dict):
-        raise ValueError('extract_data must be a dict with callable values')
+        raise ValueError('extract_data must be a dict of callables')
     for key in extract_data:
         if not callable(extract_data[key]):
-            raise ValueError('extract_data must be a dict with callable values')
+            raise ValueError('extract_data must be a dict of callables')
         if key in _Reader.reserved_tags:
             raise ValueError(f'extract_data includes reserved key {key}')
+
+def _warning(message, category, filename, lineno, *args, **kwargs):
+    return f'{filename}:{lineno}: {category.__name__}: {message}\n'

@@ -68,14 +68,14 @@ class CifReader(_Reader):
         if reader == 'ase':
             extensions = {'cif'}
             file_parser = ase.io.cif.parse_cif
-            pset_converter = self._CIFBlock_to_PeriodicSet
+            pset_converter = self._cifblock_to_periodicset
 
         elif reader == 'ccdc':
             if not _CCDC_ENABLED:
                 raise ImportError("Failed to import csd-python-api; check it is installed and licensed.")
             extensions = ccdc.io.EntryReader.known_suffixes
             file_parser = ccdc.io.EntryReader
-            pset_converter = self._Entry_to_PeriodicSet
+            pset_converter = self._entry_to_periodicset
 
         if folder:
             generator = self._folder_generator(path, file_parser, extensions)
@@ -160,7 +160,7 @@ class CSDReader(_Reader):
 
         self._entry_reader = ccdc.io.EntryReader('CSD')
         self._generator = self._map(
-            self._Entry_to_PeriodicSet,
+            self._entry_to_periodicset,
             self._ccdc_generator(refcodes))
 
     def _ccdc_generator(self, refcodes):
@@ -182,7 +182,7 @@ class CSDReader(_Reader):
         """Read a PeriodicSet given any CSD refcode."""
 
         entry = self._entry_reader.entry(refcode)
-        periodic_set = self._Entry_to_PeriodicSet(entry)
+        periodic_set = self._entry_to_periodicset(entry)
         return periodic_set
 
 
