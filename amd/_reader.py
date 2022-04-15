@@ -118,7 +118,7 @@ class _Reader:
         """ase.io.cif.CIFBlock --> PeriodicSet. Returns None for a "bad" set."""
 
         self.current_name = block.name
-        asym_unit, asym_symbols, sitesym, cell = self._cifblock_to_asym_unit(block)
+        asym_unit, asym_symbols, sitesym, cell = self._asym_unit_from_cifblock(block)
 
         # indices of sites to remove
         remove = []
@@ -163,7 +163,7 @@ class _Reader:
         periodic_set = self._construct_periodic_set(asym_unit, asym_symbols, sitesym, cell, **data)
         return periodic_set
 
-    def _cifblock_to_asym_unit(self, block):
+    def _asym_unit_from_cifblock(self, block):
         """ase.io.cif.CIFBlock --> 
         asymmetric unit (frac coords), asym_symbols, cell, symops (as strings)"""
         
@@ -258,7 +258,7 @@ class _Reader:
             warnings.warn(f'Skipping {self.current_name} as some atoms do not have sites')
             return None
 
-        asym_unit, asym_symbols, sitesym, cell = self._crystal_to_asym_unit(crystal)
+        asym_unit, asym_symbols, sitesym, cell = self._asym_unit_from_crystal(crystal)
 
         # remove overlapping sites, check sites exist
         keep_sites = self._validate_sites(asym_unit, asym_is_disordered)
@@ -274,7 +274,7 @@ class _Reader:
         periodic_set = self._construct_periodic_set(asym_unit, asym_symbols, sitesym, cell, **data)
         return periodic_set
 
-    def _crystal_to_asym_unit(self, crystal):
+    def _asym_unit_from_crystal(self, crystal):
         """ase.io.cif.CIFBlock -->
         asymmetric unit (frac coords), asym_symbols, symops, cell"""
 
