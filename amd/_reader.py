@@ -1,4 +1,4 @@
-"""Contains base reader class for the io module. 
+"""Contains base reader class for the io module.
 This class implements the converters from CifBlock, Entry to PeriodicSets.
 """
 
@@ -71,19 +71,27 @@ class _Reader:
         if disorder not in _Reader.disorder_options:
             raise ValueError(f'disorder parameter {disorder} must be one of {_Reader.disorder_options}')
 
+        # validate extract_data
         if extract_data is None:
             self.extract_data = {}
         else:
-            _validate_extract_data(extract_data)
+            if not isinstance(extract_data, dict):
+                raise ValueError('extract_data must be a dict of callables')
+            for key in extract_data:
+                if not callable(extract_data[key]):
+                    raise ValueError('extract_data must be a dict of callables')
+                if key in _Reader.reserved_tags:
+                    raise ValueError(f'extract_data includes reserved key {key}')
             self.extract_data = extract_data
 
+        # validate include_if
         if include_if is None:
             self.include_if = ()
         elif not all(callable(func) for func in include_if):
             raise ValueError('include_if must be a list of callables')
         else:
             self.include_if = include_if
-        
+
         self.remove_hydrogens = remove_hydrogens
         self.disorder = disorder
         self.heaviest_component = heaviest_component
@@ -117,23 +125,51 @@ class _Reader:
     def _cifblock_to_periodicset(self, block) -> PeriodicSet:
         """ase.io.cif.CIFBlock --> PeriodicSet. Returns None for a "bad" set."""
 
-        data = {key: func(block) for key, func in self.extract_data.items()}
         self.current_name = block.name
-        asym_unit, asym_symbols, sitesym, cell = self._asym_unit_from_cifblock(block)
-        occupancies = block.get('_atom_site_occupancy')
-        labels = block.get('_atom_site_label')
+        data = {key: func(block) for key, func in self.extract_data.items()}
+
+        # unit cell
+        cell = block.get_cell().array
+
+        # asymmetric unit fractional coords
+        asym_unit = [block.get(name) for name in _Reader.atom_site_fract_tags]
+        if None in asym_unit:
+            asym_motif = [block.get(name) for name in _Reader.atom_site_cartn_tags]
+            if None in asym_motif:
+                warnings.warn(f'Skipping {self.current_name} as coordinates were not found')
+                return None
+            asym_unit = np.array(asym_motif) @ np.linalg.inv(cell)
+        asym_unit = np.mod(np.array(asym_unit).T, 1)
+
+        # asymmetric unit symbols
+        try:
+            asym_symbols = block.get_symbols()
+        except ase.io.cif.NoStructureData as _:
+            asym_symbols = ['Unknown' for _ in range(len(asym_unit))]
+
+        # symmetry operators
+        sitesym = ['x,y,z', ]
+        for tag in _Reader.symop_tags:
+            if tag in block:
+                sitesym = block[tag]
+                break
+        if isinstance(sitesym, str):
+            sitesym = [sitesym]
+
         remove_sites = []
 
+        # handle disorder
+        occupancies = block.get('_atom_site_occupancy')
+        labels = block.get('_atom_site_label')
         if occupancies is not None:
             if self.disorder == 'skip':
-                if any(_atom_has_disorder(lab, occ) for lab, occ in zip(labels, occupancies)):
+                if any(atom_has_disorder(lab, occ) for lab, occ in zip(labels, occupancies)):
                     warnings.warn(f'Skipping {self.current_name} as structure is disordered')
                     return None
-
             elif self.disorder == 'ordered_sites':
                 remove_sites.extend(
-                    (i for i, (lab, occ) in enumerate(zip(labels, occupancies)) 
-                     if _atom_has_disorder(lab, occ)))
+                    (i for i, (lab, occ) in enumerate(zip(labels, occupancies))
+                        if atom_has_disorder(lab, occ)))
 
         if self.remove_hydrogens:
             remove_sites.extend((i for i, sym in enumerate(asym_symbols) if sym in 'HD'))
@@ -144,41 +180,12 @@ class _Reader:
         if self.disorder != 'all_sites':
             asym_unit, asym_symbols = self._validate_sites(asym_unit, asym_symbols)
 
-        if self._has_no_valid_sites(asym_unit):
+        if asym_unit.shape[0] == 0:
+            warnings.warn(f'Skipping {self.current_name} as there are no sites with coordinates')
             return None
 
         periodic_set = self._construct_periodic_set(asym_unit, asym_symbols, sitesym, cell, **data)
         return periodic_set
-
-    def _asym_unit_from_cifblock(self, block):
-        """ase.io.cif.CIFBlock --> 
-        asymmetric unit (frac coords), asym_symbols, cell, symops (as strings)"""
-
-        cell = block.get_cell().array
-        asym_unit = [block.get(name) for name in _Reader.atom_site_fract_tags]
-        if None in asym_unit:
-            asym_motif = [block.get(name) for name in _Reader.atom_site_cartn_tags]
-            if None in asym_motif:
-                warnings.warn(f'Skipping {self.current_name} as coordinates were not found')
-                return None
-            asym_unit = np.array(asym_motif) @ np.linalg.inv(cell)
-        asym_unit = np.mod(np.array(asym_unit).T, 1)
-
-        try:
-            asym_symbols = block.get_symbols()
-        except ase.io.cif.NoStructureData as _:
-            asym_symbols = ['Unknown' for _ in range(len(asym_unit))]
-
-        sitesym = ['x,y,z', ]
-        for tag in _Reader.symop_tags:
-            if tag in block:
-                sitesym = block[tag]
-                break
-
-        if isinstance(sitesym, str):
-            sitesym = [sitesym]
-
-        return asym_unit, asym_symbols, sitesym, cell
 
     def _entry_to_periodicset(self, entry) -> PeriodicSet:
         """ccdc.entry.Entry --> PeriodicSet. Returns None for a "bad" set."""
@@ -193,74 +200,75 @@ class _Reader:
 
         molecule = crystal.disordered_molecule
 
+        # handle disorder
         if self.disorder == 'skip':
             if crystal.has_disorder or entry.has_disorder or \
-               any(_atom_has_disorder(a.label, a.occupancy) for a in molecule.atoms):
+               any(atom_has_disorder(a.label, a.occupancy) for a in molecule.atoms):
                 warnings.warn(f'Skipping {self.current_name} as structure is disordered')
                 return None
 
         elif self.disorder == 'ordered_sites':
             molecule.remove_atoms(a for a in molecule.atoms
-                                  if _atom_has_disorder(a.label, a.occupancy))
+                                  if atom_has_disorder(a.label, a.occupancy))
 
         if self.remove_hydrogens:
             molecule.remove_atoms(a for a in molecule.atoms if a.atomic_symbol in 'HD')
 
+        # remove all but heaviest component
         if self.heaviest_component and len(molecule.components) > 1:
             molecule = _heaviest_component(molecule)
 
-        # check all atoms have coords. option/default remove unknown sites?
         if not molecule.all_atoms_have_sites or \
            any(a.fractional_coordinates is None for a in molecule.atoms):
             warnings.warn(f'Skipping {self.current_name} as some atoms do not have sites')
             return None
 
         crystal.molecule = molecule
-        asym_unit, asym_symbols, sitesym, cell = self._asym_unit_from_crystal(crystal)
+
+        # asymmetric unit fractional coords + symbols
+        asym_atoms = crystal.asymmetric_unit_molecule.atoms
+        asym_unit = np.array([tuple(a.fractional_coordinates) for a in asym_atoms])
+        asym_unit = np.mod(asym_unit, 1)
+        # asymmetric unit symbols
+        asym_symbols = [a.atomic_symbol for a in asym_atoms]
+
+        # unit cell
+        cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
+
+        # symmetry operators
+        sitesym = crystal.symmetry_operators
+        if not sitesym:
+            sitesym = ['x,y,z', ]
 
         if self.disorder != 'all_sites':
             asym_unit, asym_symbols = self._validate_sites(asym_unit, asym_symbols)
 
-        if self._has_no_valid_sites(asym_unit):
+        if asym_unit.shape[0] == 0:
+            warnings.warn(f'Skipping {self.current_name} as there are no sites with coordinates')
             return None
 
         periodic_set = self._construct_periodic_set(asym_unit, asym_symbols, sitesym, cell, **data)
         return periodic_set
 
-    def _asym_unit_from_crystal(self, crystal):
-        """ase.io.cif.CIFBlock -->
-        asymmetric unit (frac coords), asym_symbols, symops, cell"""
+    def _construct_periodic_set(self, asym_unit, asym_symbols, sitesym, cell, **kwargs):
+        """Asym motif + symbols + sitesym + cell (+kwargs) --> PeriodicSet"""
+        frac_motif, asym_inds, multiplicities, inverses = self.expand_asym_unit(asym_unit, sitesym)
+        full_types = [asym_symbols[i] for i in inverses]
+        motif = frac_motif @ cell
 
-        asym_atoms = crystal.asymmetric_unit_molecule.atoms
-        asym_unit = np.array([tuple(a.fractional_coordinates) for a in asym_atoms])
-        asym_unit = np.mod(asym_unit, 1)
-        asym_symbols = [a.atomic_symbol for a in asym_atoms]
-        cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
-        sitesym = crystal.symmetry_operators
-        if not sitesym:
-            sitesym = ['x,y,z', ]
-        return asym_unit, asym_symbols, sitesym, cell
+        tags = {
+            'name': self.current_name,
+            'asymmetric_unit': asym_inds,
+            'wyckoff_multiplicities': multiplicities,
+            'types': full_types,
+            **kwargs
+        }
 
-    def _is_site_overlapping(self, new_site, all_sites, inverses, inv):
-        """Return True (and warn) if new_site overlaps with a site in all_sites."""
-        diffs1 = np.abs(new_site - all_sites)
-        diffs2 = np.abs(diffs1 - 1)
-        mask = np.all((diffs1 <= _Reader.equiv_site_tol) |
-                      (diffs2 <= _Reader.equiv_site_tol),
-                    axis=-1)
+        if self.current_filename:
+            tags['filename'] = self.current_filename
 
-        if np.any(mask):
-            where_equal = np.argwhere(mask).flatten()
-            for ind in where_equal:
-                if inverses[ind] == inv:
-                    pass
-                else:
-                    warnings.warn(
-                        f'{self.current_name} has equivalent positions {inverses[ind]} and {inv}')
-            return True
-        else:
-            return False
-
+        return PeriodicSet(motif, cell, **tags)
+    
     def _validate_sites(self, asym_unit, asym_symbols):
         site_diffs1 = np.abs(asym_unit[:, None] - asym_unit)
         site_diffs2 = np.abs(site_diffs1 - 1)
@@ -278,33 +286,7 @@ class _Reader:
 
         return asym_unit, asym_symbols
 
-    def _has_no_valid_sites(self, motif):
-        if motif.shape[0] == 0:
-            warnings.warn(
-                f'Skipping {self.current_name} as there are no sites with coordinates')
-            return True
-        return False
-
-    def _construct_periodic_set(self, asym_unit, asym_symbols, sitesym, cell, **kwargs):
-        """Asym motif + symbols + sitesym + cell (+kwargs) --> PeriodicSet"""
-        frac_motif, asym_inds, multiplicities, inverses = self.expand(asym_unit, sitesym)
-        full_types = [asym_symbols[i] for i in inverses]
-        motif = frac_motif @ cell
-
-        tags = {
-            'name': self.current_name,
-            'asymmetric_unit': asym_inds,
-            'wyckoff_multiplicities': multiplicities,
-            'types': full_types,
-            **kwargs
-        }
-
-        if self.current_filename:
-            tags['filename'] = self.current_filename
-
-        return PeriodicSet(motif, cell, **tags)
-
-    def expand(self, asym_unit: np.ndarray, sitesym: Sequence[str]) -> Tuple[np.ndarray, ...]:
+    def expand_asym_unit(self, asym_unit: np.ndarray, sitesym: Sequence[str]) -> Tuple[np.ndarray, ...]:
         """
         Asymmetric unit's fractional coords + sitesyms (as strings)
         -->
@@ -329,7 +311,22 @@ class _Reader:
                     multiplicity += 1
                     continue
 
-                if not self._is_site_overlapping(site_, all_sites, inverses, inv):
+                # check if site_ overlaps with existing sites
+                diffs1 = np.abs(site_ - all_sites)
+                diffs2 = np.abs(diffs1 - 1)
+                mask = np.all((diffs1 <= _Reader.equiv_site_tol) |
+                              (diffs2 <= _Reader.equiv_site_tol),
+                              axis=-1)
+
+                if np.any(mask):
+                    where_equal = np.argwhere(mask).flatten()
+                    for ind in where_equal:
+                        if inverses[ind] == inv:
+                            pass
+                        else:
+                            warnings.warn(
+                                f'{self.current_name} has equivalent positions {inverses[ind]} and {inv}')
+                else:
                     all_sites.append(site_)
                     inverses.append(inv)
                     multiplicity += 1
@@ -344,8 +341,9 @@ class _Reader:
         return frac_motif, asym_inds, multiplicities, inverses
 
 
-def _atom_has_disorder(label, occupancy):
+def atom_has_disorder(label, occupancy):
     return label.endswith('?') or (np.isscalar(occupancy) and occupancy < 1)
+
 
 def _heaviest_component(molecule):
     """Heaviest component (removes all but the heaviest component of the asym unit).
@@ -363,12 +361,3 @@ def _heaviest_component(molecule):
     largest_component_arg = np.argmax(np.array(component_weights))
     molecule = molecule.components[largest_component_arg]
     return molecule
-
-def _validate_extract_data(extract_data):
-    if not isinstance(extract_data, dict):
-        raise ValueError('extract_data must be a dict of callables')
-    for key in extract_data:
-        if not callable(extract_data[key]):
-            raise ValueError('extract_data must be a dict of callables')
-        if key in _Reader.reserved_tags:
-            raise ValueError(f'extract_data includes reserved key {key}')
