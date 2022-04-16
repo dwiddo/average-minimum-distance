@@ -295,7 +295,6 @@ def SDD_EMD(sdd, sdd_, return_transport: Optional[bool] = False):
         dist_cdist = np.abs(sdd[1][:, None] - sdd_[1])
     else:
         dist, dist_ = sdd[1], sdd_[1]
-
         # take EMDs between finite PDDs in dist column
         weights = np.full((order, ), 1 / order)
         dist_cdist = np.empty((n, m), dtype=np.float64)

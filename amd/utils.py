@@ -9,6 +9,7 @@ import inspect
 import scipy.spatial
 import numpy as np
 
+
 def neighbours_from_distance_matrix(
         n: int,
         dm: np.ndarray
@@ -29,7 +30,7 @@ def neighbours_from_distance_matrix(
         nearest neighbour, and ``inds[i][j]`` is the index of this neighbour (``j+1`` since
         index 0 is the first nearest neighbour).
     """
-    
+
     inds = None
 
     # 2D distance matrix

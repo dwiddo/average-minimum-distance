@@ -115,20 +115,28 @@ class _Reader:
         with warnings.catch_warnings():
             if not self.show_warnings:
                 warnings.simplefilter('ignore')
+
             for item in iterable:
+
                 if any(not check(item) for check in self.include_if):
                     continue
-                res = func(item)
-                if res is not None:
-                    yield res
+
+                periodic_set = func(item)
+
+                if periodic_set is not None:
+
+                    if self.current_filename:
+                        periodic_set.tags['filename'] = self.current_filename
+
+                    for key, func in self.extract_data.items():
+                        periodic_set.tags[key] = func(item)
+
+                    yield periodic_set
 
     def _cifblock_to_periodicset(self, block) -> PeriodicSet:
         """ase.io.cif.CIFBlock --> PeriodicSet. Returns None for a "bad" set."""
 
         self.current_name = block.name
-        data = {key: func(block) for key, func in self.extract_data.items()}
-
-        # unit cell
         cell = block.get_cell().array
 
         # asymmetric unit fractional coords
@@ -178,19 +186,33 @@ class _Reader:
         asym_symbols = [s for i, s in enumerate(asym_symbols) if i not in remove_sites]
 
         if self.disorder != 'all_sites':
-            asym_unit, asym_symbols = self._validate_sites(asym_unit, asym_symbols)
-
+            keep_sites = _validate_sites(asym_unit)
+            if np.any(keep_sites == False):
+                warnings.warn(
+                    f'{self.current_name} may have overlapping sites; duplicates will be removed')
+            asym_unit = asym_unit[keep_sites]
+            asym_symbols = [sym for sym, keep in zip(asym_symbols, keep_sites) if keep]
+        
         if asym_unit.shape[0] == 0:
             warnings.warn(f'Skipping {self.current_name} as there are no sites with coordinates')
             return None
 
-        periodic_set = self._construct_periodic_set(asym_unit, asym_symbols, sitesym, cell, **data)
-        return periodic_set
+        frac_motif, asym_inds, multiplicities, inverses = self.expand_asym_unit(asym_unit, sitesym)
+        full_types = [asym_symbols[i] for i in inverses]
+        motif = frac_motif @ cell
+
+        tags = {
+            'name': self.current_name,
+            'asymmetric_unit': asym_inds,
+            'wyckoff_multiplicities': multiplicities,
+            'types': full_types,
+        }
+
+        return PeriodicSet(motif, cell, **tags)
 
     def _entry_to_periodicset(self, entry) -> PeriodicSet:
         """ccdc.entry.Entry --> PeriodicSet. Returns None for a "bad" set."""
 
-        data = {key: func(entry) for key, func in self.extract_data.items()}
         self.current_name = entry.identifier
         crystal = entry.crystal
 
@@ -223,16 +245,12 @@ class _Reader:
             warnings.warn(f'Skipping {self.current_name} as some atoms do not have sites')
             return None
 
-        crystal.molecule = molecule
-
         # asymmetric unit fractional coords + symbols
+        crystal.molecule = molecule
         asym_atoms = crystal.asymmetric_unit_molecule.atoms
         asym_unit = np.array([tuple(a.fractional_coordinates) for a in asym_atoms])
         asym_unit = np.mod(asym_unit, 1)
-        # asymmetric unit symbols
         asym_symbols = [a.atomic_symbol for a in asym_atoms]
-
-        # unit cell
         cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
 
         # symmetry operators
@@ -241,17 +259,17 @@ class _Reader:
             sitesym = ['x,y,z', ]
 
         if self.disorder != 'all_sites':
-            asym_unit, asym_symbols = self._validate_sites(asym_unit, asym_symbols)
+            keep_sites = _validate_sites(asym_unit)
+            if np.any(keep_sites == False):
+                warnings.warn(
+                    f'{self.current_name} may have overlapping sites; duplicates will be removed')
+            asym_unit = asym_unit[keep_sites]
+            asym_symbols = [sym for sym, keep in zip(asym_symbols, keep_sites) if keep]
 
         if asym_unit.shape[0] == 0:
             warnings.warn(f'Skipping {self.current_name} as there are no sites with coordinates')
             return None
-
-        periodic_set = self._construct_periodic_set(asym_unit, asym_symbols, sitesym, cell, **data)
-        return periodic_set
-
-    def _construct_periodic_set(self, asym_unit, asym_symbols, sitesym, cell, **kwargs):
-        """Asym motif + symbols + sitesym + cell (+kwargs) --> PeriodicSet"""
+        
         frac_motif, asym_inds, multiplicities, inverses = self.expand_asym_unit(asym_unit, sitesym)
         full_types = [asym_symbols[i] for i in inverses]
         motif = frac_motif @ cell
@@ -261,30 +279,9 @@ class _Reader:
             'asymmetric_unit': asym_inds,
             'wyckoff_multiplicities': multiplicities,
             'types': full_types,
-            **kwargs
         }
 
-        if self.current_filename:
-            tags['filename'] = self.current_filename
-
         return PeriodicSet(motif, cell, **tags)
-    
-    def _validate_sites(self, asym_unit, asym_symbols):
-        site_diffs1 = np.abs(asym_unit[:, None] - asym_unit)
-        site_diffs2 = np.abs(site_diffs1 - 1)
-        overlapping = np.triu(np.all(
-            (site_diffs1 <= _Reader.equiv_site_tol) |
-            (site_diffs2 <= _Reader.equiv_site_tol),
-            axis=-1), 1)
-
-        if overlapping.any():
-            warnings.warn(
-                f'{self.current_name} may have overlapping sites; duplicates will be removed')
-            keep_sites = ~overlapping.any(0)
-            asym_unit = asym_unit[keep_sites]
-            asym_symbols = [sym for sym, keep in zip(asym_symbols, keep_sites) if keep]
-
-        return asym_unit, asym_symbols
 
     def expand_asym_unit(self, asym_unit: np.ndarray, sitesym: Sequence[str]) -> Tuple[np.ndarray, ...]:
         """
@@ -343,6 +340,16 @@ class _Reader:
 
 def atom_has_disorder(label, occupancy):
     return label.endswith('?') or (np.isscalar(occupancy) and occupancy < 1)
+
+
+def _validate_sites(asym_unit):
+    site_diffs1 = np.abs(asym_unit[:, None] - asym_unit)
+    site_diffs2 = np.abs(site_diffs1 - 1)
+    overlapping = np.triu(np.all(
+        (site_diffs1 <= _Reader.equiv_site_tol) |
+        (site_diffs2 <= _Reader.equiv_site_tol),
+        axis=-1), 1)
+    return ~overlapping.any(0)
 
 
 def _heaviest_component(molecule):

@@ -207,7 +207,7 @@ def crystal_to_periodicset(crystal):
         sitesym = ('x,y,z', )
     r = _Reader()
     r.current_identifier = crystal.identifier
-    frac_motif, asym_unit, multiplicities, _ = r.expand(asym_frac_motif, sitesym)
+    frac_motif, asym_unit, multiplicities, _ = r.expand_asym_unit(asym_frac_motif, sitesym)
     motif = frac_motif @ cell
 
     kwargs = {

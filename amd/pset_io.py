@@ -102,7 +102,6 @@ class SetWriter:
     def __enter__(self):
         return self
 
-    # handle exceptions?
     def __exit__(self, exc_type, exc_value, tb):
         self.file.close()
 
@@ -182,6 +181,5 @@ class SetReader:
     def __enter__(self):
         return self
 
-    # handle exceptions?
     def __exit__(self, exc_type, exc_value, tb):
         self.file.close()
