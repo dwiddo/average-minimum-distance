@@ -107,7 +107,7 @@ class _Reader:
         """Read the next (or first) item."""
         return next(iter(self._generator))
 
-    def _map(self, func: Callable, iterable: Iterable) -> Iterable[PeriodicSet]:
+    def _map(self, converter: Callable, iterable: Iterable) -> Iterable[PeriodicSet]:
         """Iterates over iterable, passing items through parser and yielding the 
         result if it is not None. Applies warning and include_if filter.
         """
@@ -121,8 +121,8 @@ class _Reader:
                 if any(not check(item) for check in self.include_if):
                     continue
 
-                periodic_set = func(item)
-
+                periodic_set = converter(item)
+                
                 if periodic_set is not None:
 
                     if self.current_filename:
