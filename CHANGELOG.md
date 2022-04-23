@@ -2,7 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.8] - 14/04/2022
+## [1.2.1] - 14/04/2022
+
+### Added
+
+- Fixed `amd.SDD` and improved speed of the algorithm.
+
+## [1.2] - 14/04/2022
 
 ### Added
 

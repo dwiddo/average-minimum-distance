@@ -44,6 +44,12 @@ def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
 
     ymax = collections.defaultdict(int)
     d = 0
+    
+    if dims == 1:
+        yield np.array([[0]])
+        while True:
+            d += 1
+            yield np.array([[-d], [d]])
 
     while True:
         # get integer lattice points in +ve directions

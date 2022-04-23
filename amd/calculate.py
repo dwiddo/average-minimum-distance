@@ -9,7 +9,7 @@ import numpy as np
 import scipy.spatial
 import scipy.special
 
-from ._nearest_neighbours import nearest_neighbours, nearest_neighbours_minval
+from ._nearest_neighbours import nearest_neighbours, nearest_neighbours_minval, generate_concentric_cloud
 from .periodicset import PeriodicSet
 from .utils import diameter
 
@@ -177,6 +177,7 @@ def AMD_finite(motif: np.ndarray) -> np.ndarray:
     dm = np.sort(scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(motif)), axis=-1)[:, 1:]
     return np.average(dm, axis=0)
 
+
 def PDD_finite(
         motif: np.ndarray,
         lexsort: bool = True,
@@ -230,6 +231,7 @@ def PDD_finite(
 
     return pdd
 
+
 def SDD(
         motif: np.ndarray,
         order: int = 1,
@@ -271,9 +273,10 @@ def SDD(
         kite_sdd = amd.SDD(kite)
     """
 
+    m = motif.shape[0]
+
     if order == 1:
         dm = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(motif))
-        m = motif.shape[0]
         sdd = np.sort(dm, axis=-1)[:, 1:]
         weights = np.full((m, ), 1 / m)
 
@@ -286,50 +289,32 @@ def SDD(
 
         return weights, None, sdd
 
-    if motif.shape[0] <= order:
+    if m <= order:
         raise ValueError(f'The higher order SDD is only defined when the order ({order}) is smaller than the number of points ({motif.shape[0]})')
 
     dm = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(motif))
-    m = motif.shape[0]
-    inds = np.argsort(dm, axis=-1)
-    dists = np.take_along_axis(dm, inds, axis=-1)[:, 1:]
-    inds = inds[:, 1:]
-    n_rows = scipy.special.comb(motif.shape[0], order, exact=True)
-    weights = np.full((n_rows, ), 1 / n_rows)
     dist = []
     sdd = []
 
-    for points in itertools.combinations(range(motif.shape[0]), order):
-        points = np.array(points)
-        done = set(points)
-        pointers = [0] * order
-        unsorted_row = []
-        for _ in range(m - order):
-            for i in range(order):
-                while int(inds[points[i]][pointers[i]]) in done:
-                    if pointers[i] < m - order:
-                        pointers[i] += 1
-                    else:
-                        break
-
-            _, closest_i = min(((dists[points[i]][pointers[i]], i) for i in range(order)), key=lambda x: x[0])
-            point = inds[points[closest_i]][pointers[closest_i]]
-            unsorted_row.append(sorted(np.linalg.norm(motif[points[i]] - motif[point]) for i in range(order)))
-            done.add(int(point))
-            if pointers[closest_i] < m - order:
-                pointers[closest_i] += 1
-
-        unsorted_row = np.array(unsorted_row)
+    for points in itertools.combinations(range(m), order):
+        points = list(points)
+        remove_rows = np.full((m, ), True)
+        np.put(remove_rows, points, False)
+        unsorted_row = np.sort(dm[remove_rows][:, points], axis=-1)
         sorted_row = unsorted_row[np.lexsort(np.rot90(unsorted_row))]
-        
         sdd.append(sorted_row)
 
         if order == 2:
-            dist.append(np.linalg.norm(motif[points[0]] - motif[points[1]]))
+            dist.append(dm[points[0], points[1]])
         else:
-            dist.append(PDD_finite(motif[points], collapse=False)[:, 1:])
+            dists = dm[points][:, points]
+            dists = np.sort(dists, axis=-1)[:, 1:]
+            pdd_finite = dists[np.lexsort(np.rot90(dists))]
+            dist.append(pdd_finite)
 
     sdd, dist = np.array(sdd), np.array(dist)
+    n_rows = scipy.special.comb(m, order, exact=True)
+    weights = np.full((n_rows, ), 1 / n_rows)
 
     if collapse:
         dist_diffs = np.abs(dist[:, None] - dist) <= collapse_tol
@@ -356,6 +341,7 @@ def SDD(
         weights, dist, sdd = weights[args], dist[args], sdd[args]
 
     return weights, dist, sdd
+
 
 def PDD_reconstructable(
         periodic_set: PSET_OR_TUPLE,
@@ -423,6 +409,43 @@ def PDD_reconstructable(
         pdd = pdd[np.lexsort(np.rot90(pdd))]
 
     return pdd
+
+
+def PDF(periodic_set, cutoff_r):
+    """The PDF (pair distribution function) of a periodic set up to a cutoff
+    radius r. This is a 1D vector of sorted distances between all points
+    pairwise (where at least one of two points is in the motif).
+
+    Parameters
+    ----------
+    periodic_set : :class:`.periodicset.PeriodicSet` or tuple of ndarrays
+        A periodic set represented by a :class:`.periodicset.PeriodicSet` or
+        by a tuple (motif, cell) with coordinates in Cartesian form.
+    cutoff_r : int
+        Cutoff radius for distances to find.
+
+    Returns
+    -------
+    ndarray
+        A 1D ndarray of distances, the PDF of periodic_set.
+    """
+    
+    motif, cell, _, _ = _extract_motif_and_cell(periodic_set)
+    motif, cell = periodic_set
+    generator = generate_concentric_cloud(motif, cell)
+
+    cloud = []
+    while True:
+        next_layer = np.vstack((next(generator), next(generator)))
+        cloud.append(next_layer)
+        if np.all(scipy.spatial.distance.cdist(motif, next_layer) > cutoff_r):
+            break
+    cloud.append(next(generator))
+    cloud = np.concatenate(cloud)
+
+    pdf = np.sort(scipy.spatial.distance.cdist(motif, cloud).flatten())
+    pdf = pdf[(pdf <= cutoff_r) & (pdf != 0)]
+    return pdf
 
 
 def PPC(periodic_set: PSET_OR_TUPLE) -> float:
