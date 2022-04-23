@@ -303,7 +303,7 @@ def SDD(
         points = np.array(points)
         done = set(points)
         pointers = [0] * order
-        row = []
+        unsorted_row = []
         for _ in range(m - order):
             for i in range(order):
                 while int(inds[points[i]][pointers[i]]) in done:
@@ -314,12 +314,15 @@ def SDD(
 
             _, closest_i = min(((dists[points[i]][pointers[i]], i) for i in range(order)), key=lambda x: x[0])
             point = inds[points[closest_i]][pointers[closest_i]]
-            row.append(sorted(np.linalg.norm(motif[points[i]] - motif[point]) for i in range(order)))
+            unsorted_row.append(sorted(np.linalg.norm(motif[points[i]] - motif[point]) for i in range(order)))
             done.add(int(point))
             if pointers[closest_i] < m - order:
                 pointers[closest_i] += 1
 
-        sdd.append(row)
+        unsorted_row = np.array(unsorted_row)
+        sorted_row = unsorted_row[np.lexsort(np.rot90(unsorted_row))]
+        
+        sdd.append(sorted_row)
 
         if order == 2:
             dist.append(np.linalg.norm(motif[points[0]] - motif[points[1]]))
