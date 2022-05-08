@@ -6,7 +6,7 @@
 [![MATCH Paper](https://img.shields.io/badge/DOI-10.46793%2Fmatch.87--3.529W-blue)](https://doi.org/10.46793/match.87-3.529W)
 [![CC-0 license](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-blue.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
-Implements fingerprints (*isometry invariants*) of crystals based on geometry: average minimum distances (AMD) and point-wise distance distributions (PDD). Includes .cif reading tools.
+Implements fingerprints (*isometry invariants*) of crystal structures based on geometry: average minimum distances (AMD) and point-wise distance distributions (PDD). Includes .cif reading tools.
 
 - **Papers:** https://doi.org/10.46793/match.87-3.529W or on arXiv at https://arxiv.org/abs/2009.02488
 - **PyPI project:** https://pypi.org/project/average-minimum-distance/
@@ -17,9 +17,19 @@ If you use our code in your work, please cite us. The bib reference is at the bo
 
 ## What's amd?
 
-A crystal is an arrangement of atoms which periodically repeats according to some lattice. The atoms and lattice defining a crystal are typically recorded in a .CIF file, but this representation is ambiguous, i.e. different .CIF files can define the same crystal. This package implements new *isometric invariants* called AMD (average minimum distance) and PDD (point-wise distance distribution) based on inter-point distances, which are guaranteed to take the same value for all equivalent representations of a crystal. They do this in a continuous way; crystals which are similar have similar AMDs and PDDs.
+A crystal is an arrangement of atoms which periodically repeats in all directions according to some lattice. Crystals are usually given by listing parameters defining the lattice (or unit cell) and the atomic coordinates, e.g. in a .CIF file, but this representation is ambiguous because different .CIF files can define the same crystal. This package implements new *isometric invariants* based on inter-point distances which are guaranteed to take the same value for all (isometrically) equivalent representations of a crystal, called average minimum distances (AMDs) and point-wise distance distributions (PDDs). They are invariants that are also continuous, meaning crystals which are similar have similar AMDs and PDDs.
 
-For a technical description of AMD, [see our paper on arXiv](https://arxiv.org/abs/2009.02488). Detailed documentation of this package is [available on readthedocs](https://average-minimum-distance.readthedocs.io/en/latest/).
+### Description of the invariants
+
+A *periodic set* models a crystal with a point in the centre of each atom. The AMD of a structure is an infinite increasing sequence of real numbers calculated from inter-point distances in the periodic set. In contrast, the PDD is a matrix which can have arbitrarily many columns. In practice, both are calculated up to some chosen number k.
+
+The k-th AMD value of a periodic set is the average distance to the k-th nearest neighbours of points in a unit cell. That is, to find the AMD of a periodic set up to k, first list distances to the nearest k neighbours in the infinite crystal for every point in a unit cell, then take the average over points in the unit cell.
+
+The PDD is related to AMD but contains more information as it avoids the averaging step. Again start by and listing distances to the k nearest neighbours in order for each point in a unit cell, and collect all these lists into one matrix with a row for each point. Then order the matrix rows as in a dictionary (lexicographically), by comparing elements of two rows in order until one is smaller and putting that row first. Finally, if any rows are duplicated keep only one but give each a weight proportional to its original frequency, appending the weight to the start of each row to make the first column the weights. The result is the k-th PDD of the periodic set.
+
+For a formal description, see our papers listed above. Detailed documentation for this package is [available on readthedocs](https://average-minimum-distance.readthedocs.io/en/latest/).
+
+## Getting started
 
 Use pip to install average-minimum-distance:
 
@@ -29,13 +39,11 @@ pip install average-minimum-distance
 
 Then import average-minimum-distance with ```import amd```.
 
-## Getting started
-
 The central functions of this package are ```amd.AMD()``` and ```amd.PDD()```, which take a crystal and a positive integer k, returning the crystal's AMD/PDD up to k. An AMD is a 1D numpy array, whereas PDDs are 2D arrays. The AMDs or PDDs can then be passed to functions to compare them.
 
 ### Reading crystals
 
-The following example reads a .CIF with ```amd.CifReader``` and computes the AMDs (k=100):
+This example reads a .CIF with ```amd.CifReader``` and computes the AMDs (k=100):
 
 ```py
 import amd
@@ -54,7 +62,7 @@ A crystal can also be read from the CSD using ```amd.CSDReader``` (if csd-python
 The package includes functions for comparing sets of AMDs or PDDs.
 
 They behave like scipy's function ```scipy.distance.spatial.pdist```,
-which takes a set of points and compares them pairwise, returning a *condensed distance matrix*, a 1D vector containing the distances. This vector is the upper half of the 2D distance matrix in one list, since for pairwise comparisons the matrix is symmetric. The function ```amd.AMD_pdist``` similarly takes a list of AMDs and compares them pairwise, returning the condensed distance matrix:
+which takes a set of points and compares them pairwise, returning a *condensed distance matrix*, a 1D vector containing the distances. It contains the upper half of the 2D distance matrix in one list, since for pairwise comparisons the matrix is symmetric. The function ```amd.AMD_pdist``` similarly takes a list of AMDs and compares them pairwise, returning the condensed distance matrix:
 
 ```py
 cdm = amd.AMD_pdist(amds)
@@ -92,7 +100,7 @@ plt.show()
 
 ## Example: Finding n nearest neighbours in one set from another
 
-Here is an example showing how to read two sets of crystals from .CIFs ```set1.cif``` and ```set2.cif``` and find the 10 nearest PDD-neighbours in set 2 for every crystal in set 1.
+This example shows how to read two sets of crystals from .CIFs ```set1.cif``` and ```set2.cif``` and find the 10 nearest PDD-neighbours in set 2 for every crystal in set 1.
 
 ```py
 import numpy as np

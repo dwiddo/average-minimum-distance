@@ -17,7 +17,7 @@ PSET_OR_TUPLE = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
 
 
 def AMD(periodic_set: PSET_OR_TUPLE, k: int) -> np.ndarray:
-    """The AMD up to `k` of a periodic set.
+    """The AMD of a periodic set (crystal) up to `k`.
 
     Parameters
     ----------
@@ -65,7 +65,7 @@ def PDD(
         collapse: bool = True,
         collapse_tol: float = 1e-4
 ) -> np.ndarray:
-    """The PDD up to `k` of a periodic set.
+    """The PDD of a periodic set (crystal) up to `k`.
 
     Parameters
     ----------

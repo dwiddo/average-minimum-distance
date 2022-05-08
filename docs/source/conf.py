@@ -15,12 +15,22 @@ import sys
 sys.path.insert(0, os.path.abspath(r'../..'))
 
 import mock
- 
+
+# -- Project information -----------------------------------------------------
+
+project = 'average-minimum-distance'
+copyright = '2022, Daniel Widdowson'
+author = 'Daniel Widdowson'
+
+# The full version, including alpha/beta/rc tags
+release = '1.2.1'
+
 MOCK_MODULES = [
     'numba',
     'scipy',
     'scipy.spatial',
     'scipy.special',
+    'scipy.optimize',
     'scipy.spatial.distance',
     'scipy.sparse',
     'scipy.sparse.csgraph',
@@ -35,15 +45,6 @@ MOCK_MODULES = [
 
 for mod_name in MOCK_MODULES:
     sys.modules[mod_name] = mock.Mock()
-
-# -- Project information -----------------------------------------------------
-
-project = 'average-minimum-distance'
-copyright = '2022, Daniel Widdowson'
-author = 'Daniel Widdowson'
-
-# The full version, including alpha/beta/rc tags
-release = '1.1.8'
 
 # -- General configuration ---------------------------------------------------
 

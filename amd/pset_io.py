@@ -1,10 +1,5 @@
-"""Contains I/O tools, including a .CIF reader and CSD reader
-(``csd-python-api`` only) to extract periodic set representations
-of crystals which can be passed to :func:`.calculate.AMD` and :func:`.calculate.PDD`.
-
-These intermediate :class:`.periodicset.PeriodicSet` representations can be written
-to a .hdf5 file with :class:`SetWriter`, which can be read back with :class:`SetReader`.
-This is much faster than rereading a .CIF and recomputing invariants.
+"""Contains I/O tools for storing :class:`.periodicset.PeriodicSet` representations 
+of crystals, their invariants and other data, which is faster than .CIF or CSD reads.
 """
 
 from typing import Iterable, Optional

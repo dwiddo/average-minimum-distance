@@ -1,4 +1,5 @@
 """An implementation of the Wasserstein metric between two compositional vectors.
+Aka Earth Mover's distance, an appropriate metric for comparing two PDDs.
 
 Copyright (C) 2020 Cameron Hargreaves. This code is part of the Element Movers
 Distance project https://github.com/lrcfmd/ElMD.

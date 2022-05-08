@@ -109,7 +109,7 @@ class _Reader:
 
     def _map(self, converter: Callable, iterable: Iterable) -> Iterable[PeriodicSet]:
         """Iterates over iterable, passing items through parser and yielding the 
-        result if it is not None. Applies warning and include_if filter.
+        result if it is not None. Applies warning and include_if filters.
         """
 
         with warnings.catch_warnings():

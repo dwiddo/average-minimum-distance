@@ -46,7 +46,7 @@ project_urls = {
 
 kw = {
     'name':             			 'average-minimum-distance',
-    'version':          			 '1.2.0',
+    'version':          			 '1.2.1',
     'description':      			 description,
     'long_description': 			 open('README.md').read(),
     'long_description_content_type': 'text/markdown',

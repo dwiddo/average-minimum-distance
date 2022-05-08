@@ -24,7 +24,7 @@ All notable changes to this project will be documented in this file.
 
 - Function `amd.compare.neighbours_from_distance_matrix` moved to `amd.utils.neighbours_from_distance_matrix`.
 
-- Changed how the readers handle disorder to be simpler. Now, if `disorder='skip'` then any disorder means the structure is skipped, even if the disordered atom(s) would have been removed e.g. by remove_hydrogens. If `disorder='all_sites'`, no warnings are printed for any overlapping sites in the stucture.
+- Changed how the readers handle disorder to be simpler. Now, if `disorder='skip'` then any disorder means the structure is skipped, even if the disordered atom(s) would have been removed e.g. by remove_hydrogens. If `disorder='all_sites'`, no warnings are printed for any overlapping sites in the structure.
 
 ### Removed
 

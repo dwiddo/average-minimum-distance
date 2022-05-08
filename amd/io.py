@@ -188,8 +188,8 @@ class CSDReader(_Reader):
 
 def crystal_to_periodicset(crystal):
     """ccdc.crystal.Crystal --> amd.periodicset.PeriodicSet.
-    Ignores disorder, missing sites/coords, checks & no options.
-    Is a stripped-down version of the function used in CifReader."""
+    Ignores disorder, missing sites/coords, checks & options.
+    Is a stripped-down version of _Reader._entry_to_periodicset."""
 
     cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
 
@@ -222,8 +222,8 @@ def crystal_to_periodicset(crystal):
 
 def cifblock_to_periodicset(block):
     """ase.io.cif.CIFBlock --> amd.periodicset.PeriodicSet.
-    Ignores disorder, missing sites/coords, checks & no options.
-    Is a stripped-down version of the function used in CifReader."""
+    Ignores disorder, missing sites/coords, checks & options.
+    Is a stripped-down version of _Reader._cifblock_to_periodicset."""
 
     cell = block.get_cell().array
     asym_frac_motif = [block.get(name) for name in _Reader.atom_site_fract_tags]
