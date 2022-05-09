@@ -21,13 +21,13 @@ A crystal is an arrangement of atoms which periodically repeats in all direction
 
 ### Description of the invariants and comparisons
 
-A *periodic set* models a crystal with a point in the centre of each atom. The AMD of a structure is an infinite increasing sequence of real numbers calculated from inter-point distances in the periodic set. In contrast, the PDD is a matrix which can have arbitrarily many columns. In practice, both are calculated up to some chosen number $k$.
+A *periodic set* models a crystal with a point in the centre of each atom. The AMD of a structure is an infinite increasing sequence of real numbers calculated from inter-point distances in the periodic set. In contrast, the PDD is a matrix which can have arbitrarily many columns. In practice, both are calculated up to some chosen number k.
 
-The $k$th AMD value of a periodic set is the average distance to the $k$ nearest neighbours of points in a unit cell. That is, to find AMD$_k$ for a periodic set, list distances to the nearest $k$ neighbours in the infinite crystal for every point in a unit cell and average over the points in the unit cell.
+The kth AMD value of a periodic set is the average distance to the k nearest neighbours of points in a unit cell. That is, to find the kth AMD for a periodic set, list distances to the nearest k neighbours in the infinite crystal for every point in a unit cell and average over the points in the unit cell.
 
-The PDD is related to AMD but contains more information as it avoids the averaging step. Again start by and listing distances to the $k$ nearest neighbours in order for each point in a unit cell. Collect all these lists into one matrix with a row for each point. Then order the rows of the matrix as in a dictionary (lexicographically). If any rows are not unique, keep only one but give each a weight proportional to its original frequency, appending the weight to the start of each row to make the first column the weights. The result is the $k$th PDD of the periodic set.
+The PDD is related to AMD but contains more information as it avoids the averaging step. Again start by and listing distances to the k nearest neighbours in order for each point in a unit cell. Collect all these lists into one matrix with a row for each point. Then order the rows of the matrix as in a dictionary (lexicographically). If any rows are not unique, keep only one but give each a weight proportional to its original frequency, appending the weight to the start of each row to make the first column the weights. The result is the kth PDD of the periodic set.
 
-An AMD is just a vector, and so can be compared with any metric as long and $k$ (length of the AMD vector) is the same. The default metric used in the package is $L_\infty$ (aka Chebyshev), since it does not so much accumulate differences in distances across many neighbours. PDDs are matrices with weighted rows, and the appropriate metric for them is *Earth mover's distance* (aka Wasserstein), which itself needs a metric to compare two PDD rows (without weights), $L_\infty$ being the default.
+An AMD is just a vector, and so can be compared with any metric as long and k (length of the AMD vector) is the same. The default metric used in the package is L-infinity (aka Chebyshev), since it does not so much accumulate differences in distances across many neighbours. PDDs are matrices with weighted rows, and the appropriate metric for them is *Earth mover's distance* (aka Wasserstein), which itself needs a metric to compare two PDD rows (without weights), L-infinity being the default.
 
 For a formal description, see our papers listed above. Detailed documentation for this package is [available on readthedocs](https://average-minimum-distance.readthedocs.io/en/latest/).
 
@@ -41,11 +41,11 @@ pip install average-minimum-distance
 
 Then import average-minimum-distance with ```import amd```.
 
-The central functions of this package are ```amd.AMD()``` and ```amd.PDD()```, which take a crystal and a positive integer $k$, returning the crystal's AMD/PDD up to $k$. An AMD is a 1D NumPy array, whereas PDDs are 2D arrays. The AMDs or PDDs can then be passed to functions to compare them.
+The central functions of this package are ```amd.AMD()``` and ```amd.PDD()```, which take a crystal and a positive integer k, returning the crystal's AMD/PDD up to k. An AMD is a 1D NumPy array, whereas PDDs are 2D arrays. The AMDs or PDDs can then be passed to functions to compare them.
 
 ### Reading crystals
 
-This example reads a .cif with ```amd.CifReader``` and computes the AMDs $(k=100)$:
+This example reads a .cif with ```amd.CifReader``` and computes the AMDs (k=100):
 
 ```py
 import amd
@@ -70,7 +70,7 @@ which takes a set of points and compares them pairwise, returning a *condensed d
 cdm = amd.AMD_pdist(amds)
 ```
 
-The default metric for comparison is ```chebyshev``` $(L_\infty)$, though it can be changed to anything accepted by SciPy's ```pdist```, e.g. ```euclidean```.
+The default metric for comparison is ```chebyshev``` (L-infinity), though it can be changed to anything accepted by SciPy's ```pdist```, e.g. ```euclidean```.
 
 It is preferable to store the condensed matrix, though if you want the symmetric 2D distance matrix, use SciPy's ```squareform```:
 
@@ -145,7 +145,7 @@ for i in range(len(set1)):
 
 ## Cite us <a name="citeus"></a>
 
-Use the following bib references to cite us.
+Use the following bib reference to cite us.
 
 *Average minimum distances of periodic point sets – foundational invariants for mapping periodic crystals*. MATCH Communications in Mathematical and in Computer Chemistry, 87(3), 529-559 (2022). <https://doi.org/10.46793/match.87-3.529W>.
 
