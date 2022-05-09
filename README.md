@@ -43,7 +43,7 @@ Then import average-minimum-distance with ```import amd```.
 
 The central functions of this package are ```amd.AMD()``` and ```amd.PDD()```, which take a crystal and a positive integer k, returning the crystal's AMD/PDD up to k. An AMD is a 1D NumPy array, whereas PDDs are 2D arrays. The AMDs or PDDs can then be passed to functions to compare them.
 
-### Reading crystals
+### Reading crystals from a file
 
 This example reads a .cif with ```amd.CifReader``` and computes the AMDs (k=100):
 
@@ -57,7 +57,7 @@ amds = [amd.AMD(crystal, 100) for crystal in reader]
 
 *Note: CifReader accepts optional arguments, e.g. for removing hydrogen and handling disorder. See the documentation for details.*
 
-A crystal can also be read from the CSD using ```amd.CSDReader``` (if csd-python-api is installed), or created manually.
+If csd-python-api is installed, CifReader can accept file formats other than cif, and crystals can be read directly from your local CSD database with ```amd.CSDReader```.
 
 ### Comparing AMDs or PDDs
 
