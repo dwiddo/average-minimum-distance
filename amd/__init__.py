@@ -6,11 +6,6 @@ online at https://average-minimum-distance.readthedocs.io.
 Using functions from this package does not require explicit import of
 the relevant module.
 
-Modules
--------
-Using any of these subpackages requires an explicit import. For example,
-``import scipy.cluster``.
-
 ::
 
  calculate   --- Calculate invariants (fingerprints) of periodic sets (crystals)
@@ -22,10 +17,10 @@ Using any of these subpackages requires an explicit import. For example,
  utils       --- General utility functions/classes (eg diameter, eta)
 """
 
-from .io import *
-from .pset_io import *
 from .calculate import *
 from .compare import *
-from .utils import *
+from .io import *
 from .periodicset import PeriodicSet
+from .pset_io import *
 from .reconstruct import reconstruct
+from .utils import *

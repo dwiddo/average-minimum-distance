@@ -169,9 +169,9 @@ def nearest_neighbours(
                                 compact_nodes=False,
                                 balanced_tree=False)
     pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
-    pdd = np.empty_like(pdd_)
+    pdd = np.zeros_like(pdd_)
 
-    while not np.allclose(pdd, pdd_, atol=0, rtol=1e-12):
+    while not np.allclose(pdd, pdd_, atol=1e-12, rtol=0):
         pdd = pdd_
         cloud = np.vstack((cloud,
                            next(cloud_generator),
@@ -199,7 +199,7 @@ def nearest_neighbours_minval(motif, cell, min_val):
                                 compact_nodes=False,
                                 balanced_tree=False)
     pdd_, _ = tree.query(motif, k=cloud.shape[0], workers=-1)
-    pdd = np.empty_like(pdd_)
+    pdd = np.zeros_like(pdd_)
 
     while True:
         if np.all(pdd[:, -1] >= min_val):

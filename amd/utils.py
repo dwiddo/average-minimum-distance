@@ -1,63 +1,13 @@
-"""Helpful utility functions."""
+"""Helpful utility functions, e.g. unit cell diameter, converting
+cell parameters to Cartesian form, and an ETA class."""
 
 from typing import Tuple
-import random
 import time
 import datetime
 import inspect
 
 import scipy.spatial
 import numpy as np
-
-
-def neighbours_from_distance_matrix(
-        n: int,
-        dm: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Given a distance matrix, find the ``n`` nearest neighbours of each item.
-
-    Parameters
-    ----------
-    n : int
-        Number of nearest neighbours to find for each item.
-    dm : ndarray
-        2D distance matrix or 1D condensed distance matrix.
-
-    Returns
-    -------
-    tuple of ndarrays (nn_dm, inds)
-        For item ``i``, ``nn_dm[i][j]`` is the distance from item ``i`` to its ``j+1`` st
-        nearest neighbour, and ``inds[i][j]`` is the index of this neighbour (``j+1`` since
-        index 0 is the first nearest neighbour).
-    """
-
-    inds = None
-
-    # 2D distance matrix
-    if len(dm.shape) == 2:
-        inds = np.array([np.argpartition(row, n)[:n] for row in dm])
-
-    # 1D condensed distance vector
-    elif len(dm.shape) == 1:
-        dm = scipy.spatial.distance.squareform(dm)
-        inds = []
-        for i, row in enumerate(dm):
-            inds_row = np.argpartition(row, n+1)[:n+1]
-            inds_row = inds_row[inds_row != i][:n]
-            inds.append(inds_row)
-        inds = np.array(inds)
-
-    else:
-        ValueError(
-            'Input must be an ndarray, either a 2D distance matrix '
-            'or a condensed distance matrix (returned by pdist).')
-
-    # inds are the indexes of nns: inds[i,j] is the j-th nn to point i
-    nn_dm = np.take_along_axis(dm, inds, axis=-1)
-    sorted_inds = np.argsort(nn_dm, axis=-1)
-    inds = np.take_along_axis(inds, sorted_inds, axis=-1)
-    nn_dm = np.take_along_axis(nn_dm, sorted_inds, axis=-1)
-    return nn_dm, inds
 
 
 def diameter(cell):
@@ -115,6 +65,56 @@ def cellpar_to_cell_2D(a, b, alpha):
     return cell
 
 
+def neighbours_from_distance_matrix(
+        n: int,
+        dm: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Given a distance matrix, find the ``n`` nearest neighbours of each item.
+
+    Parameters
+    ----------
+    n : int
+        Number of nearest neighbours to find for each item.
+    dm : ndarray
+        2D distance matrix or 1D condensed distance matrix.
+
+    Returns
+    -------
+    tuple of ndarrays (nn_dm, inds)
+        For item ``i``, ``nn_dm[i][j]`` is the distance from item ``i`` to its ``j+1`` st
+        nearest neighbour, and ``inds[i][j]`` is the index of this neighbour (``j+1`` since
+        index 0 is the first nearest neighbour).
+    """
+
+    inds = None
+
+    # 2D distance matrix
+    if len(dm.shape) == 2:
+        inds = np.array([np.argpartition(row, n)[:n] for row in dm])
+
+    # 1D condensed distance vector
+    elif len(dm.shape) == 1:
+        dm = scipy.spatial.distance.squareform(dm)
+        inds = []
+        for i, row in enumerate(dm):
+            inds_row = np.argpartition(row, n+1)[:n+1]
+            inds_row = inds_row[inds_row != i][:n]
+            inds.append(inds_row)
+        inds = np.array(inds)
+
+    else:
+        ValueError(
+            'Input must be an ndarray, either a 2D distance matrix '
+            'or a condensed distance matrix (returned by pdist).')
+
+    # inds are the indexes of nns: inds[i,j] is the j-th nn to point i
+    nn_dm = np.take_along_axis(dm, inds, axis=-1)
+    sorted_inds = np.argsort(nn_dm, axis=-1)
+    inds = np.take_along_axis(inds, sorted_inds, axis=-1)
+    nn_dm = np.take_along_axis(nn_dm, sorted_inds, axis=-1)
+    return nn_dm, inds
+
+
 def lattice_cubic(scale=1, dims=3):
     """Return a pair (motif, cell) representing a cubic lattice, passable to
     ``amd.AMD()`` or ``amd.PDD()``."""
@@ -124,14 +124,19 @@ def lattice_cubic(scale=1, dims=3):
 def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
     """Random unit cell."""
     
-    lengths = [random.uniform(*length_bounds) for _ in range(dims)]
+    lengths = [np.random.uniform(low=length_bounds[0],
+                                 high=length_bounds[1]) 
+               for _ in range(dims)]
     
     if dims == 3:
-        angles = [random.uniform(*angle_bounds) for _ in range(dims)]
+        angles = [np.random.uniform(low=angle_bounds[0],
+                                    high=length_bounds[1]) 
+                  for _ in range(dims)]
         return cellpar_to_cell(*lengths, *angles)
 
     if dims == 2:
-        alpha = random.uniform(*angle_bounds)
+        alpha = np.random.uniform(low=angle_bounds[0],
+                                   high=length_bounds[1])
         return cellpar_to_cell_2D(*lengths, alpha)
 
     raise ValueError(f'random_cell only implimented for dimensions 2 and 3 (passed {dims})')

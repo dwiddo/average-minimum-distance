@@ -12,7 +12,6 @@ more details about specific tasks.
    reading from CSD
    AMDs
    PDDs
-   Pset IO
    miscellaneous
 
 .. toctree::

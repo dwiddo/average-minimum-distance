@@ -13,7 +13,7 @@ keywords = 'isometry, invariant, crystal, amd, pdd, similarity, average, ' \
            'minimum, distance, point-wise, distribution, cif'
 
 classifiers = [
-    'Development Status :: 3 - Alpha',
+    'Development Status :: 4 - Beta',
     'Intended Audience :: Science/Research',
     'License :: Other/Proprietary License',
     'Natural Language :: English',

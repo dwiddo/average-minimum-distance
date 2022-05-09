@@ -4,9 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [1.2.1] - 14/04/2022
 
-### Added
+### Fixed
 
-- Fixed `amd.SDD` and improved speed of the algorithm.
+- Fixed issue where calculations were producing a RuntimeWarning from NumPy.
+
+## Removed
+
+- SDDs removed for now until theory is complete.
 
 ## [1.2] - 14/04/2022
 
@@ -128,13 +132,13 @@ All notable changes to this project will be documented in this file.
 
 - The `SetWriter` and `SetReader` objects write and read `PeriodicSet`s as compressed .hdf5 files (requires `h5py`). Optionally accepts any keyword arguments, stored alongside the sets (intended to store AMDs and PDDs).
 
-- `CifReader` and `CSDReader` no longer take the optional boolean parameter `allow_disorder`, but instead the parameter `disorder` which can be any out of {`'skip'`, `'ordered_sites'`, `'all_sites'`}. `allow_disorder=False` is now `disorder='skip'` (default: skip disordered structures), `allow_disorder=True` is now `disorder='all_sites'` (take all sites ignoring any disorder) and newly added `disorder='ordered_sites'` reads in the set but removes disordered sites.
+- `CifReader` and `CSDReader` no longer take the optional Boolean parameter `allow_disorder`, but instead the parameter `disorder` which can be any out of {`'skip'`, `'ordered_sites'`, `'all_sites'`}. `allow_disorder=False` is now `disorder='skip'` (default: skip disordered structures), `allow_disorder=True` is now `disorder='all_sites'` (take all sites ignoring any disorder) and newly added `disorder='ordered_sites'` reads in the set but removes disordered sites.
 
 - `PeriodicSet`s now have an attribute `.tags`, a dictionary storing any additional information. This data is saved with the `PeriodicSet` if written with `SetWriter`.
 
 - `CifReader` and `CSDReader` include a parameter `types` (default `False`) which includes a list of atomic types of atoms in the `.tags` dictionary (with key `'types'`) of the `PeriodicSet`s yielded. Access with `set.tags['types']`.
 
-- Requirements now includes version requirements (numpy>=1.20.1, scipy>=1.6.1).
+- Requirements now includes version requirements (NumPy>=1.20.1, SciPy>=1.6.1).
 
 ### Changed
 

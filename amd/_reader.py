@@ -16,9 +16,7 @@ from .utils import cellpar_to_cell
 class _Reader:
     """Base Reader class. Contains parsers for converting ase CifBlock
     and ccdc Entry objects to PeriodicSets.
-
-    Intended use:
-
+    Intended to be inherited and then a generator set to self._generator.
     First make a new method for _Reader converting object to PeriodicSet
     (e.g. named _X_to_PSet). Then make this class outline:
 
@@ -35,6 +33,7 @@ class _Reader:
         self._generator = self._read(iterable, self._X_to_PSet)
     """
 
+    equiv_site_tol = 1e-3
     disorder_options = {'skip', 'ordered_sites', 'all_sites'}
     reserved_tags = {
         'motif',
@@ -56,8 +55,6 @@ class _Reader:
         '_space_group_symop_operation_xyz',
         '_space_group_symop.operation_xyz',
         '_symmetry_equiv_pos_as_xyz',]
-
-    equiv_site_tol = 1e-3
 
     def __init__(
             self,
@@ -186,7 +183,7 @@ class _Reader:
         asym_symbols = [s for i, s in enumerate(asym_symbols) if i not in remove_sites]
 
         if self.disorder != 'all_sites':
-            keep_sites = _validate_sites(asym_unit)
+            keep_sites = _unique_sites(asym_unit)
             if np.any(keep_sites == False):
                 warnings.warn(
                     f'{self.current_name} may have overlapping sites; duplicates will be removed')
@@ -259,7 +256,7 @@ class _Reader:
             sitesym = ['x,y,z', ]
 
         if self.disorder != 'all_sites':
-            keep_sites = _validate_sites(asym_unit)
+            keep_sites = _unique_sites(asym_unit)
             if np.any(keep_sites == False):
                 warnings.warn(
                     f'{self.current_name} may have overlapping sites; duplicates will be removed')
@@ -283,7 +280,11 @@ class _Reader:
 
         return PeriodicSet(motif, cell, **tags)
 
-    def expand_asym_unit(self, asym_unit: np.ndarray, sitesym: Sequence[str]) -> Tuple[np.ndarray, ...]:
+    def expand_asym_unit(
+        self, 
+        asym_unit: np.ndarray, 
+        sitesym: Sequence[str]
+    ) -> Tuple[np.ndarray, ...]:
         """
         Asymmetric unit's fractional coords + sitesyms (as strings)
         -->
@@ -342,14 +343,14 @@ def atom_has_disorder(label, occupancy):
     return label.endswith('?') or (np.isscalar(occupancy) and occupancy < 1)
 
 
-def _validate_sites(asym_unit):
+def _unique_sites(asym_unit):
     site_diffs1 = np.abs(asym_unit[:, None] - asym_unit)
     site_diffs2 = np.abs(site_diffs1 - 1)
     overlapping = np.triu(np.all(
         (site_diffs1 <= _Reader.equiv_site_tol) |
         (site_diffs2 <= _Reader.equiv_site_tol),
         axis=-1), 1)
-    return ~overlapping.any(0)
+    return ~overlapping.any(axis=0)
 
 
 def _heaviest_component(molecule):
@@ -365,6 +366,6 @@ def _heaviest_component(molecule):
                 else:
                     weight += a.atomic_weight
         component_weights.append(weight)
-    largest_component_arg = np.argmax(np.array(component_weights))
-    molecule = molecule.components[largest_component_arg]
+    largest_component_ind = np.argmax(np.array(component_weights))
+    molecule = molecule.components[largest_component_ind]
     return molecule

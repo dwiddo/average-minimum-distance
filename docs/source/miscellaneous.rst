@@ -1,5 +1,5 @@
 Miscellaneous
-==================
+=============
 
 Fingerprints of finite point sets
 ----------------------------------
@@ -7,10 +7,6 @@ AMDs and PDDs also work for finite point sets. The functions :func:`.calculate.f
 :func:`.calculate.finite_PDD` accept just a numpy array containing the points, returning the 
 fingerprint of the finite point set. Unlike ``amd.AMD`` and ``amd.PDD`` no integer ``k`` is passed;
 instead the distances to all neighbours are found (number of columns = no of points - 1).
-
-Simplex-wise distance distributions
------------------------------------
-As the name suggests 
 
 Inverse design
 --------------

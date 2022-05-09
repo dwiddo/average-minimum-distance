@@ -2,7 +2,6 @@
 """
 
 from typing import Union, Tuple
-import itertools
 import collections
 
 import numpy as np
@@ -13,10 +12,10 @@ from ._nearest_neighbours import nearest_neighbours, nearest_neighbours_minval, 
 from .periodicset import PeriodicSet
 from .utils import diameter
 
-PSET_OR_TUPLE = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
+PeriodicSet_or_Tuple = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
 
 
-def AMD(periodic_set: PSET_OR_TUPLE, k: int) -> np.ndarray:
+def AMD(periodic_set: PeriodicSet_or_Tuple, k: int) -> np.ndarray:
     """The AMD of a periodic set (crystal) up to `k`.
 
     Parameters
@@ -58,8 +57,9 @@ def AMD(periodic_set: PSET_OR_TUPLE, k: int) -> np.ndarray:
     pdd, _, _ = nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
     return np.average(pdd, axis=0, weights=multiplicities)
 
+
 def PDD(
-        periodic_set: PSET_OR_TUPLE,
+        periodic_set: PeriodicSet_or_Tuple,
         k: int,
         lexsort: bool = True,
         collapse: bool = True,
@@ -232,119 +232,8 @@ def PDD_finite(
     return pdd
 
 
-def SDD(
-        motif: np.ndarray,
-        order: int = 1,
-        lexsort: bool = True,
-        collapse: bool = True,
-        collapse_tol: float = 1e-4):
-    """The SSD (simplex-wise distance distribution) of a finite point set,
-    with `len(motif) - 1` columns. The SDD with order h considers h-sized collection
-    of points in the motif; the first-order SDD is equivalent to the PDD for finite sets.
-
-    Parameters
-    ----------
-    motif : ndarray
-        Cartesian coordinates of points in a set. Shape (n_points, dimensions)
-    order : int
-        Order of the SDD, default 1. See papers for a description of higher-order SDDs.
-    lexsort : bool, optional
-        Whether or not to lexicographically order the rows. Default True.
-    collapse: bool, optional
-        Whether or not to collapse identical rows (within a tolerance). Default True.
-    collapse_tol: float
-        If two rows have all entries closer than collapse_tol, they get collapsed.
-        Default is 1e-4.
-
-    Returns
-    -------
-    tuple of ndarrays
-        The h-order SDD of ``motif``. A tuple of 3 arrays is returned,
-        ``weights``, ``dist`` and ``sdd``. If order=1, dist is None.
-
-    Examples
-    --------
-    Find the SDD of the trapezium and kite point sets::
-
-        trapezium = np.array([[0,0],[1,1],[3,1],[4,0]])
-        kite      = np.array([[0,0],[1,1],[1,-1],[4,0]])
-
-        trap_sdd = amd.SDD(trapezium, order=2)
-        kite_sdd = amd.SDD(kite)
-    """
-
-    m = motif.shape[0]
-
-    if order == 1:
-        dm = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(motif))
-        sdd = np.sort(dm, axis=-1)[:, 1:]
-        weights = np.full((m, ), 1 / m)
-
-        if collapse:
-            weights, sdd = _collapse_rows(weights, sdd, collapse_tol)
-
-        if lexsort:
-            sorted_inds = np.lexsort(np.rot90(sdd))
-            weights, sdd = weights[sorted_inds], sdd[sorted_inds]
-
-        return weights, None, sdd
-
-    if m <= order:
-        raise ValueError(f'The higher order SDD is only defined when the order ({order}) is smaller than the number of points ({motif.shape[0]})')
-
-    dm = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(motif))
-    dist = []
-    sdd = []
-
-    for points in itertools.combinations(range(m), order):
-        points = list(points)
-        remove_rows = np.full((m, ), True)
-        np.put(remove_rows, points, False)
-        unsorted_row = np.sort(dm[remove_rows][:, points], axis=-1)
-        sorted_row = unsorted_row[np.lexsort(np.rot90(unsorted_row))]
-        sdd.append(sorted_row)
-
-        if order == 2:
-            dist.append(dm[points[0], points[1]])
-        else:
-            dists = dm[points][:, points]
-            dists = np.sort(dists, axis=-1)[:, 1:]
-            pdd_finite = dists[np.lexsort(np.rot90(dists))]
-            dist.append(pdd_finite)
-
-    sdd, dist = np.array(sdd), np.array(dist)
-    n_rows = scipy.special.comb(m, order, exact=True)
-    weights = np.full((n_rows, ), 1 / n_rows)
-
-    if collapse:
-        dist_diffs = np.abs(dist[:, None] - dist) <= collapse_tol
-
-        if dist.ndim == 1:
-            dist_overlapping = dist_diffs
-        else:
-            dist_overlapping = np.all(np.all(dist_diffs, axis=-1), axis=-1)
-
-        sdd_overlapping = np.all(np.all(np.abs(sdd[:, None] - sdd) <= collapse_tol, axis=-1), axis=-1)
-        overlapping = np.logical_and(sdd_overlapping, dist_overlapping)
-        res = _group_overlapping_and_sum_weights(weights, overlapping)
-        if res is not None:
-            weights, dist, sdd = res[0], dist[res[1]], sdd[res[1]]
-
-    if lexsort:
-        if order == 2:
-            flat_sdd = np.hstack((dist[:, None], sdd.reshape((sdd.shape[0], sdd.shape[1] * sdd.shape[2]))))
-            args = np.lexsort(np.rot90(flat_sdd))
-        else:
-            flat_dist = dist.reshape((dist.shape[0], dist.shape[1] * dist.shape[2]))
-            flat_sdd = sdd.reshape((sdd.shape[0], sdd.shape[1] * sdd.shape[2]))
-            args = np.lexsort(np.rot90(np.hstack((flat_dist, flat_sdd))))
-        weights, dist, sdd = weights[args], dist[args], sdd[args]
-
-    return weights, dist, sdd
-
-
 def PDD_reconstructable(
-        periodic_set: PSET_OR_TUPLE,
+        periodic_set: PeriodicSet_or_Tuple,
         lexsort: bool = True
 ) -> np.ndarray:
     """The PDD of a periodic set with `k` (no of columns) large enough such that
@@ -411,44 +300,7 @@ def PDD_reconstructable(
     return pdd
 
 
-def PDF(periodic_set, cutoff_r):
-    """The PDF (pair distribution function) of a periodic set up to a cutoff
-    radius r. This is a 1D vector of sorted distances between all points
-    pairwise (where at least one of two points is in the motif).
-
-    Parameters
-    ----------
-    periodic_set : :class:`.periodicset.PeriodicSet` or tuple of ndarrays
-        A periodic set represented by a :class:`.periodicset.PeriodicSet` or
-        by a tuple (motif, cell) with coordinates in Cartesian form.
-    cutoff_r : int
-        Cutoff radius for distances to find.
-
-    Returns
-    -------
-    ndarray
-        A 1D ndarray of distances, the PDF of periodic_set.
-    """
-    
-    motif, cell, _, _ = _extract_motif_and_cell(periodic_set)
-    motif, cell = periodic_set
-    generator = generate_concentric_cloud(motif, cell)
-
-    cloud = []
-    while True:
-        next_layer = np.vstack((next(generator), next(generator)))
-        cloud.append(next_layer)
-        if np.all(scipy.spatial.distance.cdist(motif, next_layer) > cutoff_r):
-            break
-    cloud.append(next(generator))
-    cloud = np.concatenate(cloud)
-
-    pdf = np.sort(scipy.spatial.distance.cdist(motif, cloud).flatten())
-    pdf = pdf[(pdf <= cutoff_r) & (pdf != 0)]
-    return pdf
-
-
-def PPC(periodic_set: PSET_OR_TUPLE) -> float:
+def PPC(periodic_set: PeriodicSet_or_Tuple) -> float:
     r"""The point packing coefficient (PPC) of ``periodic_set``.
 
     The PPC is a constant of any periodic set determining the
@@ -488,7 +340,7 @@ def PPC(periodic_set: PSET_OR_TUPLE) -> float:
     return (det / (m * V)) ** (1./n)
 
 
-def AMD_estimate(periodic_set: PSET_OR_TUPLE, k: int) -> np.ndarray:
+def AMD_estimate(periodic_set: PeriodicSet_or_Tuple, k: int) -> np.ndarray:
     r"""Calculates an estimate of AMD based on the PPC, using the fact that
 
     .. math::
@@ -505,7 +357,7 @@ def AMD_estimate(periodic_set: PSET_OR_TUPLE, k: int) -> np.ndarray:
     return np.array([(x ** (1. / n)) * c for x in range(1, k + 1)])
 
 
-def _extract_motif_and_cell(periodic_set: PSET_OR_TUPLE):
+def _extract_motif_and_cell(periodic_set: PeriodicSet_or_Tuple):
     """`periodic_set` is either a :class:`.periodicset.PeriodicSet`, or
     a tuple of ndarrays (motif, cell). If possible, extracts the asymmetric unit
     and wyckoff multiplicities and returns them, otherwise returns None.
@@ -546,7 +398,6 @@ def _collapse_rows(weights, dists, collapse_tol):
 
 
 def _group_overlapping_and_sum_weights(weights, overlapping):
-    # I hate this solution, but I can't seem to make anything cleverer work.
     if np.triu(overlapping, 1).any():
         groups = {}
         group = 0
