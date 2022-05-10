@@ -4,7 +4,6 @@ cell parameters to Cartesian form, and an ETA class."""
 from typing import Tuple
 import time
 import datetime
-import inspect
 
 import scipy.spatial
 import numpy as np
@@ -198,12 +197,3 @@ class ETA:
               f'n passes: {self.counter} ' \
               f'({round(self.to_do/total, 2)} passes/second)'
         return msg
-
-
-def _extend_signature(base):
-    def decorator(func):
-        func_params = list(inspect.signature(func).parameters.values())[:-1]
-        base_params = list(inspect.signature(base).parameters.values())[1:]
-        func.__signature__ = inspect.Signature(func_params + base_params)
-        return func
-    return decorator

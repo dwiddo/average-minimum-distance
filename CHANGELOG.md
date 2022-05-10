@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- Fixed issue where calculations were producing a RuntimeWarning from NumPy.
+- Fixed issue where AMD/PDD calculations were producing a RuntimeWarning from NumPy.
 
 ## Removed
 
