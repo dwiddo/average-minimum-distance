@@ -91,7 +91,7 @@ html_sidebars = {
         'relations.html', 
         'sourcelink.html', 
         'searchbox.html'
-        ] 
+    ] 
 }
 
 # # Add any paths that contain custom static files (such as style sheets) here,

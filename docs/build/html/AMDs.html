@@ -1,0 +1,290 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>Using AMDs &mdash; average-minimum-distance 1.2.1 documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/dark_mode_css/general.css" type="text/css" />
+  <link rel="stylesheet" href="_static/dark_mode_css/dark.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+        <script src="_static/dark_mode_js/default_dark.js"></script>
+        <script src="_static/dark_mode_js/theme_switcher.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Using PDDs" href="PDDs.html" />
+    <link rel="prev" title="Reading from the CSD" href="reading%20from%20CSD.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> average-minimum-distance
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Common tasks</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="reading%20cifs.html">Reading .CIFs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reading%20from%20CSD.html">Reading from the CSD</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Using AMDs</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#calculating-amds">Calculating AMDs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#comparing-by-amd">Comparing by AMD</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#comparison-options">Comparison options</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="PDDs.html">Using PDDs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="miscellaneous.html">Miscellaneous</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Modules</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="amd.calculate.html">amd.calculate module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="amd.compare.html">amd.compare module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="amd.io.html">amd.io module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="amd.periodicset.html">amd.periodicset module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="amd.utils.html">amd.utils module</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">average-minimum-distance</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>Using AMDs</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="_sources/AMDs.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="using-amds">
+<h1>Using AMDs<a class="headerlink" href="#using-amds" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="calculating-amds">
+<h2>Calculating AMDs<a class="headerlink" href="#calculating-amds" title="Permalink to this headline">¶</a></h2>
+<p>The AMD (average minimum distance) of a crystal is given by <code class="docutils literal notranslate"><span class="pre">amd.AMD()</span></code>.
+It accepts a crystal and an integer k, returning <span class="math notranslate nohighlight">\(\text{AMD}_k\)</span> as a vector.</p>
+<p>If you have a .cif file, use <code class="xref py py-class docutils literal notranslate"><span class="pre">amd.CifReader</span></code> to read the crystals. If
+<code class="docutils literal notranslate"><span class="pre">csd-python-api</span></code> is installed and you have CSD refcodes, use <code class="xref py py-class docutils literal notranslate"><span class="pre">amd.CSDReader</span></code>.
+You can also give the coordinates of motif points and unit cell as a tuple of numpy
+arrays, in Cartesian form. Examples:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># get AMDs of crystals in a .cif</span>
+<span class="n">crystals</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">amd</span><span class="o">.</span><span class="n">CifReader</span><span class="p">(</span><span class="s1">&#39;file.cif&#39;</span><span class="p">))</span>
+<span class="n">amds</span> <span class="o">=</span> <span class="p">[</span><span class="n">amd</span><span class="o">.</span><span class="n">AMD</span><span class="p">(</span><span class="n">crystal</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span> <span class="k">for</span> <span class="n">crystal</span> <span class="ow">in</span> <span class="n">crystals</span><span class="p">]</span>
+
+<span class="c1"># get AMDs of crystals in DEBXIT family</span>
+<span class="n">amds</span> <span class="o">=</span> <span class="p">[</span><span class="n">amd</span><span class="o">.</span><span class="n">AMD</span><span class="p">(</span><span class="n">crystal</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span> <span class="k">for</span> <span class="n">crystal</span> <span class="ow">in</span> <span class="n">amd</span><span class="o">.</span><span class="n">CSDReader</span><span class="p">(</span><span class="s1">&#39;DEBXIT&#39;</span><span class="p">,</span> <span class="n">families</span><span class="o">=</span><span class="kc">True</span><span class="p">)]</span>
+
+<span class="c1"># AMD of 3D cubic lattice</span>
+<span class="n">motif</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]])</span>
+<span class="n">cell</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">identity</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+<span class="n">cubic_amd</span> <span class="o">=</span> <span class="n">amd</span><span class="o">.</span><span class="n">AMD</span><span class="p">((</span><span class="n">motif</span><span class="p">,</span> <span class="n">cell</span><span class="p">),</span> <span class="mi">100</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Each AMD returned by <code class="docutils literal notranslate"><span class="pre">amd.AMD(c,</span> <span class="pre">k)</span></code> is a vector length <code class="docutils literal notranslate"><span class="pre">k</span></code>.</p>
+<p><em>Note:</em> If you want both the AMD and PDD of a crystal, first get the PDD and then use
+<code class="docutils literal notranslate"><span class="pre">amd.PDD_to_AMD()</span></code> to get the AMD from it to save time.</p>
+</div>
+<div class="section" id="comparing-by-amd">
+<h2>Comparing by AMD<a class="headerlink" href="#comparing-by-amd" title="Permalink to this headline">¶</a></h2>
+<p>Any metric can be used to compare AMDs, but the <a class="reference internal" href="amd.compare.html#module-amd.compare" title="amd.compare"><code class="xref py py-mod docutils literal notranslate"><span class="pre">amd.compare</span></code></a> module has functions to compare for you.</p>
+<p>Most useful are <a class="reference internal" href="amd.compare.html#amd.compare.AMD_pdist" title="amd.compare.AMD_pdist"><code class="xref py py-func docutils literal notranslate"><span class="pre">compare.AMD_pdist()</span></code></a> and <a class="reference internal" href="amd.compare.html#amd.compare.AMD_cdist" title="amd.compare.AMD_cdist"><code class="xref py py-func docutils literal notranslate"><span class="pre">compare.AMD_cdist()</span></code></a>, which mimic
+the interface of scipy’s functions <code class="docutils literal notranslate"><span class="pre">pdist</span></code> and <code class="docutils literal notranslate"><span class="pre">cdist</span></code>. <code class="docutils literal notranslate"><span class="pre">pdist</span></code> takes one set and
+compares all elements pairwise, whereas <code class="docutils literal notranslate"><span class="pre">cdist</span></code> takes two sets and compares elements in
+one with the other. <code class="docutils literal notranslate"><span class="pre">cdist</span></code> returns a 2D distance matrix, but <code class="docutils literal notranslate"><span class="pre">pdist</span></code> returns a
+condensed distance matrix (see <a class="reference external" href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.pdist.html">scipy’s pdist function</a>).
+The default metric for AMD comparisons is l-infinity, but it can be changed to any metric
+accepted by scipy’s pdist/cdist.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># compare crystals in file1.cif with those in file2.cif by AMD, k=100</span>
+<span class="n">amds1</span> <span class="o">=</span> <span class="p">[</span><span class="n">amd</span><span class="o">.</span><span class="n">AMD</span><span class="p">(</span><span class="n">crystal</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span> <span class="k">for</span> <span class="n">crystal</span> <span class="ow">in</span> <span class="n">amd</span><span class="o">.</span><span class="n">CifReader</span><span class="p">(</span><span class="s1">&#39;file1.cif&#39;</span><span class="p">)]</span>
+<span class="n">amds2</span> <span class="o">=</span> <span class="p">[</span><span class="n">amd</span><span class="o">.</span><span class="n">AMD</span><span class="p">(</span><span class="n">crystal</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span> <span class="k">for</span> <span class="n">crystal</span> <span class="ow">in</span> <span class="n">amd</span><span class="o">.</span><span class="n">CifReader</span><span class="p">(</span><span class="s1">&#39;file2.cif&#39;</span><span class="p">)]</span>
+<span class="n">distance_matrix</span> <span class="o">=</span> <span class="n">amd</span><span class="o">.</span><span class="n">AMD_cdist</span><span class="p">(</span><span class="n">amds1</span><span class="p">,</span> <span class="n">amds2</span><span class="p">)</span>
+
+<span class="c1"># compare everything in file1.cif with each other (using l-inf)</span>
+<span class="n">condensed_dm</span> <span class="o">=</span> <span class="n">amd</span><span class="o">.</span><span class="n">AMD_pdist</span><span class="p">(</span><span class="n">amds1</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="section" id="comparison-options">
+<h3>Comparison options<a class="headerlink" href="#comparison-options" title="Permalink to this headline">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">amd.AMD_cdist</span></code> and <code class="docutils literal notranslate"><span class="pre">amd.AMD_pdist</span></code> share the following optional arguments:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">metric</span></code> chooses the metric used for comparison, see scipy’s cdist/pdist for a list of accepted metrics.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">k</span></code> will truncate the passed AMDs to length <code class="docutils literal notranslate"><span class="pre">k</span></code> before comaparing (so <code class="docutils literal notranslate"><span class="pre">k</span></code> must not be larger than the passed AMDs). Useful if comparing for several <code class="docutils literal notranslate"><span class="pre">k</span></code> values.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">low_memory</span></code> (default <code class="docutils literal notranslate"><span class="pre">False</span></code>) uses an alternative slower algorithm that keeps memory use low for much larger input sizes. Currently only <code class="docutils literal notranslate"><span class="pre">metric='chebyshev'</span></code> is accepted with <code class="docutils literal notranslate"><span class="pre">low_memory</span></code>.</p></li>
+</ul>
+</div>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="PDDs.html" class="btn btn-neutral float-right" title="Using PDDs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="reading%20from%20CSD.html" class="btn btn-neutral float-left" title="Reading from the CSD" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2022, Daniel Widdowson.
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
