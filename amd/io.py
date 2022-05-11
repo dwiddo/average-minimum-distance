@@ -31,6 +31,21 @@ def _custom_warning(message, category, filename, lineno, *args, **kwargs):
 
 warnings.formatwarning = _custom_warning
 
+_EQUIV_SITE_TOL = 1e-3
+_ATOM_SITE_FRACT_TAGS = [
+    '_atom_site_fract_x',
+    '_atom_site_fract_y',
+    '_atom_site_fract_z',]
+_ATOM_SITE_CARTN_TAGS = [
+    '_atom_site_cartn_x',
+    '_atom_site_cartn_y',
+    '_atom_site_cartn_z',]
+_SYMOP_TAGS = [
+    '_space_group_symop_operation_xyz',
+    '_space_group_symop.operation_xyz',
+    '_symmetry_equiv_pos_as_xyz',]
+
+
 class ParseError(ValueError):
     """Raised when an item cannot be parsed into a periodic set."""
     pass
@@ -51,29 +66,7 @@ class _Reader:
         self._generator = self._map(iterable, self._X_to_PSet)
     """
 
-    # move these? 
-    _EQUIV_SITE_TOL = 1e-3
     _DISORDER_OPTIONS = {'skip', 'ordered_sites', 'all_sites'}
-    _RESERVED_TAGS = {
-        'motif',
-        'cell',
-        'name',
-        'asymmetric_unit',
-        'wyckoff_multiplicities',
-        'types',
-        'filename',}
-    _ATOM_SITE_FRACT_TAGS = [
-        '_atom_site_fract_x',
-        '_atom_site_fract_y',
-        '_atom_site_fract_z',]
-    _ATOM_SITE_CARTN_TAGS = [
-        '_atom_site_cartn_x',
-        '_atom_site_cartn_y',
-        '_atom_site_cartn_z',]
-    _SYMOP_TAGS = [
-        '_space_group_symop_operation_xyz',
-        '_space_group_symop.operation_xyz',
-        '_symmetry_equiv_pos_as_xyz',]
 
     def __init__(
             self,
@@ -419,9 +412,9 @@ def cifblock_to_periodicset(
     cell = block.get_cell().array
 
     # asymmetric unit fractional coords
-    asym_unit = [block.get(name) for name in _Reader._ATOM_SITE_FRACT_TAGS]
+    asym_unit = [block.get(name) for name in _ATOM_SITE_FRACT_TAGS]
     if None in asym_unit:
-        asym_motif = [block.get(name) for name in _Reader._ATOM_SITE_CARTN_TAGS]
+        asym_motif = [block.get(name) for name in _ATOM_SITE_CARTN_TAGS]
         if None in asym_motif:
             raise ParseError(f'{block.name}: Has no sites')
         asym_unit = np.array(asym_motif) @ np.linalg.inv(cell)
@@ -433,7 +426,7 @@ def cifblock_to_periodicset(
         asym_symbols = ['Unknown' for _ in range(len(asym_unit))]
 
     sitesym = ['x,y,z', ]
-    for tag in _Reader._SYMOP_TAGS:
+    for tag in _SYMOP_TAGS:
         if tag in block:
             sitesym = block[tag]
             break
@@ -514,8 +507,7 @@ def expand_asym_unit(
             # check if site_ overlaps with existing sites
             diffs1 = np.abs(site_ - all_sites)
             diffs2 = np.abs(diffs1 - 1)
-            mask = np.all((diffs1 <= _Reader._EQUIV_SITE_TOL) | 
-                          (diffs2 <= _Reader._EQUIV_SITE_TOL), axis=-1)
+            mask = np.all((diffs1 <= _EQUIV_SITE_TOL) | (diffs2 <= _EQUIV_SITE_TOL), axis=-1)
 
             if np.any(mask):
                 where_equal = np.argwhere(mask).flatten()
@@ -547,8 +539,7 @@ def _unique_sites(asym_unit):
     site_diffs1 = np.abs(asym_unit[:, None] - asym_unit)
     site_diffs2 = np.abs(site_diffs1 - 1)
     overlapping = np.triu(np.all(
-        (site_diffs1 <= _Reader._EQUIV_SITE_TOL) | 
-        (site_diffs2 <= _Reader._EQUIV_SITE_TOL),
+        (site_diffs1 <= _EQUIV_SITE_TOL) | (site_diffs2 <= _EQUIV_SITE_TOL),
         axis=-1), 1)
     return ~overlapping.any(axis=0)
 

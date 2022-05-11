@@ -4,13 +4,15 @@ description = (
     'Implements fingerprints (isometry invariants) of crystals '
     'based on geometry: average minimum distances (AMD) and '
     'point-wise distance distributions (PDD). '
-    'Includes .cif reading tools.'
+    'Includes tools to read crystals from files or the CSD.'
 )
 
 license = 'Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License'
 
-keywords = 'isometry, invariant, crystal, amd, pdd, similarity, average, ' \
-           'minimum, distance, point-wise, distribution, cif'
+keywords = (
+    'isometry, invariant, crystal, amd, pdd, similarity, average, '
+    'minimum, point-wise, distance, cif'
+)
 
 classifiers = [
     'Development Status :: 4 - Beta',
