@@ -8,4 +8,3 @@ To clean/build the html:
 
     $ ...\docs> make clean
     $ ...\docs> make html
-

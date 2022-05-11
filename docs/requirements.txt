@@ -3,4 +3,4 @@ m2r2==0.3.1
 mistune==0.8.4
 numpy>=1.21
 # rinohtype==0.5.3
-sphinx-rtd-dark-mode==1.2.4
+sphinx-rtd-dark-mode>=1.2.4
