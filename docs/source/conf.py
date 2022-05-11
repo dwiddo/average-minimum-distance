@@ -57,6 +57,7 @@ extensions = [
     'sphinx.ext.napoleon',
     # 'sphinx.ext.autosummary',
     # 'rinoh.frontend.sphinx',
+    'sphinx_rtd_theme',
     'sphinx_rtd_dark_mode',
     'm2r2',
 ]
