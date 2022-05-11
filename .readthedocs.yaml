@@ -26,7 +26,6 @@ formats:
 
 # Optionally declare the Python requirements required to build your docs
 python:
-  version: "3.7"
   install:
   - requirements: docs/requirements.txt
   - requirements: requirements.txt
