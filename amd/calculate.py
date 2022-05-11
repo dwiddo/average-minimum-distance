@@ -8,7 +8,7 @@ import numpy as np
 import scipy.spatial
 import scipy.special
 
-from ._nearest_neighbours import nearest_neighbours, nearest_neighbours_minval, generate_concentric_cloud
+from ._nearest_neighbours import nearest_neighbours, nearest_neighbours_minval
 from .periodicset import PeriodicSet
 from .utils import diameter
 

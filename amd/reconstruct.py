@@ -4,8 +4,8 @@ This is possible 'in a general position', see our papers for more."""
 import itertools
 
 import numpy as np
-import scipy.spatial
 import numba
+import scipy.spatial
 
 from .utils import diameter
 from ._nearest_neighbours import generate_concentric_cloud

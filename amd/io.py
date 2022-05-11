@@ -32,25 +32,117 @@ def _custom_warning(message, category, filename, lineno, *args, **kwargs):
 warnings.formatwarning = _custom_warning
 
 class ParseError(ValueError):
+    """Raised when an item cannot be parsed into a periodic set."""
     pass
 
-_EQUIV_SITE_TOL = 1e-3
-_DISORDER_OPTIONS = {'skip', 'ordered_sites', 'all_sites',}
-_ATOM_SITE_FRACT_TAGS = [
-    '_atom_site_fract_x',
-    '_atom_site_fract_y',
-    '_atom_site_fract_z',]
-_ATOM_SITE_CARTN_TAGS = [
-    '_atom_site_cartn_x',
-    '_atom_site_cartn_y',
-    '_atom_site_cartn_z',]
-_SYMOP_TAGS = [
-    '_space_group_symop_operation_xyz',
-    '_space_group_symop.operation_xyz',
-    '_symmetry_equiv_pos_as_xyz',]
+
+class _Reader:
+    """Base Reader class. Contains parsers for converting ase CifBlock
+    and ccdc Entry objects to PeriodicSets.
+    Intended to be inherited and then a generator set to self._generator.
+    First make a new method for _Reader converting object to PeriodicSet
+    (e.g. named _X_to_PSet). Then make this class outline:
+    class XReader(_Reader):
+        def __init__(self, ..., **kwargs):
+        super().__init__(**kwargs)
+        # setup and checks
+        # make 'iterable' which yields objects to be converted (e.g. CIFBlock, Entry)
+        # set self._generator like this
+        self._generator = self._map(iterable, self._X_to_PSet)
+    """
+
+    # move these? 
+    _EQUIV_SITE_TOL = 1e-3
+    _DISORDER_OPTIONS = {'skip', 'ordered_sites', 'all_sites'}
+    _RESERVED_TAGS = {
+        'motif',
+        'cell',
+        'name',
+        'asymmetric_unit',
+        'wyckoff_multiplicities',
+        'types',
+        'filename',}
+    _ATOM_SITE_FRACT_TAGS = [
+        '_atom_site_fract_x',
+        '_atom_site_fract_y',
+        '_atom_site_fract_z',]
+    _ATOM_SITE_CARTN_TAGS = [
+        '_atom_site_cartn_x',
+        '_atom_site_cartn_y',
+        '_atom_site_cartn_z',]
+    _SYMOP_TAGS = [
+        '_space_group_symop_operation_xyz',
+        '_space_group_symop.operation_xyz',
+        '_symmetry_equiv_pos_as_xyz',]
+
+    def __init__(
+            self,
+            remove_hydrogens=False,
+            disorder='skip',
+            heaviest_component=False,
+            show_warnings=True,
+            extract_data=None,
+            include_if=None):
+
+        if disorder not in _Reader._DISORDER_OPTIONS:
+            raise ValueError(f'disorder parameter {disorder} must be one of {_Reader._DISORDER_OPTIONS}')
+
+        extract_data, include_if = _validate_kwargs(extract_data, include_if)
+        self.remove_hydrogens = remove_hydrogens
+        self.disorder = disorder
+        self.heaviest_component = heaviest_component
+        self.show_warnings = show_warnings
+        self.extract_data = extract_data
+        self.include_if = include_if
+        self.current_filename = None
+        self._generator = []
+
+    def __iter__(self):
+        yield from self._generator
+
+    def read_one(self):
+        """Read the next (or first) item."""
+        return next(iter(self._generator))
+
+    def _map(self, func: Callable, iterable: Iterable) -> Iterable[PeriodicSet]:
+        """Iterates over iterable, passing items through parser and yielding the result.
+        Applies warning and include_if filters, catches bad structures and warns.
+        """
+
+        if not self.show_warnings:
+            warnings.simplefilter('ignore')
+        
+        for item in iterable:
+            
+            with warnings.catch_warnings(record=True) as warning_msgs:
+
+                if any(not check(item) for check in self.include_if):
+                    continue
+
+                parse_failed = False
+                try:
+                    periodic_set = func(item)
+                except ParseError as err:
+                    parse_failed = str(err)
+
+            if parse_failed:
+                warnings.warn(parse_failed)
+                continue
+
+            for warning in warning_msgs:
+                msg = f'{periodic_set.name}: {warning.message}'
+                warnings.warn(msg, category=warning.category)
+
+            if self.current_filename:
+                periodic_set.tags['filename'] = self.current_filename
+
+            for key, extractor_func in self.extract_data.items():
+                periodic_set.tags[key] = extractor_func(item)
+
+            yield periodic_set
 
 
-class CifReader:
+class CifReader(_Reader):
     """Read all structures in a .CIF with ``ase`` or ``ccdc``
     (``csd-python-api`` only), yielding  :class:`.periodicset.PeriodicSet`
     objects which can be passed to :func:`.calculate.AMD` or
@@ -73,20 +165,27 @@ class CifReader:
             amds = [amd.AMD(periodic_set, 100) for periodic_set in amd.CifReader('mycif.cif')]
     """
 
-    def __init__(self,
-                 path,
-                 reader='ase',
-                 folder=False,
-                 remove_hydrogens=False,
-                 disorder='skip',
-                 heaviest_component=False,
-                 show_warnings=True,
-                 extract_data=None,
-                 include_if=None
+    def __init__(
+            self,
+            path,
+            reader='ase',
+            folder=False,
+            remove_hydrogens=False,
+            disorder='skip',
+            heaviest_component=False,
+            show_warnings=True,
+            extract_data=None,
+            include_if=None
     ):
-  
-        if disorder not in _DISORDER_OPTIONS:
-            raise ValueError(f'disorder parameter {disorder} must be one of {_DISORDER_OPTIONS}')
+        
+        super().__init__(
+            remove_hydrogens=remove_hydrogens,
+            disorder=disorder,
+            heaviest_component=heaviest_component,
+            show_warnings=show_warnings,
+            extract_data=extract_data,
+            include_if=include_if
+        )
 
         if reader not in ('ase', 'ccdc'):
             raise ValueError(f'Invalid reader {reader}; must be ase or ccdc.')
@@ -94,17 +193,10 @@ class CifReader:
         if reader == 'ase' and heaviest_component:
             raise NotImplementedError('Parameter heaviest_component not implimented for ase, only ccdc.')
 
-        extract_data, include_if = _validate_kwargs(extract_data, include_if)
-
-        self.show_warnings = show_warnings
-        self.extract_data = extract_data
-        self.include_if = include_if
-        self.current_filename = None
-
         if reader == 'ase':
             extensions = {'cif'}
             file_parser = ase.io.cif.parse_cif
-            converter = functools.partial(cifblock_to_periodicset, 
+            converter = functools.partial(cifblock_to_periodicset,
                                           remove_hydrogens=remove_hydrogens,
                                           disorder=disorder)
 
@@ -125,13 +217,6 @@ class CifReader:
 
         self._generator = self._map(converter, generator)
 
-    def __iter__(self):
-        yield from self._generator
-
-    def read_one(self):
-        """Read the next (usually first and only) item."""
-        return next(iter(self._generator))
-
     def _folder_generator(self, path, file_parser, extensions):
         for file in os.listdir(path):
             suff = os.path.splitext(file)[1][1:]
@@ -139,41 +224,8 @@ class CifReader:
                 self.current_filename = file
                 yield from file_parser(os.path.join(path, file))
 
-    def _map(self, func: Callable, iterable: Iterable) -> Iterable[PeriodicSet]:
-        """Iterates over iterable, passing items through parser and yielding the result.
-        Applies warning and include_if filters, catches bad structures and warns.
-        """
 
-        for item in iterable:
-
-            with warnings.catch_warnings(record=True) as warning_msgs:
-
-                if not self.show_warnings:
-                    warnings.simplefilter('ignore')
-
-                if any(not check(item) for check in self.include_if):
-                    continue
-
-                try:
-                    periodic_set = func(item)
-                except ParseError as err:
-                    warnings.warn(err, category=UserWarning)
-                    continue
-
-            for warning in warning_msgs:
-                msg = f'{periodic_set.name}: {warning.message}'
-                warnings.warn(msg, category=warning.category)
-
-            if self.current_filename:
-                periodic_set.tags['filename'] = self.current_filename
-
-            for key, func in self.extract_data.items():
-                periodic_set.tags[key] = func(item)
-
-            yield periodic_set
-
-
-class CSDReader:
+class CSDReader(_Reader):
     """Read Entries from the CSD, yielding :class:`.periodicset.PeriodicSet` objects.
 
     The CSDReader returns :class:`.periodicset.PeriodicSet` objects which can be passed
@@ -208,29 +260,29 @@ class CSDReader:
                 amds.append(amd.AMD(periodic_set, 100))
     """
 
-    def __init__(self,
-                 refcodes=None,
-                 families=False,
-                 remove_hydrogens=False,
-                 disorder='skip',
-                 heaviest_component=False,
-                 show_warnings=True,
-                 extract_data=None,
-                 include_if=None,
+    def __init__(
+            self,
+            refcodes=None,
+            families=False,
+            remove_hydrogens=False,
+            disorder='skip',
+            heaviest_component=False,
+            show_warnings=True,
+            extract_data=None,
+            include_if=None,
     ):
+        
+        super().__init__(
+            remove_hydrogens=remove_hydrogens,
+            disorder=disorder,
+            heaviest_component=heaviest_component,
+            show_warnings=show_warnings,
+            extract_data=extract_data,
+            include_if=include_if
+        )
 
         if not _CSD_PYTHON_API_ENABLED:
             raise ImportError('Failed to import csd-python-api; check it is installed and licensed.')
-
-        if disorder not in _DISORDER_OPTIONS:
-            raise ValueError(f'disorder parameter {disorder} must be one of {_DISORDER_OPTIONS}')
-
-        extract_data, include_if = _validate_kwargs(extract_data, include_if)
-
-        self.show_warnings = show_warnings
-        self.extract_data = extract_data
-        self.include_if = include_if
-        self.current_filename = None
 
         if isinstance(refcodes, str) and refcodes.lower() == 'csd':
             refcodes = None
@@ -257,21 +309,14 @@ class CSDReader:
 
         self._entry_reader = ccdc.io.EntryReader('CSD')
 
-        converter = functools.partial(entry_to_periodicset, 
+        converter = functools.partial(entry_to_periodicset,
                                       remove_hydrogens=remove_hydrogens,
                                       disorder=disorder,
                                       heaviest_component=heaviest_component)
-        
+
         generator = self._ccdc_generator(refcodes)
-        
+
         self._generator = self._map(converter, generator)
-
-    def __iter__(self):
-        yield from self._generator
-
-    def read_one(self):
-        """Read the next (usually first and only) item."""
-        return next(iter(self._generator))
 
     def entry(self, refcode: str, **kwargs) -> PeriodicSet:
         """Read a PeriodicSet given any CSD refcode."""
@@ -291,62 +336,33 @@ class CSDReader:
                 try:
                     entry = self._entry_reader.entry(refcode)
                     yield entry
-                except RuntimeError:
+                except RuntimeError:    # if self.show_warnings?
                     warnings.warn(f'Identifier {refcode} not found in database')
 
-    def _map(self, func: Callable, iterable: Iterable) -> Iterable[PeriodicSet]:
-        """Iterates over iterable, passing items through parser and yielding the result.
-        Applies warning and include_if filters, catches bad structures and warns.
-        """
 
-        for item in iterable:
-
-            with warnings.catch_warnings(record=True) as warning_msgs:
-
-                if not self.show_warnings:
-                    warnings.simplefilter('ignore')
-
-                if any(not check(item) for check in self.include_if):
-                    continue
-
-                try:
-                    periodic_set = func(item)
-                except ParseError as err:
-                    warnings.warn(err, category=UserWarning)
-                    continue
-
-            for warning in warning_msgs:
-                msg = f'{periodic_set.name}: {warning.message}'
-                warnings.warn(msg, category=warning.category)
-
-            for key, func in self.extract_data.items():
-                periodic_set.tags[key] = func(item)
-
-            yield periodic_set
-
-
-def entry_to_periodicset(entry,
-                         remove_hydrogens=False,
-                         disorder='skip',
-                         heaviest_component=False
+def entry_to_periodicset(
+        entry,
+        remove_hydrogens=False,
+        disorder='skip',
+        heaviest_component=False
 ) -> PeriodicSet:
     """ccdc.entry.Entry --> PeriodicSet."""
 
     crystal = entry.crystal
 
     if not entry.has_3d_structure:
-        raise ParseError(f'Has no 3D structure')
+        raise ParseError(f'{entry.identifier}: Has no 3D structure')
 
     molecule = crystal.disordered_molecule
 
     if disorder == 'skip':
         if crystal.has_disorder or entry.has_disorder or \
             any(atom_has_disorder(a.label, a.occupancy) for a in molecule.atoms):
-            raise ParseError(f'Has disorder')
+            raise ParseError(f'{entry.identifier}: Has disorder')
 
     elif disorder == 'ordered_sites':
         molecule.remove_atoms(a for a in molecule.atoms
-                                if atom_has_disorder(a.label, a.occupancy))
+                              if atom_has_disorder(a.label, a.occupancy))
 
     if remove_hydrogens:
         molecule.remove_atoms(a for a in molecule.atoms if a.atomic_symbol in 'HD')
@@ -356,7 +372,7 @@ def entry_to_periodicset(entry,
 
     if not molecule.all_atoms_have_sites or \
         any(a.fractional_coordinates is None for a in molecule.atoms):
-        raise ParseError(f'Has atoms without sites')
+        raise ParseError(f'{entry.identifier}: Has atoms without sites')
 
     crystal.molecule = molecule
     asym_atoms = crystal.asymmetric_unit_molecule.atoms
@@ -371,13 +387,13 @@ def entry_to_periodicset(entry,
 
     if disorder != 'all_sites':
         keep_sites = _unique_sites(asym_unit)
-        if np.any(keep_sites == False):
-            warnings.warn(f'May have overlapping sites; duplicates will be removed')
+        if not np.all(keep_sites):
+            warnings.warn(f'{entry.identifier}: May have overlapping sites; duplicates will be removed')
         asym_unit = asym_unit[keep_sites]
         asym_symbols = [sym for sym, keep in zip(asym_symbols, keep_sites) if keep]
 
     if asym_unit.shape[0] == 0:
-        raise ParseError(f'Has no valid sites')
+        raise ParseError(f'{entry.identifier}: Has no valid sites')
     
     frac_motif, asym_inds, multiplicities, inverses = expand_asym_unit(asym_unit, sitesym)
     full_types = [asym_symbols[i] for i in inverses]
@@ -393,20 +409,21 @@ def entry_to_periodicset(entry,
     return PeriodicSet(motif, cell, **tags)
 
 
-def cifblock_to_periodicset(block, 
-                            remove_hydrogens=False,
-                            disorder='skip'
+def cifblock_to_periodicset(
+        block,
+        remove_hydrogens=False,
+        disorder='skip'
 ) -> PeriodicSet:
     """ase.io.cif.CIFBlock --> PeriodicSet."""
 
     cell = block.get_cell().array
 
     # asymmetric unit fractional coords
-    asym_unit = [block.get(name) for name in _ATOM_SITE_FRACT_TAGS]
+    asym_unit = [block.get(name) for name in _Reader._ATOM_SITE_FRACT_TAGS]
     if None in asym_unit:
-        asym_motif = [block.get(name) for name in _ATOM_SITE_CARTN_TAGS]
+        asym_motif = [block.get(name) for name in _Reader._ATOM_SITE_CARTN_TAGS]
         if None in asym_motif:
-            raise ParseError(f'Has no sites')
+            raise ParseError(f'{block.name}: Has no sites')
         asym_unit = np.array(asym_motif) @ np.linalg.inv(cell)
     asym_unit = np.mod(np.array(asym_unit).T, 1)
 
@@ -416,7 +433,7 @@ def cifblock_to_periodicset(block,
         asym_symbols = ['Unknown' for _ in range(len(asym_unit))]
 
     sitesym = ['x,y,z', ]
-    for tag in _SYMOP_TAGS:
+    for tag in _Reader._SYMOP_TAGS:
         if tag in block:
             sitesym = block[tag]
             break
@@ -430,7 +447,7 @@ def cifblock_to_periodicset(block,
     if occupancies is not None:
         if disorder == 'skip':
             if any(atom_has_disorder(lab, occ) for lab, occ in zip(labels, occupancies)):
-                raise ParseError(f'Has disorder')
+                raise ParseError(f'{block.name}: Has disorder')
         elif disorder == 'ordered_sites':
             remove_sites.extend(
                 (i for i, (lab, occ) in enumerate(zip(labels, occupancies))
@@ -444,13 +461,13 @@ def cifblock_to_periodicset(block,
 
     if disorder != 'all_sites':
         keep_sites = _unique_sites(asym_unit)
-        if np.any(keep_sites == False):
-            warnings.warn(f'May have overlapping sites; duplicates will be removed')
+        if not np.all(keep_sites):
+            warnings.warn(f'{block.name}: May have overlapping sites; duplicates will be removed')
         asym_unit = asym_unit[keep_sites]
         asym_symbols = [sym for sym, keep in zip(asym_symbols, keep_sites) if keep]
     
     if asym_unit.shape[0] == 0:
-        raise ParseError(f'Has no valid sites')
+        raise ParseError(f'{block.name}: Has no valid sites')
 
     frac_motif, asym_inds, multiplicities, inverses = expand_asym_unit(asym_unit, sitesym)
     full_types = [asym_symbols[i] for i in inverses]
@@ -467,8 +484,8 @@ def cifblock_to_periodicset(block,
 
 
 def expand_asym_unit(
-    asym_unit: np.ndarray, 
-    sitesym: Sequence[str]
+        asym_unit: np.ndarray, 
+        sitesym: Sequence[str]
 ) -> Tuple[np.ndarray, ...]:
     """
     Asymmetric unit's fractional coords + sitesyms (as strings)
@@ -497,7 +514,8 @@ def expand_asym_unit(
             # check if site_ overlaps with existing sites
             diffs1 = np.abs(site_ - all_sites)
             diffs2 = np.abs(diffs1 - 1)
-            mask = np.all((diffs1 <= _EQUIV_SITE_TOL) | (diffs2 <= _EQUIV_SITE_TOL), axis=-1)
+            mask = np.all((diffs1 <= _Reader._EQUIV_SITE_TOL) | 
+                          (diffs2 <= _Reader._EQUIV_SITE_TOL), axis=-1)
 
             if np.any(mask):
                 where_equal = np.argwhere(mask).flatten()
@@ -529,7 +547,8 @@ def _unique_sites(asym_unit):
     site_diffs1 = np.abs(asym_unit[:, None] - asym_unit)
     site_diffs2 = np.abs(site_diffs1 - 1)
     overlapping = np.triu(np.all(
-        (site_diffs1 <= _EQUIV_SITE_TOL) | (site_diffs2 <= _EQUIV_SITE_TOL),
+        (site_diffs1 <= _Reader._EQUIV_SITE_TOL) | 
+        (site_diffs2 <= _Reader._EQUIV_SITE_TOL),
         axis=-1), 1)
     return ~overlapping.any(axis=0)
 
@@ -553,11 +572,11 @@ def _heaviest_component(molecule):
 
 
 def _validate_kwargs(extract_data, include_if):
-    
+
     reserved_tags = {'motif', 'cell', 'name',
                      'asymmetric_unit', 'wyckoff_multiplicities',
                      'types', 'filename'}
-    
+
     if extract_data is None:
         extract_data = {}
     else:
@@ -568,13 +587,10 @@ def _validate_kwargs(extract_data, include_if):
                 raise ValueError('extract_data must be a dict of callables')
             if key in reserved_tags:
                 raise ValueError(f'extract_data includes reserved key {key}')
-        extract_data = extract_data
 
     if include_if is None:
         include_if = ()
     elif not all(callable(func) for func in include_if):
         raise ValueError('include_if must be a list of callables')
-    else:
-        include_if = include_if
 
     return extract_data, include_if

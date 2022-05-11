@@ -30,8 +30,6 @@ class SetWriter:
     Read the crystals back from the file with :class:`SetReader`.
     """
 
-    _str_dtype = h5py.vlen_dtype(str)
-
     def __init__(self, filename: str):
 
         self.file = h5py.File(filename, 'w', track_order=True)
@@ -77,7 +75,7 @@ class SetWriter:
                         data = [str(d) for d in data]
                         tags_group.create_dataset(tag,
                                                   data=data,
-                                                  dtype=SetWriter._str_dtype)
+                                                  dtype=h5py.vlen_dtype(str))
                     else:    # other lists must be castable to ndarray
                         data = np.asarray(data)
                         tags_group.create_dataset(tag, data=np.array(data))

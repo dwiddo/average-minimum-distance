@@ -5,8 +5,8 @@ from typing import List, Optional, Union
 import warnings
 
 import numpy as np
-import scipy.spatial    # cdist, pdist, squareform
-import scipy.optimize   # linear_sum_assignment
+import scipy.spatial
+import scipy.optimize
 
 from ._network_simplex import network_simplex
 from .utils import ETA
@@ -46,7 +46,7 @@ def EMD(
         Thrown if the two PDDs do not have the
         same number of columns (``k`` value).
     """
-
+    # put kwargs back! make sure it works with amd_extras, everywhere EMD is used!
     dm = scipy.spatial.distance.cdist(pdd[:, 1:], pdd_[:, 1:], metric=metric, **kwargs)
     emd_dist, transport_plan = network_simplex(pdd[:, 0], pdd_[:, 0], dm)
 
