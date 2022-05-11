@@ -26,18 +26,18 @@ author = 'Daniel Widdowson'
 release = '1.2.1'
 
 MOCK_MODULES = [
-    'numba',
-    'scipy',
-    'scipy.spatial',
-    'scipy.special',
-    'scipy.optimize',
-    'scipy.spatial.distance',
-    'scipy.sparse',
-    'scipy.sparse.csgraph',
-    'ase',
-    'ase.io.cif',
-    'ase.spacegroup.spacegroup',
-    'h5py', 
+    # 'numba',
+    # 'scipy',
+    # 'scipy.spatial',
+    # 'scipy.special',
+    # 'scipy.optimize',
+    # 'scipy.spatial.distance',
+    # 'scipy.sparse',
+    # 'scipy.sparse.csgraph',
+    # 'ase',
+    # 'ase.io.cif',
+    # 'ase.spacegroup.spacegroup',
+    # 'h5py', 
     'ccdc',
     'ccdc.io',
     'ccdc.search'
@@ -83,8 +83,8 @@ exclude_patterns = []
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 
-html_theme = 'sphinx_rtd_dark_mode'
-default_dark_mode = False
+html_theme = 'sphinx_rtd_theme'
+default_dark_mode = True
 
 html_sidebars = { 
     '**': [
