@@ -1,38 +1,17 @@
-
-
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
   <meta charset="utf-8" />
-  
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  
   <title>Using PDDs &mdash; average-minimum-distance 1.2.1 documentation</title>
-  
-
-  
-  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  <link rel="stylesheet" href="_static/dark_mode_css/general.css" type="text/css" />
-  <link rel="stylesheet" href="_static/dark_mode_css/dark.css" type="text/css" />
-
-  
-  
-
-  
-  
-
-  
-
-  
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="_static/dark_mode_css/general.css" type="text/css" />
+      <link rel="stylesheet" href="_static/dark_mode_css/dark.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-    
-      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
         <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
         <script src="_static/jquery.js"></script>
         <script src="_static/underscore.js"></script>
@@ -40,39 +19,20 @@
         <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
         <script src="_static/dark_mode_js/default_light.js"></script>
         <script src="_static/dark_mode_js/theme_switcher.js"></script>
-    
-    <script type="text/javascript" src="_static/js/theme.js"></script>
-
-    
+    <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Miscellaneous" href="miscellaneous.html" />
     <link rel="prev" title="Using AMDs" href="AMDs.html" /> 
 </head>
 
-<body class="wy-body-for-nav">
-
-   
+<body class="wy-body-for-nav"> 
   <div class="wy-grid-for-nav">
-    
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-          
-
-          
             <a href="index.html" class="icon icon-home"> average-minimum-distance
-          
-
-          
           </a>
-
-          
-            
-            
-          
-
-          
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" />
@@ -80,18 +40,7 @@
     <input type="hidden" name="area" value="default" />
   </form>
 </div>
-
-          
-        </div>
-
-        
-        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
-          
-            
-            
-              
-            
-            
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption"><span class="caption-text">Common tasks</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="reading%20cifs.html">Reading .CIFs</a></li>
@@ -119,75 +68,34 @@
 <li class="toctree-l1"><a class="reference internal" href="amd.utils.html">amd.utils module</a></li>
 </ul>
 
-            
-          
         </div>
-        
       </div>
     </nav>
 
-    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
-
-      
-      <nav class="wy-nav-top" aria-label="top navigation">
-        
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
           <a href="index.html">average-minimum-distance</a>
-        
       </nav>
 
-
       <div class="wy-nav-content">
-        
         <div class="rst-content">
-        
-          
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<div role="navigation" aria-label="breadcrumbs navigation">
-
+          <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-    
       <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
-        
       <li>Using PDDs</li>
-    
-    
       <li class="wy-breadcrumbs-aside">
-        
-          
             <a href="_sources/PDDs.rst.txt" rel="nofollow"> View page source</a>
-          
-        
       </li>
-    
   </ul>
-
-  
   <hr/>
 </div>
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
-            
+             
   <div class="section" id="using-pdds">
-<h1>Using PDDs<a class="headerlink" href="#using-pdds" title="Permalink to this headline">¶</a></h1>
+<h1>Using PDDs<a class="headerlink" href="#using-pdds" title="Permalink to this headline"></a></h1>
 <div class="section" id="calculating-pdds">
-<h2>Calculating PDDs<a class="headerlink" href="#calculating-pdds" title="Permalink to this headline">¶</a></h2>
+<h2>Calculating PDDs<a class="headerlink" href="#calculating-pdds" title="Permalink to this headline"></a></h2>
 <p>The PDD (pointwise distance distribution) of a crystal is given by <code class="docutils literal notranslate"><span class="pre">amd.PDD()</span></code>.
 It accepts a crystal and an integer k, returning the <span class="math notranslate nohighlight">\(\text{PDD}_k\)</span> as a matrix
 with k+1 columns, the weights of each row being in the first column.</p>
@@ -210,7 +118,7 @@ arrays, in Cartesian form. Examples:</p>
 </div>
 <p>Each PDD returned by <code class="docutils literal notranslate"><span class="pre">amd.PDD(c,</span> <span class="pre">k)</span></code> is a matrix with <code class="docutils literal notranslate"><span class="pre">k+1</span></code> columns.</p>
 <div class="section" id="calculation-options">
-<h3>Calculation options<a class="headerlink" href="#calculation-options" title="Permalink to this headline">¶</a></h3>
+<h3>Calculation options<a class="headerlink" href="#calculation-options" title="Permalink to this headline"></a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">amd.PDD</span></code> accepts a few optional arguments (not relevant to <code class="docutils literal notranslate"><span class="pre">amd.AMD</span></code>):</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">amd</span><span class="o">.</span><span class="n">PDD</span><span class="p">(</span><span class="n">periodic_set</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">collapse</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">collapse_tol</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">)</span>
 </pre></div>
@@ -224,7 +132,7 @@ PDDs; but the Earth mover’s distance between the PDDs would still be 0.</p>
 </div>
 </div>
 <div class="section" id="comparing-by-pdd">
-<h2>Comparing by PDD<a class="headerlink" href="#comparing-by-pdd" title="Permalink to this headline">¶</a></h2>
+<h2>Comparing by PDD<a class="headerlink" href="#comparing-by-pdd" title="Permalink to this headline"></a></h2>
 <p>The <a class="reference external" href="https://en.wikipedia.org/wiki/Earth_mover%27s_distance">Earth mover’s distance</a> is
 an appropriate metric to compare PDDs, and the <a class="reference internal" href="amd.compare.html#module-amd.compare" title="amd.compare"><code class="xref py py-mod docutils literal notranslate"><span class="pre">amd.compare</span></code></a> module has functions
 for these comparisons.</p>
@@ -255,7 +163,7 @@ an optional argument <code class="docutils literal notranslate"><span class="pre
 The metric used to compare PDD matrices is always Earth mover’s distance, but this still requires another metric
 between the rows of PDDs (so there’s a different Earth mover’s distance for each choice of metric).</p>
 <div class="section" id="comparison-options">
-<h3>Comparison options<a class="headerlink" href="#comparison-options" title="Permalink to this headline">¶</a></h3>
+<h3>Comparison options<a class="headerlink" href="#comparison-options" title="Permalink to this headline"></a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">amd.PDD_cdist</span></code> and <code class="docutils literal notranslate"><span class="pre">amd.PDD_pdist</span></code> share the following optional arguments:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">metric</span></code> chooses the metric used for comparison of PDD rows, as explained above. See scipy’s cdist/pdist for a list of accepted metrics.</p></li>
@@ -268,50 +176,33 @@ between the rows of PDDs (so there’s a different Earth mover’s distance for 
 
 
            </div>
-           
           </div>
-          <footer>
-    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
-        <a href="miscellaneous.html" class="btn btn-neutral float-right" title="Miscellaneous" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="AMDs.html" class="btn btn-neutral float-left" title="Using AMDs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="miscellaneous.html" class="btn btn-neutral float-right" title="Miscellaneous" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
 
   <div role="contentinfo">
-    <p>
-        &#169; Copyright 2022, Daniel Widdowson.
-
-    </p>
+    <p>&#169; Copyright 2022, Daniel Widdowson.</p>
   </div>
-    
-    
-    
-    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
-    
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
     <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
-    
-    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
 
 </footer>
         </div>
       </div>
-
     </section>
-
   </div>
-  
-
-  <script type="text/javascript">
+  <script>
       jQuery(function () {
           SphinxRtdTheme.Navigation.enable(true);
       });
-  </script>
-
-  
-  
-    
-   
+  </script> 
 
 </body>
 </html>

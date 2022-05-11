@@ -1,77 +1,37 @@
-
-
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
   <meta charset="utf-8" />
-  
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  
   <title>amd.io module &mdash; average-minimum-distance 1.2.1 documentation</title>
-  
-
-  
-  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  <link rel="stylesheet" href="_static/dark_mode_css/general.css" type="text/css" />
-  <link rel="stylesheet" href="_static/dark_mode_css/dark.css" type="text/css" />
-
-  
-  
-
-  
-  
-
-  
-
-  
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="_static/dark_mode_css/general.css" type="text/css" />
+      <link rel="stylesheet" href="_static/dark_mode_css/dark.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-    
-      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
         <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
         <script src="_static/jquery.js"></script>
         <script src="_static/underscore.js"></script>
         <script src="_static/doctools.js"></script>
         <script src="_static/dark_mode_js/default_light.js"></script>
         <script src="_static/dark_mode_js/theme_switcher.js"></script>
-    
-    <script type="text/javascript" src="_static/js/theme.js"></script>
-
-    
+    <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="amd.periodicset module" href="amd.periodicset.html" />
     <link rel="prev" title="amd.compare module" href="amd.compare.html" /> 
 </head>
 
-<body class="wy-body-for-nav">
-
-   
+<body class="wy-body-for-nav"> 
   <div class="wy-grid-for-nav">
-    
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-          
-
-          
             <a href="index.html" class="icon icon-home"> average-minimum-distance
-          
-
-          
           </a>
-
-          
-            
-            
-          
-
-          
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" />
@@ -79,18 +39,7 @@
     <input type="hidden" name="area" value="default" />
   </form>
 </div>
-
-          
-        </div>
-
-        
-        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
-          
-            
-            
-              
-            
-            
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption"><span class="caption-text">Common tasks</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="reading%20cifs.html">Reading .CIFs</a></li>
@@ -108,73 +57,32 @@
 <li class="toctree-l1"><a class="reference internal" href="amd.utils.html">amd.utils module</a></li>
 </ul>
 
-            
-          
         </div>
-        
       </div>
     </nav>
 
-    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
-
-      
-      <nav class="wy-nav-top" aria-label="top navigation">
-        
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
           <a href="index.html">average-minimum-distance</a>
-        
       </nav>
 
-
       <div class="wy-nav-content">
-        
         <div class="rst-content">
-        
-          
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<div role="navigation" aria-label="breadcrumbs navigation">
-
+          <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-    
       <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
-        
       <li>amd.io module</li>
-    
-    
       <li class="wy-breadcrumbs-aside">
-        
-          
             <a href="_sources/amd.io.rst.txt" rel="nofollow"> View page source</a>
-          
-        
       </li>
-    
   </ul>
-
-  
   <hr/>
 </div>
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
-            
+             
   <div class="section" id="module-amd.io">
-<span id="amd-io-module"></span><h1>amd.io module<a class="headerlink" href="#module-amd.io" title="Permalink to this headline">¶</a></h1>
+<span id="amd-io-module"></span><h1>amd.io module<a class="headerlink" href="#module-amd.io" title="Permalink to this headline"></a></h1>
 <p>Contains I/O tools, including a .CIF reader and CSD reader
 (<code class="docutils literal notranslate"><span class="pre">csd-python-api</span></code> only) to extract periodic set representations
 of crystals which can be passed to <a class="reference internal" href="amd.calculate.html#amd.calculate.AMD" title="amd.calculate.AMD"><code class="xref py py-func docutils literal notranslate"><span class="pre">calculate.AMD()</span></code></a> and <a class="reference internal" href="amd.calculate.html#amd.calculate.PDD" title="amd.calculate.PDD"><code class="xref py py-func docutils literal notranslate"><span class="pre">calculate.PDD()</span></code></a>.</p>
@@ -183,14 +91,14 @@ to a .hdf5 file with <code class="xref py py-class docutils literal notranslate"
 This is much faster than rereading a .CIF and recomputing invariants.</p>
 <dl class="py exception">
 <dt class="sig sig-object py" id="amd.io.ParseError">
-<em class="property"><span class="pre">exception</span> </em><span class="sig-prename descclassname"><span class="pre">amd.io.</span></span><span class="sig-name descname"><span class="pre">ParseError</span></span><a class="headerlink" href="#amd.io.ParseError" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">exception</span> </em><span class="sig-prename descclassname"><span class="pre">amd.io.</span></span><span class="sig-name descname"><span class="pre">ParseError</span></span><a class="headerlink" href="#amd.io.ParseError" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code></p>
 <p>Raised when an item cannot be parsed into a periodic set.</p>
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="amd.io.CifReader">
-<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">amd.io.</span></span><span class="sig-name descname"><span class="pre">CifReader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reader</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'ase'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">folder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_hydrogens</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">disorder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'skip'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">heaviest_component</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_warnings</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extract_data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_if</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#amd.io.CifReader" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">amd.io.</span></span><span class="sig-name descname"><span class="pre">CifReader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reader</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'ase'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">folder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_hydrogens</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">disorder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'skip'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">heaviest_component</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_warnings</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extract_data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_if</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#amd.io.CifReader" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">amd.io._Reader</span></code></p>
 <p>Read all structures in a .CIF with <code class="docutils literal notranslate"><span class="pre">ase</span></code> or <code class="docutils literal notranslate"><span class="pre">ccdc</span></code>
 (<code class="docutils literal notranslate"><span class="pre">csd-python-api</span></code> only), yielding  <a class="reference internal" href="amd.periodicset.html#amd.periodicset.PeriodicSet" title="amd.periodicset.PeriodicSet"><code class="xref py py-class docutils literal notranslate"><span class="pre">periodicset.PeriodicSet</span></code></a>
@@ -214,7 +122,7 @@ objects which can be passed to <a class="reference internal" href="amd.calculate
 
 <dl class="py class">
 <dt class="sig sig-object py" id="amd.io.CSDReader">
-<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">amd.io.</span></span><span class="sig-name descname"><span class="pre">CSDReader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">refcodes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">families</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_hydrogens</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">disorder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'skip'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">heaviest_component</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_warnings</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extract_data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_if</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#amd.io.CSDReader" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">amd.io.</span></span><span class="sig-name descname"><span class="pre">CSDReader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">refcodes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">families</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_hydrogens</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">disorder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'skip'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">heaviest_component</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_warnings</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extract_data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_if</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#amd.io.CSDReader" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">amd.io._Reader</span></code></p>
 <p>Read Entries from the CSD, yielding <a class="reference internal" href="amd.periodicset.html#amd.periodicset.PeriodicSet" title="amd.periodicset.PeriodicSet"><code class="xref py py-class docutils literal notranslate"><span class="pre">periodicset.PeriodicSet</span></code></a> objects.</p>
 <p>The CSDReader returns <a class="reference internal" href="amd.periodicset.html#amd.periodicset.PeriodicSet" title="amd.periodicset.PeriodicSet"><code class="xref py py-class docutils literal notranslate"><span class="pre">periodicset.PeriodicSet</span></code></a> objects which can be passed
@@ -248,7 +156,7 @@ to <a class="reference internal" href="amd.calculate.html#amd.calculate.AMD" tit
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="amd.io.CSDReader.entry">
-<span class="sig-name descname"><span class="pre">entry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">refcode</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="amd.periodicset.html#amd.periodicset.PeriodicSet" title="amd.periodicset.PeriodicSet"><span class="pre">amd.periodicset.PeriodicSet</span></a><a class="headerlink" href="#amd.io.CSDReader.entry" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">entry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">refcode</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="amd.periodicset.html#amd.periodicset.PeriodicSet" title="amd.periodicset.PeriodicSet"><span class="pre">amd.periodicset.PeriodicSet</span></a><a class="headerlink" href="#amd.io.CSDReader.entry" title="Permalink to this definition"></a></dt>
 <dd><p>Read a PeriodicSet given any CSD refcode.</p>
 </dd></dl>
 
@@ -256,19 +164,19 @@ to <a class="reference internal" href="amd.calculate.html#amd.calculate.AMD" tit
 
 <dl class="py function">
 <dt class="sig sig-object py" id="amd.io.entry_to_periodicset">
-<span class="sig-prename descclassname"><span class="pre">amd.io.</span></span><span class="sig-name descname"><span class="pre">entry_to_periodicset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_hydrogens</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">disorder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'skip'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">heaviest_component</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="amd.periodicset.html#amd.periodicset.PeriodicSet" title="amd.periodicset.PeriodicSet"><span class="pre">amd.periodicset.PeriodicSet</span></a><a class="headerlink" href="#amd.io.entry_to_periodicset" title="Permalink to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">amd.io.</span></span><span class="sig-name descname"><span class="pre">entry_to_periodicset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_hydrogens</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">disorder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'skip'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">heaviest_component</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="amd.periodicset.html#amd.periodicset.PeriodicSet" title="amd.periodicset.PeriodicSet"><span class="pre">amd.periodicset.PeriodicSet</span></a><a class="headerlink" href="#amd.io.entry_to_periodicset" title="Permalink to this definition"></a></dt>
 <dd><p>ccdc.entry.Entry –&gt; PeriodicSet.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="amd.io.cifblock_to_periodicset">
-<span class="sig-prename descclassname"><span class="pre">amd.io.</span></span><span class="sig-name descname"><span class="pre">cifblock_to_periodicset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">block</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_hydrogens</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">disorder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'skip'</span></span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="amd.periodicset.html#amd.periodicset.PeriodicSet" title="amd.periodicset.PeriodicSet"><span class="pre">amd.periodicset.PeriodicSet</span></a><a class="headerlink" href="#amd.io.cifblock_to_periodicset" title="Permalink to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">amd.io.</span></span><span class="sig-name descname"><span class="pre">cifblock_to_periodicset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">block</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_hydrogens</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">disorder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'skip'</span></span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="amd.periodicset.html#amd.periodicset.PeriodicSet" title="amd.periodicset.PeriodicSet"><span class="pre">amd.periodicset.PeriodicSet</span></a><a class="headerlink" href="#amd.io.cifblock_to_periodicset" title="Permalink to this definition"></a></dt>
 <dd><p>ase.io.cif.CIFBlock –&gt; PeriodicSet.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="amd.io.expand_asym_unit">
-<span class="sig-prename descclassname"><span class="pre">amd.io.</span></span><span class="sig-name descname"><span class="pre">expand_asym_unit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">asym_unit</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sitesym</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#amd.io.expand_asym_unit" title="Permalink to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">amd.io.</span></span><span class="sig-name descname"><span class="pre">expand_asym_unit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">asym_unit</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sitesym</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#amd.io.expand_asym_unit" title="Permalink to this definition"></a></dt>
 <dd><p>Asymmetric unit’s fractional coords + sitesyms (as strings)
 –&gt;
 frac motif, asym unit inds, multiplicities, inverses</p>
@@ -276,57 +184,40 @@ frac motif, asym unit inds, multiplicities, inverses</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="amd.io.atom_has_disorder">
-<span class="sig-prename descclassname"><span class="pre">amd.io.</span></span><span class="sig-name descname"><span class="pre">atom_has_disorder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">occupancy</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#amd.io.atom_has_disorder" title="Permalink to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">amd.io.</span></span><span class="sig-name descname"><span class="pre">atom_has_disorder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">occupancy</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#amd.io.atom_has_disorder" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
 </div>
 
 
            </div>
-           
           </div>
-          <footer>
-    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
-        <a href="amd.periodicset.html" class="btn btn-neutral float-right" title="amd.periodicset module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="amd.compare.html" class="btn btn-neutral float-left" title="amd.compare module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="amd.periodicset.html" class="btn btn-neutral float-right" title="amd.periodicset module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
 
   <div role="contentinfo">
-    <p>
-        &#169; Copyright 2022, Daniel Widdowson.
-
-    </p>
+    <p>&#169; Copyright 2022, Daniel Widdowson.</p>
   </div>
-    
-    
-    
-    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
-    
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
     <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
-    
-    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
 
 </footer>
         </div>
       </div>
-
     </section>
-
   </div>
-  
-
-  <script type="text/javascript">
+  <script>
       jQuery(function () {
           SphinxRtdTheme.Navigation.enable(true);
       });
-  </script>
-
-  
-  
-    
-   
+  </script> 
 
 </body>
 </html>
