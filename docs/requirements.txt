@@ -2,6 +2,6 @@ mock==4.0.3
 m2r2==0.3.1
 mistune==0.8.4
 numpy==1.21
-sphinx==4.0.2
+Sphinx==4.0.2
 sphinx-rtd-theme==0.5.2
 sphinx-rtd-dark-mode==1.2.4
