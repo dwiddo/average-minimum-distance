@@ -1,4 +1,4 @@
-"""Functions for calculating AMDs and PDDs (and SDDs) of periodic and finite sets.
+"""Functions for calculating AMDs and PDDs of periodic and finite sets.
 """
 
 from typing import Union, Tuple
@@ -8,9 +8,9 @@ import numpy as np
 import scipy.spatial
 import scipy.special
 
-from ._nearest_neighbours import nearest_neighbours, nearest_neighbours_minval
+from . import _nearest_neighbours
+from . import utils
 from .periodicset import PeriodicSet
-from .utils import diameter
 
 PeriodicSet_or_Tuple = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
 
@@ -54,7 +54,7 @@ def AMD(periodic_set: PeriodicSet_or_Tuple, k: int) -> np.ndarray:
     """
 
     motif, cell, asymmetric_unit, multiplicities = _extract_motif_and_cell(periodic_set)
-    pdd, _, _ = nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
+    pdd, _, _ = _nearest_neighbours.nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
     return np.average(pdd, axis=0, weights=multiplicities)
 
 
@@ -113,7 +113,7 @@ def PDD(
     """
 
     motif, cell, asymmetric_unit, multiplicities = _extract_motif_and_cell(periodic_set)
-    dists, _, _ = nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
+    dists, _, _ = _nearest_neighbours.nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
 
     if multiplicities is None:
         weights = np.full((motif.shape[0], ), 1 / motif.shape[0])
@@ -163,7 +163,7 @@ def AMD_finite(motif: np.ndarray) -> np.ndarray:
 
     Examples
     --------
-    Find AMD distance between finite trapezium and kite point sets::
+    Find L-infinity AMD distance between finite trapezium and kite point sets::
 
         trapezium = np.array([[0,0],[1,1],[3,1],[4,0]])
         kite      = np.array([[0,0],[1,1],[1,-1],[4,0]])
@@ -171,10 +171,12 @@ def AMD_finite(motif: np.ndarray) -> np.ndarray:
         trap_amd = amd.AMD_finite(trapezium)
         kite_amd = amd.AMD_finite(kite)
 
-        dist = amd.AMD_pdist(trap_amd, kite_amd)
+        l_inf_dist = np.amax(np.abs(trap_amd - kite_amd))
     """
 
-    dm = np.sort(scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(motif)), axis=-1)[:, 1:]
+    dm = np.sort(scipy.spatial.distance.squareform(
+                 scipy.spatial.distance.pdist(motif)), 
+                 axis=-1)[:, 1:]
     return np.average(dm, axis=0)
 
 
@@ -213,7 +215,7 @@ def PDD_finite(
         trap_pdd = amd.PDD_finite(trapezium)
         kite_pdd = amd.PDD_finite(kite)
 
-        dist = amd.emd(trap_pdd, kite_pdd)
+        dist = amd.EMD(trap_pdd, kite_pdd)
     """
 
     dm = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(motif))
@@ -291,8 +293,8 @@ def PDD_reconstructable(
     if dims not in (2, 3):
         raise ValueError('Reconstructing from PDD only implemented for 2 and 3 dimensions')
 
-    min_val = diameter(cell) * 2
-    pdd = nearest_neighbours_minval(motif, cell, min_val)
+    min_val = utils.diameter(cell) * 2
+    pdd = _nearest_neighbours.nearest_neighbours_minval(motif, cell, min_val)
 
     if lexsort:
         pdd = pdd[np.lexsort(np.rot90(pdd))]
@@ -398,6 +400,7 @@ def _collapse_rows(weights, dists, collapse_tol):
 
 
 def _group_overlapping_and_sum_weights(weights, overlapping):
+
     if np.triu(overlapping, 1).any():
         groups = {}
         group = 0

@@ -31,7 +31,6 @@ class SetWriter:
     """
 
     def __init__(self, filename: str):
-
         self.file = h5py.File(filename, 'w', track_order=True)
 
     def write(self, periodic_set: PeriodicSet, name: Optional[str] = None):
@@ -45,7 +44,7 @@ class SetWriter:
         if name is None:
             if periodic_set.name is None:
                 raise ValueError(
-                    'Periodic set must have a name to be written. Either set the name '
+                    'PeriodicSet must have a name to be written. Either set the name '
                     'attribute of the PeriodicSet or pass a name to SetWriter.write()')
             name = periodic_set.name
 

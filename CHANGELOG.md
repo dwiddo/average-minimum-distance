@@ -4,13 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [1.2.1] - 14/04/2022
 
-### Fixed
+### Changed
+
+- Readers now read atomic numbers rather than symbols which are better for checking if types align with Earth mover's distance flows.
 
 - Fixed issue where AMD/PDD calculations were producing a RuntimeWarning from NumPy.
 
 ## Removed
 
 - SDDs removed for now until theory is complete.
+
+- include_if and extract_data removed from readers.
 
 ## [1.2] - 14/04/2022
 

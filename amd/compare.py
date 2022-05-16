@@ -8,8 +8,8 @@ import numpy as np
 import scipy.spatial
 import scipy.optimize
 
-from ._network_simplex import network_simplex
-from .utils import ETA
+from . import _network_simplex
+from . import utils
 
 
 def EMD(
@@ -48,7 +48,7 @@ def EMD(
     """
     # put kwargs back! make sure it works with amd_extras, everywhere EMD is used!
     dm = scipy.spatial.distance.cdist(pdd[:, 1:], pdd_[:, 1:], metric=metric, **kwargs)
-    emd_dist, transport_plan = network_simplex(pdd[:, 0], pdd_[:, 0], dm)
+    emd_dist, transport_plan = _network_simplex.network_simplex(pdd[:, 0], pdd_[:, 0], dm)
 
     if return_transport:
         return emd_dist, transport_plan.reshape(dm.shape)
@@ -190,11 +190,13 @@ def PDD_cdist(
         if len(pdds_.shape) == 2:
             pdds_ = [pdds_]
 
+    kwargs.pop('return_transport', None)
+
     n, m = len(pdds), len(pdds_)
     dm = np.empty((n, m))
     if verbose:
         update_rate = (n * m) // 10000
-        eta = ETA(n * m, update_rate=update_rate)
+        eta = utils.ETA(n * m, update_rate=update_rate)
 
     for i in range(n):
         pdd = pdds[i]
@@ -235,12 +237,14 @@ def PDD_pdist(
         if len(pdds.shape) == 2:
             pdds = [pdds]
 
+    kwargs.pop('return_transport', None)
+
     m = len(pdds)
     cdm_len = (m * (m - 1)) // 2
     cdm = np.empty(cdm_len, dtype=np.double)
     if verbose:
         update_rate = cdm_len // 10000
-        eta = ETA(cdm_len, update_rate=update_rate)
+        eta = utils.ETA(cdm_len, update_rate=update_rate)
     inds = ((i, j) for i in range(0, m - 1) for j in range(i + 1, m))
 
     for r, (i, j) in enumerate(inds):
@@ -257,5 +261,5 @@ def emd(
         metric: Optional[str] = 'chebyshev',
         return_transport: Optional[bool] = False,
         **kwargs):
-    """Alias for amd.emd()."""
+    """Alias for amd.EMD()."""
     return EMD(pdd, pdd_, metric=metric, return_transport=return_transport, **kwargs)

@@ -26,18 +26,6 @@ author = 'Daniel Widdowson'
 release = '1.2.1'
 
 MOCK_MODULES = [
-    # 'numba',
-    # 'scipy',
-    # 'scipy.spatial',
-    # 'scipy.special',
-    # 'scipy.optimize',
-    # 'scipy.spatial.distance',
-    # 'scipy.sparse',
-    # 'scipy.sparse.csgraph',
-    # 'ase',
-    # 'ase.io.cif',
-    # 'ase.spacegroup.spacegroup',
-    # 'h5py', 
     'ccdc',
     'ccdc.io',
     'ccdc.search'
@@ -55,8 +43,6 @@ extensions = [
     'sphinx.ext.autodoc', 
     'sphinx.ext.coverage', 
     'sphinx.ext.napoleon',
-    # 'sphinx.ext.autosummary',
-    # 'rinoh.frontend.sphinx',
     'sphinx_rtd_theme',
     'sphinx_rtd_dark_mode',
     'm2r2',

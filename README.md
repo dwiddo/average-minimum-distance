@@ -19,15 +19,17 @@ If you use our code in your work, cite us with the reference at the bottom of th
 
 A crystal is an arrangement of atoms which periodically repeats in all directions according to some lattice. Crystals are usually given by listing parameters defining the lattice (or unit cell) and the atomic coordinates, e.g. in a .cif file, but this representation is ambiguous because different .cif files can define the same crystal. This package implements new *isometric invariants* based on inter-point distances which are guaranteed to take the same value for all (isometrically) equivalent representations of a crystal, called average minimum distances (AMDs) and point-wise distance distributions (PDDs). They are invariants that are also continuous, meaning crystals which are similar have similar AMDs and PDDs.
 
-### Description of the invariants and comparisons
+### Description of AMD and PDD
 
-A *periodic set* models a crystal with a point in the centre of each atom. The AMD of a structure is an infinite increasing sequence of real numbers calculated from inter-point distances in the periodic set. In contrast, the PDD is a matrix which can have arbitrarily many columns. In practice, both are calculated up to some chosen number k.
+The average minimum distance (AMD) of a crystal is an infinite increasing sequence of numbers calculated from inter-point distances in the crystal. In contrast, the point-wise distance distribution (PDD) is a matrix which can have arbitrarily many columns. In practice, both are calculated up to some chosen number k.
 
-The kth AMD value of a periodic set is the average distance to the k nearest neighbours of points in a unit cell. That is, to find the kth AMD for a periodic set, list distances to the nearest k neighbours in the infinite crystal for every point in a unit cell and average over the points in the unit cell.
+The kth AMD value of a periodic set is the average distance to the kth nearest neighbour over points in a unit cell. That is, to find the AMD for a periodic set up to k, list (in order) distances to the nearest k neighbours (in the infinite periodic set) for every point in a unit cell and average over points in the cell.
 
-The PDD is related to AMD but contains more information as it avoids the averaging step. Again start by and listing distances to the k nearest neighbours in order for each point in a unit cell. Collect all these lists into one matrix with a row for each point. Then order the rows of the matrix as in a dictionary (lexicographically). If any rows are not unique, keep only one but give each a weight proportional to its original frequency, appending the weight to the start of each row to make the first column the weights. The result is the kth PDD of the periodic set.
+The PDD is related to AMD but contains more information as it avoids the averaging step. Like the AMD, start by and listing distances to the k nearest neighbours in order for each point in a unit cell. Collect these lists into one matrix with a row for each point. Then order the rows of the matrix as in a dictionary (lexicographically). If any rows are not unique, keep only one but give each a weight proportional to how many copies there are, appending the weight to the start of each row so the first column contains weights. The result is the kth PDD of the periodic set.
 
-An AMD is just a vector, and so can be compared with any metric as long and k (length of the AMD vector) is the same. The default metric used in the package is L-infinity (aka Chebyshev), since it does not so much accumulate differences in distances across many neighbours. PDDs are matrices with weighted rows, and the appropriate metric for them is *Earth mover's distance* (aka Wasserstein), which itself needs a metric to compare two PDD rows (without weights), L-infinity being the default.
+### Comparing with AMD or PDD
+  
+AMDs are just vectors which can be compared with any metric, as long as k (length of the AMD) is the same. The default metric used in the package is L-infinity (aka Chebyshev), since it does not so much accumulate differences in distances across many neighbours. PDDs are matrices with weighted rows; the appropriate metric to compare them is the *Earth mover's distance* (aka Wasserstein metric), which itself needs a metric to compare two PDD rows (without weights), where L-infinity is again the default.
 
 For a formal description, see our papers listed above. Detailed documentation for this package is [available on readthedocs](https://average-minimum-distance.readthedocs.io/en/latest/).
 
@@ -58,6 +60,10 @@ amds = [amd.AMD(crystal, 100) for crystal in reader]
 *Note: CifReader accepts optional arguments, e.g. for removing hydrogen and handling disorder. See the documentation for details.*
 
 If csd-python-api is installed, CifReader can accept file formats other than cif, and crystals can be read directly from your local CSD database with ```amd.CSDReader```.
+
+### Which k to choose?
+
+The second argument `k` of these functions controls the length of the AMD vector or number of columns of the PDD. It is a free parameter in the process 
 
 ### Comparing AMDs or PDDs
 

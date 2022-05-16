@@ -14,10 +14,11 @@ from typing import Callable, Iterable, Sequence, Tuple
 
 import numpy as np
 import ase.io.cif
+import ase.data
 import ase.spacegroup.spacegroup
 
+from . import utils
 from .periodicset import PeriodicSet
-from .utils import cellpar_to_cell
 
 try:
     import ccdc.io
@@ -46,7 +47,7 @@ _SYMOP_TAGS = [
     '_symmetry_equiv_pos_as_xyz',]
 
 
-class ParseError(ValueError):
+class _ParseError(ValueError):
     """Raised when an item cannot be parsed into a periodic set."""
     pass
 
@@ -74,19 +75,15 @@ class _Reader:
             disorder='skip',
             heaviest_component=False,
             show_warnings=True,
-            extract_data=None,
-            include_if=None):
+    ):
 
         if disorder not in _Reader._DISORDER_OPTIONS:
             raise ValueError(f'disorder parameter {disorder} must be one of {_Reader._DISORDER_OPTIONS}')
 
-        extract_data, include_if = _validate_kwargs(extract_data, include_if)
         self.remove_hydrogens = remove_hydrogens
         self.disorder = disorder
         self.heaviest_component = heaviest_component
         self.show_warnings = show_warnings
-        self.extract_data = extract_data
-        self.include_if = include_if
         self.current_filename = None
         self._generator = []
 
@@ -104,18 +101,15 @@ class _Reader:
 
         if not self.show_warnings:
             warnings.simplefilter('ignore')
-        
-        for item in iterable:
-            
-            with warnings.catch_warnings(record=True) as warning_msgs:
 
-                if any(not check(item) for check in self.include_if):
-                    continue
+        for item in iterable:
+
+            with warnings.catch_warnings(record=True) as warning_msgs:
 
                 parse_failed = False
                 try:
                     periodic_set = func(item)
-                except ParseError as err:
+                except _ParseError as err:
                     parse_failed = str(err)
 
             if parse_failed:
@@ -128,9 +122,6 @@ class _Reader:
 
             if self.current_filename:
                 periodic_set.tags['filename'] = self.current_filename
-
-            for key, extractor_func in self.extract_data.items():
-                periodic_set.tags[key] = extractor_func(item)
 
             yield periodic_set
 
@@ -167,17 +158,13 @@ class CifReader(_Reader):
             disorder='skip',
             heaviest_component=False,
             show_warnings=True,
-            extract_data=None,
-            include_if=None
     ):
-        
+
         super().__init__(
             remove_hydrogens=remove_hydrogens,
             disorder=disorder,
             heaviest_component=heaviest_component,
             show_warnings=show_warnings,
-            extract_data=extract_data,
-            include_if=include_if
         )
 
         if reader not in ('ase', 'ccdc'):
@@ -261,8 +248,6 @@ class CSDReader(_Reader):
             disorder='skip',
             heaviest_component=False,
             show_warnings=True,
-            extract_data=None,
-            include_if=None,
     ):
         
         super().__init__(
@@ -270,8 +255,6 @@ class CSDReader(_Reader):
             disorder=disorder,
             heaviest_component=heaviest_component,
             show_warnings=show_warnings,
-            extract_data=extract_data,
-            include_if=include_if
         )
 
         if not _CSD_PYTHON_API_ENABLED:
@@ -308,7 +291,6 @@ class CSDReader(_Reader):
                                       heaviest_component=heaviest_component)
 
         generator = self._ccdc_generator(refcodes)
-
         self._generator = self._map(converter, generator)
 
     def entry(self, refcode: str, **kwargs) -> PeriodicSet:
@@ -344,18 +326,18 @@ def entry_to_periodicset(
     crystal = entry.crystal
 
     if not entry.has_3d_structure:
-        raise ParseError(f'{entry.identifier}: Has no 3D structure')
+        raise _ParseError(f'{crystal.identifier}: Has no 3D structure')
 
     molecule = crystal.disordered_molecule
 
     if disorder == 'skip':
         if crystal.has_disorder or entry.has_disorder or \
-            any(atom_has_disorder(a.label, a.occupancy) for a in molecule.atoms):
-            raise ParseError(f'{entry.identifier}: Has disorder')
+            any(_atom_has_disorder(a.label, a.occupancy) for a in molecule.atoms):
+            raise _ParseError(f'{crystal.identifier}: Has disorder')
 
     elif disorder == 'ordered_sites':
         molecule.remove_atoms(a for a in molecule.atoms
-                              if atom_has_disorder(a.label, a.occupancy))
+                              if _atom_has_disorder(a.label, a.occupancy))
 
     if remove_hydrogens:
         molecule.remove_atoms(a for a in molecule.atoms if a.atomic_symbol in 'HD')
@@ -365,14 +347,14 @@ def entry_to_periodicset(
 
     if not molecule.all_atoms_have_sites or \
         any(a.fractional_coordinates is None for a in molecule.atoms):
-        raise ParseError(f'{entry.identifier}: Has atoms without sites')
+        raise _ParseError(f'{crystal.identifier}: Has atoms without sites')
 
     crystal.molecule = molecule
     asym_atoms = crystal.asymmetric_unit_molecule.atoms
     asym_unit = np.array([tuple(a.fractional_coordinates) for a in asym_atoms])
     asym_unit = np.mod(asym_unit, 1)
-    asym_symbols = [a.atomic_symbol for a in asym_atoms]
-    cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
+    asym_types = [a.atomic_number for a in asym_atoms]
+    cell = utils.cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
 
     sitesym = crystal.symmetry_operators
     if not sitesym:
@@ -381,22 +363,22 @@ def entry_to_periodicset(
     if disorder != 'all_sites':
         keep_sites = _unique_sites(asym_unit)
         if not np.all(keep_sites):
-            warnings.warn(f'{entry.identifier}: May have overlapping sites; duplicates will be removed')
+            warnings.warn(f'{crystal.identifier}: May have overlapping sites; duplicates will be removed')
         asym_unit = asym_unit[keep_sites]
-        asym_symbols = [sym for sym, keep in zip(asym_symbols, keep_sites) if keep]
+        asym_types = [sym for sym, keep in zip(asym_types, keep_sites) if keep]
 
     if asym_unit.shape[0] == 0:
-        raise ParseError(f'{entry.identifier}: Has no valid sites')
+        raise _ParseError(f'{crystal.identifier}: Has no valid sites')
     
     frac_motif, asym_inds, multiplicities, inverses = expand_asym_unit(asym_unit, sitesym)
-    full_types = [asym_symbols[i] for i in inverses]
+    full_types = np.array([asym_types[i] for i in inverses])
     motif = frac_motif @ cell
 
     tags = {
-        'name': entry.identifier,
+        'name': crystal.identifier,
         'asymmetric_unit': asym_inds,
         'wyckoff_multiplicities': multiplicities,
-        'types': full_types,
+        'types': full_types
     }
 
     return PeriodicSet(motif, cell, **tags)
@@ -416,14 +398,14 @@ def cifblock_to_periodicset(
     if None in asym_unit:
         asym_motif = [block.get(name) for name in _ATOM_SITE_CARTN_TAGS]
         if None in asym_motif:
-            raise ParseError(f'{block.name}: Has no sites')
+            raise _ParseError(f'{block.name}: Has no sites')
         asym_unit = np.array(asym_motif) @ np.linalg.inv(cell)
     asym_unit = np.mod(np.array(asym_unit).T, 1)
 
     try:
-        asym_symbols = block.get_symbols()
+        asym_types = [ase.data.atomic_numbers[s] for s in block.get_symbols()]
     except ase.io.cif.NoStructureData as _:
-        asym_symbols = ['Unknown' for _ in range(len(asym_unit))]
+        asym_types = [0 for _ in range(len(asym_unit))]
 
     sitesym = ['x,y,z', ]
     for tag in _SYMOP_TAGS:
@@ -439,51 +421,51 @@ def cifblock_to_periodicset(
     labels = block.get('_atom_site_label')
     if occupancies is not None:
         if disorder == 'skip':
-            if any(atom_has_disorder(lab, occ) for lab, occ in zip(labels, occupancies)):
-                raise ParseError(f'{block.name}: Has disorder')
+            if any(_atom_has_disorder(lab, occ) for lab, occ in zip(labels, occupancies)):
+                raise _ParseError(f'{block.name}: Has disorder')
         elif disorder == 'ordered_sites':
             remove_sites.extend(
                 (i for i, (lab, occ) in enumerate(zip(labels, occupancies))
-                    if atom_has_disorder(lab, occ)))
+                    if _atom_has_disorder(lab, occ)))
 
     if remove_hydrogens:
-        remove_sites.extend((i for i, sym in enumerate(asym_symbols) if sym in 'HD'))
+        remove_sites.extend((i for i, sym in enumerate(asym_types) if sym in 'HD'))
 
     asym_unit = np.delete(asym_unit, remove_sites, axis=0)
-    asym_symbols = [s for i, s in enumerate(asym_symbols) if i not in remove_sites]
+    asym_types = [s for i, s in enumerate(asym_types) if i not in remove_sites]
 
     if disorder != 'all_sites':
         keep_sites = _unique_sites(asym_unit)
         if not np.all(keep_sites):
             warnings.warn(f'{block.name}: May have overlapping sites; duplicates will be removed')
         asym_unit = asym_unit[keep_sites]
-        asym_symbols = [sym for sym, keep in zip(asym_symbols, keep_sites) if keep]
+        asym_types = [sym for sym, keep in zip(asym_types, keep_sites) if keep]
     
     if asym_unit.shape[0] == 0:
-        raise ParseError(f'{block.name}: Has no valid sites')
+        raise _ParseError(f'{block.name}: Has no valid sites')
 
     frac_motif, asym_inds, multiplicities, inverses = expand_asym_unit(asym_unit, sitesym)
-    full_types = [asym_symbols[i] for i in inverses]
+    full_types = np.array([asym_types[i] for i in inverses])
     motif = frac_motif @ cell
 
     tags = {
         'name': block.name,
         'asymmetric_unit': asym_inds,
         'wyckoff_multiplicities': multiplicities,
-        'types': full_types,
+        'types': full_types
     }
 
     return PeriodicSet(motif, cell, **tags)
 
 
 def expand_asym_unit(
-        asym_unit: np.ndarray, 
+        asym_unit: np.ndarray,
         sitesym: Sequence[str]
 ) -> Tuple[np.ndarray, ...]:
     """
-    Asymmetric unit's fractional coords + sitesyms (as strings)
+    Asymmetric unit's fractional coords + site symmetries (as strings)
     -->
-    frac motif, asym unit inds, multiplicities, inverses
+    fractional motif, asymmetric unit indices, multiplicities and inverses.
     """
 
     rotations, translations = ase.spacegroup.spacegroup.parse_sitesym(sitesym)
@@ -531,7 +513,8 @@ def expand_asym_unit(
     return frac_motif, asym_inds, multiplicities, inverses
 
 
-def atom_has_disorder(label, occupancy):
+def _atom_has_disorder(label, occupancy):
+    """Return True if atom has disorder and False otherwise."""
     return label.endswith('?') or (np.isscalar(occupancy) and occupancy < 1)
 
 
@@ -560,28 +543,3 @@ def _heaviest_component(molecule):
     largest_component_ind = np.argmax(np.array(component_weights))
     molecule = molecule.components[largest_component_ind]
     return molecule
-
-
-def _validate_kwargs(extract_data, include_if):
-
-    reserved_tags = {'motif', 'cell', 'name',
-                     'asymmetric_unit', 'wyckoff_multiplicities',
-                     'types', 'filename'}
-
-    if extract_data is None:
-        extract_data = {}
-    else:
-        if not isinstance(extract_data, dict):
-            raise ValueError('extract_data must be a dict of callables')
-        for key in extract_data:
-            if not callable(extract_data[key]):
-                raise ValueError('extract_data must be a dict of callables')
-            if key in reserved_tags:
-                raise ValueError(f'extract_data includes reserved key {key}')
-
-    if include_if is None:
-        include_if = ()
-    elif not all(callable(func) for func in include_if):
-        raise ValueError('include_if must be a list of callables')
-
-    return extract_data, include_if

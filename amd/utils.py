@@ -5,12 +5,14 @@ from typing import Tuple
 import time
 import datetime
 
-import scipy.spatial
 import numpy as np
+import scipy.spatial
 
 
 def diameter(cell):
-    """Diameter of a unit cell in 3 or fewer dimensions."""
+    """Diameter of a unit cell (as a square matrix in Cartesian form) 
+    in 3 or fewer dimensions."""
+
     dims = cell.shape[0]
     if dims == 1:
         return cell[0][0]
@@ -29,9 +31,10 @@ def diameter(cell):
 
 
 def cellpar_to_cell(a, b, c, alpha, beta, gamma):
-    """Simplified version of function from ase.geometry.
-    3D unit cell parameters a,b,c,α,β,γ --> cell as 3x3 ndarray.
+    """Simplified version of function from ase.geometry of the same name.
+    3D unit cell parameters a,b,c,α,β,γ --> cell as 3x3 NumPy array.
     """
+
     # Handle orthorhombic cells separately to avoid rounding errors
     eps = 2 * np.spacing(90.0, dtype=np.float64)  # around 1.4e-14
 
@@ -58,10 +61,10 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
 
 
 def cellpar_to_cell_2D(a, b, alpha):
-    """UD unit cell parameters a,b,α --> cell as 2x2 ndarray."""
-    cell = np.array([[a, 0],
+    """2D unit cell parameters a,b,α --> cell as 2x2 ndarray."""
+
+    return np.array([[a, 0],
                      [b * np.cos(alpha * np.pi / 180.), b * np.sin(alpha * np.pi / 180.)]])
-    return cell
 
 
 def neighbours_from_distance_matrix(
@@ -79,7 +82,7 @@ def neighbours_from_distance_matrix(
 
     Returns
     -------
-    tuple of ndarrays (nn_dm, inds)
+    tuple of numpy ndarrays (nn_dm, inds)
         For item ``i``, ``nn_dm[i][j]`` is the distance from item ``i`` to its ``j+1`` st
         nearest neighbour, and ``inds[i][j]`` is the index of this neighbour (``j+1`` since
         index 0 is the first nearest neighbour).
@@ -117,16 +120,18 @@ def neighbours_from_distance_matrix(
 def lattice_cubic(scale=1, dims=3):
     """Return a pair (motif, cell) representing a cubic lattice, passable to
     ``amd.AMD()`` or ``amd.PDD()``."""
+
     return (np.zeros((1, dims)), np.identity(dims) * scale)
 
 
 def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
-    """Random unit cell."""
-    
+    """Random unit cell with uniformally chosen length and angle parameters
+    between bounds."""
+
     lengths = [np.random.uniform(low=length_bounds[0],
                                  high=length_bounds[1]) 
                for _ in range(dims)]
-    
+
     if dims == 3:
         angles = [np.random.uniform(low=angle_bounds[0],
                                     high=length_bounds[1]) 

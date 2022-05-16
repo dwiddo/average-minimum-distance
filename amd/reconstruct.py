@@ -7,8 +7,8 @@ import numpy as np
 import numba
 import scipy.spatial
 
-from .utils import diameter
-from ._nearest_neighbours import generate_concentric_cloud
+from . import _nearest_neighbours
+from . import utils
 
 
 def reconstruct(pdd, cell):
@@ -44,7 +44,7 @@ def reconstruct(pdd, cell):
     if dims not in (2, 3):
         raise ValueError('Reconstructing from PDD only implemented for 2 and 3 dimensions')
 
-    diam = diameter(cell)
+    diam = utils.diameter(cell)
     motif = [np.zeros((dims, ))]    # set first point as origin wlog, return if 1 motif point
 
     if pdd.shape[0] == 1:
@@ -52,7 +52,7 @@ def reconstruct(pdd, cell):
         return motif
 
     # finding lattice distances so we can ignore them
-    cloud_generator = generate_concentric_cloud(np.array(motif), cell)
+    cloud_generator = _nearest_neighbours.generate_concentric_cloud(np.array(motif), cell)
     cloud = []
     next(cloud_generator)
     l = next(cloud_generator)
@@ -168,7 +168,7 @@ def _neighbour_set(cell, prec):
     vecs = np.array(vecs)
 
     origin = np.zeros((1, cell.shape[0]))
-    cloud_generator = generate_concentric_cloud(origin, cell)
+    cloud_generator = _nearest_neighbours.generate_concentric_cloud(origin, cell)
     cloud = np.concatenate((next(cloud_generator), next(cloud_generator)))
     tree = scipy.spatial.cKDTree(cloud,
                                  compact_nodes=False,

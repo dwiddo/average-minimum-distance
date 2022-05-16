@@ -42,6 +42,7 @@ extras_require = {
 }
 
 project_urls = {
+    'Source Code': 'https://github.com/dwiddo/average-minimum-distance/',
     'Documentation': 'https://average-minimum-distance.readthedocs.io/en/latest/',
 	'Changelog': 'https://github.com/dwiddo/average-minimum-distance/blob/master/CHANGELOG.md',
 }
@@ -63,7 +64,6 @@ kw = {
     'install_requires': 			 install_requires,
     'extras_require':   			 extras_require,
     'packages':         			 find_packages(),
-    # 'zip_safe':       			   True,
 }
 
 if __name__ == '__main__':
