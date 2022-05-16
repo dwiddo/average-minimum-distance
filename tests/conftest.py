@@ -5,7 +5,7 @@ import pickle
 
 @pytest.fixture(scope='session', autouse=True)
 def root_dir():
-    return r'tests\data'
+    return r'tests/data'
 
 
 @pytest.fixture(scope='session', autouse=True)

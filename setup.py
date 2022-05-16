@@ -64,6 +64,7 @@ kw = {
     'install_requires': 			 install_requires,
     'extras_require':   			 extras_require,
     'packages':         			 find_packages(),
+    'include_package_data':          True,
 }
 
 if __name__ == '__main__':
