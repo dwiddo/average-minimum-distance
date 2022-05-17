@@ -3,6 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/average-minimum-distance.svg)](https://pypi.org/project/average-minimum-distance/)
 [![Status](https://img.shields.io/pypi/status/average-minimum-distance)](https://pypi.org/project/average-minimum-distance/)
 [![Read the Docs](https://img.shields.io/readthedocs/average-minimum-distance)](https://average-minimum-distance.readthedocs.io)
+[![Build](https://app.travis-ci.com/dwiddo/average-minimum-distance.svg?branch=master)](https://app.travis-ci.com/github/dwiddo/average-minimum-distance)
 [![MATCH Paper](https://img.shields.io/badge/DOI-10.46793%2Fmatch.87--3.529W-blue)](https://doi.org/10.46793/match.87-3.529W)
 [![CC-0 license](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-blue.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
@@ -28,7 +29,7 @@ The kth AMD value of a periodic set is the average distance to the kth nearest n
 The PDD is related to AMD but contains more information as it avoids the averaging step. Like the AMD, start by and listing distances to the k nearest neighbours in order for each point in a unit cell. Collect these lists into one matrix with a row for each point. Then order the rows of the matrix as in a dictionary (lexicographically). If any rows are not unique, keep only one but give each a weight proportional to how many copies there are, appending the weight to the start of each row so the first column contains weights. The result is the kth PDD of the periodic set.
 
 ### Comparing with AMD or PDD
-  
+
 AMDs are just vectors which can be compared with any metric, as long as k (length of the AMD) is the same. The default metric used in the package is L-infinity (aka Chebyshev), since it does not so much accumulate differences in distances across many neighbours. PDDs are matrices with weighted rows; the appropriate metric to compare them is the *Earth mover's distance* (aka Wasserstein metric), which itself needs a metric to compare two PDD rows (without weights), where L-infinity is again the default.
 
 For a formal description, see our papers listed above. Detailed documentation for this package is [available on readthedocs](https://average-minimum-distance.readthedocs.io/en/latest/).
