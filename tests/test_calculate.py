@@ -3,10 +3,6 @@ import pytest
 import amd
 
 
-def test_fail():
-    pytest.fail('I failed!')
-
-
 def test_AMD(reference_data):
     for name in reference_data:
         for s in reference_data[name]:
