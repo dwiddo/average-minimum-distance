@@ -249,7 +249,7 @@ class CSDReader(_Reader):
             heaviest_component=False,
             show_warnings=True,
     ):
-        
+
         super().__init__(
             remove_hydrogens=remove_hydrogens,
             disorder=disorder,
@@ -274,7 +274,8 @@ class CSDReader(_Reader):
             for refcode in refcodes:
                 query = ccdc.search.TextNumericSearch()
                 query.add_identifier(refcode)
-                all_refcodes.extend((hit.identifier for hit in query.search()))
+                hits = [hit.identifier for hit in query.search()]
+                all_refcodes.extend(hits)
 
             # filter to unique refcodes
             seen = set()
@@ -369,7 +370,7 @@ def entry_to_periodicset(
 
     if asym_unit.shape[0] == 0:
         raise _ParseError(f'{crystal.identifier}: Has no valid sites')
-    
+
     frac_motif, asym_inds, multiplicities, inverses = expand_asym_unit(asym_unit, sitesym)
     full_types = np.array([asym_types[i] for i in inverses])
     motif = frac_motif @ cell
@@ -426,7 +427,7 @@ def cifblock_to_periodicset(
         elif disorder == 'ordered_sites':
             remove_sites.extend(
                 (i for i, (lab, occ) in enumerate(zip(labels, occupancies))
-                    if _atom_has_disorder(lab, occ)))
+                 if _atom_has_disorder(lab, occ)))
 
     if remove_hydrogens:
         remove_sites.extend((i for i, sym in enumerate(asym_types) if sym in 'HD'))
@@ -440,7 +441,7 @@ def cifblock_to_periodicset(
             warnings.warn(f'{block.name}: May have overlapping sites; duplicates will be removed')
         asym_unit = asym_unit[keep_sites]
         asym_types = [sym for sym, keep in zip(asym_types, keep_sites) if keep]
-    
+
     if asym_unit.shape[0] == 0:
         raise _ParseError(f'{block.name}: Has no valid sites')
 

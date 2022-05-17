@@ -1,0 +1,28 @@
+checks:
+    python:
+        code_rating: true
+        duplicate_code: true
+
+build:
+    nodes:
+        analysis:
+            project_setup:
+                override:
+                    - 'true'
+            tests:
+                override:
+                    - py-scrutinizer-run
+                    -
+                        command: pylint-run
+                        use_website_config: true
+    tests:
+        before:
+          - pip install -r requirements.txt
+        override: [pytest]
+
+coding_style:
+
+filter:
+    excluded_paths:
+        - '*/docs/*'
+        - '*/tests/*'

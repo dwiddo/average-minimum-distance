@@ -10,7 +10,7 @@ import scipy.spatial
 
 
 def diameter(cell):
-    """Diameter of a unit cell (as a square matrix in Cartesian form) 
+    """Diameter of a unit cell (as a square matrix in Cartesian form)
     in 3 or fewer dimensions."""
 
     dims = cell.shape[0]
@@ -39,7 +39,7 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     eps = 2 * np.spacing(90.0, dtype=np.float64)  # around 1.4e-14
 
     cos_alpha = 0. if abs(abs(alpha) - 90.) < eps else np.cos(alpha * np.pi / 180.)
-    cos_beta  = 0. if abs(abs(beta)  - 90.) < eps else np.cos(beta * np.pi / 180.)
+    cos_beta = 0. if abs(abs(beta) - 90.) < eps else np.cos(beta * np.pi / 180.)
     cos_gamma = 0. if abs(abs(gamma) - 90.) < eps else np.cos(gamma * np.pi / 180.)
 
     if abs(gamma - 90) < eps:
@@ -129,18 +129,18 @@ def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
     between bounds."""
 
     lengths = [np.random.uniform(low=length_bounds[0],
-                                 high=length_bounds[1]) 
+                                 high=length_bounds[1])
                for _ in range(dims)]
 
     if dims == 3:
         angles = [np.random.uniform(low=angle_bounds[0],
-                                    high=length_bounds[1]) 
+                                    high=length_bounds[1])
                   for _ in range(dims)]
         return cellpar_to_cell(*lengths, *angles)
 
     if dims == 2:
         alpha = np.random.uniform(low=angle_bounds[0],
-                                   high=length_bounds[1])
+                                  high=length_bounds[1])
         return cellpar_to_cell_2D(*lengths, alpha)
 
     raise ValueError(f'random_cell only implimented for dimensions 2 and 3 (passed {dims})')

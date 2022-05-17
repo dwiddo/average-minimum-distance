@@ -9,6 +9,21 @@ import numpy as np
 import scipy.spatial
 
 
+@numba.njit()
+def _dist(xy, z):
+    s = z ** 2
+    for val in xy:
+        s += val ** 2
+    return s
+
+@numba.njit()
+def _distkey(pt):
+    s = 0
+    for val in pt:
+        s += val ** 2
+    return s
+
+
 def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
     """Generates batches of integer lattice points.
 
@@ -27,23 +42,9 @@ def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
         Yields arrays of integer points in dims dimensional Euclidean space.
     """
 
-    @numba.njit()
-    def _dist(xy, z):
-        s = z ** 2
-        for val in xy:
-            s += val ** 2
-        return s
-
-    @numba.njit()
-    def _distkey(pt):
-        s = 0
-        for val in pt:
-            s += val ** 2
-        return s
-
     ymax = collections.defaultdict(int)
     d = 0
-    
+
     if dims == 1:
         yield np.array([[0]])
         while True:
