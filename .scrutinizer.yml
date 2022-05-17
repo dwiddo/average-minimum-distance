@@ -4,23 +4,24 @@ checks:
         duplicate_code: true
 
 build:
+    dependencies:
+        override:
+            - "pip install -r requirements.txt"
+            - "pip install ."
+            - "pip install pytest"
     nodes:
         analysis:
-            project_setup:
-                override:
-                    - 'true'
             tests:
                 override:
                     - py-scrutinizer-run
-                    -
+                    - 
                         command: pylint-run
                         use_website_config: true
-    tests:
-        before:
-          - pip install -r requirements.txt
-        override: [pytest]
 
-coding_style:
+        coverage:
+            tests:
+                override: 
+                    - command: 'pytest'
 
 filter:
     excluded_paths:
