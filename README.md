@@ -14,13 +14,19 @@ Implements fingerprints (*isometry invariants*) of crystal structures based on g
 - **Documentation:** <https://average-minimum-distance.readthedocs.io>
 - **Source code:** <https://github.com/dwiddo/average-minimum-distance>
 
-If you use our code in your work, cite us with the reference at the bottom of this page; [click here jump to it](#citeus).
+If you use our code in your work, cite us with the reference at the bottom of this page: [click here jump to it](#citeus).
 
 ## What's amd?
 
-A crystal is an arrangement of atoms which periodically repeats in all directions according to some lattice. Crystals are usually given by listing parameters defining the lattice (or unit cell) and the atomic coordinates, e.g. in a .cif file, but this representation is ambiguous because different .cif files can define the same crystal. This package implements new *isometric invariants* based on inter-point distances which are guaranteed to take the same value for all (isometrically) equivalent representations of a crystal, called average minimum distances (AMDs) and point-wise distance distributions (PDDs). They are invariants that are also continuous, meaning crystals which are similar have similar AMDs and PDDs.
+A crystal is an arrangement of atoms which periodically repeats according to some lattice. Crystals are usually given by listing parameters defining the lattice (or unit cell) and the atomic coordinates, e.g. in a .cif file, but this representation is ambiguous because different .cif files can define the same crystal. This package implements new *isometric invariants* based on inter-point distances which are guaranteed to take the same value for all (isometrically) equivalent representations of a crystal, called average minimum distances (AMDs) and point-wise distance distributions (PDDs). These invariants are also continuous, meaning crystals which are similar have similar AMDs and PDDs.
 
-### Description of AMD and PDD
+## Description of AMD and PDD
+
+Essentially, the point-wise distance distribution (PDD) of a crystal records the environment of each atom in a unit cell. It does this by listing distances to neighbouring atoms in order, closest first. When PDDs are compared we try to find an optimal matching of these environments, so a small distance between PDDs means the lists of distances to neighbours of atoms in one crystal line up with the other.
+
+The average minimum distance (AMD) averages the PDD over over atoms in the unit cell. In theory this loses some information about the structure and two different PDDs could give rise to the same AMD, but in practice this is very unlikely. As AMDs are vectors, comparing them is much faster than comparing PDDs.
+
+### A more formal description
 
 The average minimum distance (AMD) of a crystal is an infinite increasing sequence of numbers calculated from inter-point distances in the crystal. In contrast, the point-wise distance distribution (PDD) is a matrix which can have arbitrarily many columns. In practice, both are calculated up to some chosen number k.
 
@@ -62,9 +68,9 @@ amds = [amd.AMD(crystal, 100) for crystal in reader]
 
 If csd-python-api is installed, CifReader can accept file formats other than cif, and crystals can be read directly from your local CSD database with ```amd.CSDReader```.
 
-### Which k to choose?
+### Choosing a value of k
 
-The second argument `k` of these functions controls the length of the AMD vector or number of columns of the PDD. It is a free parameter in the process 
+The second argument (k) of ```amd.AMD``` and ```amd.PDD``` controls the number of nearest neighbour atoms considered for each atom in the unit cell. So choosing a small k (e.g. k=5) only takes into account close neighbours of atoms, often in the same molecule, so there is usually a small distance between crystals with the same or similar unit molecules when k is small. A larger k (e.g. k=100) is more 'strict', meaning to get a small distance between crystals, the environments of atoms in one must line up with those in the other up to a larger radius. It is not recommended to choose very large values, usually over 1000, as the invariants start to converge and comparisons depend only on density.
 
 ### Comparing AMDs or PDDs
 
