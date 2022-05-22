@@ -168,24 +168,6 @@ def network_simplex(source_demands, sink_demands, network_costs):
     return final[0], final_flows
 
 
-# @numba.njit(cache=True)
-# def emd_from_flows_and_costs(flows, costs, fp_multiplier):
-#     """Calculate final EMD from flow and cost matrices."""
-#     flow_cost = 0
-#     final_flows = flows.astype(np.float64)
-#     edge_costs = costs.astype(np.float64)
-
-#     # dot product is returning wrong values for some reason...
-#     for arc_ind, flow in np.ndenumerate(final_flows):
-#         flow_cost += flow * edge_costs[arc_ind]
-
-#     final = flow_cost / fp_multiplier
-#     final = final.astype(np.float64)
-#     final = final / fp_multiplier
-#     final_flows = final_flows / fp_multiplier
-#     return final[0], final_flows
-
-
 @numba.njit(cache=True)
 def reduced_cost(i, costs, potentials, tails, heads, flows):
     """Return the reduced cost of an edge i.

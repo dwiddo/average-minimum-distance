@@ -8,11 +8,11 @@ more details about specific tasks.
    :maxdepth: 1
    :caption: Common tasks
 
-   reading cifs
-   reading from CSD
-   AMDs
-   PDDs
-   miscellaneous
+   Reading_cifs
+   Reading_from_the_CSD
+   Using_AMDs
+   Using_PDDs
+   Miscellaneous
 
 .. toctree::
    :maxdepth: 2

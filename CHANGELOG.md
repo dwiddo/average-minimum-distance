@@ -2,11 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.1] - 14/04/2022
+## [1.2.2] - 21/05/2022
+
+### Added
+
+- Functions `PDD()` and `finite_PDD()` now accept the optional argument `return_row_groups`, default `False`. If `True`, a tuple is returned `(pdd, groups)` where `groups[i]` contains the indices of the point(s) corresponding to `pdd[i]`. Note that these indices are for the asymmetric unit of the input set, whose indices in ``.motif`` are accessible through ``.asymmetric_unit``.
 
 ### Changed
 
 - Readers now read atomic numbers rather than symbols which are better for checking if types align with Earth mover's distance flows.
+
+- Argument `folder` removed from `CifReader`, now whether the path is a directory is checked by `os.path.isdir`.
 
 - Fixed issue where AMD/PDD calculations were producing a RuntimeWarning from NumPy.
 
@@ -39,6 +45,8 @@ All notable changes to this project will be documented in this file.
 - Higher-order PDDs (the order parameter of `amd.PDD()` and `amd.PDD_finite()`) are removed and replaced with `amd.SDD()` (simplex-wise distance distribution). This invariant is only appropriate for finite sets, but first-order SDDs are equivalent to PDDs.
 
 - Removed several functions which were bloating the package. List of removed functions/modules: `auto`, `ccdc_utils`, `periodicset.PeriodicSet.to_dict`, `io.SetReader.extract_tags`, `compare.mst_from_distance_matrix`, `compare.filter`, `compare.AMD_mst`, `compare.PDD_mst`, `utils.extract_tags`, `utils.neighbours_df_dict`. Also removed parameter `k` in functions in `compare`, and the `verbose` parameter (instead controlled by `compare.set_verbose()`).
+
+- `utils.ETA` is removed and replaced by the progressbar2 package which is now a dependency.
 
 ## [1.1.7] - 01/02/2022
 

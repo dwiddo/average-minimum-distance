@@ -1,11 +1,10 @@
-"""Implements the class :class:`PeriodicSet` representing a periodic set,
-defined by a motif and unit cell.
+"""Implements the :class:`PeriodicSet` class representing a periodic set,
+defined by a motif and unit cell. This models a crystal with a point at the
+center of each atom.
 
 This is the object type yielded by the readers :class:`.io.CifReader` and
 :class:`.io.CSDReader`. The :class:`PeriodicSet` can be passed as the first argument
 to :func:`.calculate.AMD` or :func:`.calculate.PDD` to calculate its invariants.
-They can be written to a file with :class:`.io.SetWriter` which can be read with
-:class:`.io.SetReader`.
 """
 
 from typing import Optional
@@ -16,11 +15,10 @@ class PeriodicSet:
     """A periodic set is the mathematical representation of a crystal by putting a
     single point in the center of every atom. A periodic set is defined by a basis
     (unit cell) and collection of points (motif) which repeats according to the basis.
-    Has attributes motif, cell and name (which can be :const:`None`).
 
-    :class:`PeriodicSet` objects are returned by the readers in the :mod:`.io` module.
+    :class:`PeriodicSet` s are returned by the readers in the :mod:`.io` module.
     Instances of this object can be passed to :func:`.calculate.AMD` or
-    :func:`.calculate.PDD`.
+    :func:`.calculate.PDD` to calculate the invariant.
     """
 
     def __init__(
@@ -85,16 +83,3 @@ class PeriodicSet:
 
     def __ne__(self, other):
         return not self.__eq__(other)
-
-    def copy(self):
-        """Return copy of the PeriodicSet."""
-        return PeriodicSet(self.motif, self.cell, name=self.name, **self.tags)
-
-    def astype(self, dtype):
-        """Returns copy of the :class:`PeriodicSet` with ``.motif``
-        and ``.cell`` casted to ``dtype``."""
-
-        return PeriodicSet(self.motif.astype(dtype),
-                           self.cell.astype(dtype),
-                           name=self.name,
-                           **self.tags)

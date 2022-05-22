@@ -170,9 +170,9 @@ def _neighbour_set(cell, prec):
     origin = np.zeros((1, cell.shape[0]))
     cloud_generator = _nearest_neighbours.generate_concentric_cloud(origin, cell)
     cloud = np.concatenate((next(cloud_generator), next(cloud_generator)))
-    tree = scipy.spatial.cKDTree(cloud,
-                                 compact_nodes=False,
-                                 balanced_tree=False)
+    tree = scipy.spatial.KDTree(cloud,
+                                compact_nodes=False,
+                                balanced_tree=False)
     dists, inds = tree.query(vecs, k=k_, workers=-1)
     dists_ = np.empty_like(dists)
 
@@ -181,9 +181,9 @@ def _neighbour_set(cell, prec):
         cloud = np.vstack((cloud,
                            next(cloud_generator),
                            next(cloud_generator)))
-        tree = scipy.spatial.cKDTree(cloud,
-                                     compact_nodes=False,
-                                     balanced_tree=False)
+        tree = scipy.spatial.KDTree(cloud,
+                                    compact_nodes=False,
+                                    balanced_tree=False)
         dists_, inds = tree.query(vecs, k=k_, workers=-1)
 
     tmp_inds = np.unique(inds[:, 1:].flatten())

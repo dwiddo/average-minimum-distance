@@ -1,12 +1,12 @@
 """Implements core function nearest_neighbours used for AMD and PDD calculations."""
 
-from typing import Iterable, Optional
-import itertools
 import collections
+from typing import Iterable, Optional
+from itertools import product, combinations
 
 import numba
 import numpy as np
-import scipy.spatial
+from scipy.spatial import KDTree
 
 
 @numba.njit()
@@ -56,7 +56,7 @@ def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
         positive_int_lattice = []
         while True:
             batch = []
-            for xy in itertools.product(range(d+1), repeat=dims-1):
+            for xy in product(range(d+1), repeat=dims-1):
                 if _dist(xy, ymax[xy]) <= d**2:
                     batch.append((*xy, ymax[xy]))
                     ymax[xy] += 1
@@ -70,7 +70,7 @@ def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
         for p in positive_int_lattice:
             int_lattice.append(p)
             for n_reflections in range(1, dims+1):
-                for indexes in itertools.combinations(range(dims), n_reflections):
+                for indexes in combinations(range(dims), n_reflections):
                     if all((p[i] for i in indexes)):
                         p_ = list(p)
                         for i in indexes:
@@ -166,9 +166,7 @@ def nearest_neighbours(
     cloud.append(next(cloud_generator))
     cloud = np.concatenate(cloud)
 
-    tree = scipy.spatial.KDTree(cloud,
-                                compact_nodes=False,
-                                balanced_tree=False)
+    tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
     pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
     pdd = np.zeros_like(pdd_)
 
@@ -177,9 +175,7 @@ def nearest_neighbours(
         cloud = np.vstack((cloud,
                            next(cloud_generator),
                            next(cloud_generator)))
-        tree = scipy.spatial.KDTree(cloud,
-                                    compact_nodes=False,
-                                    balanced_tree=False)
+        tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
         pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
 
     return pdd_[:, 1:], cloud, inds[:, 1:]
@@ -196,9 +192,7 @@ def nearest_neighbours_minval(motif, cell, min_val):
         cloud.append(next(cloud_generator))
 
     cloud = np.concatenate(cloud)
-    tree = scipy.spatial.KDTree(cloud,
-                                compact_nodes=False,
-                                balanced_tree=False)
+    tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
     pdd_, _ = tree.query(motif, k=cloud.shape[0], workers=-1)
     pdd = np.zeros_like(pdd_)
 
@@ -212,9 +206,7 @@ def nearest_neighbours_minval(motif, cell, min_val):
         cloud = np.vstack((cloud,
                            next(cloud_generator),
                            next(cloud_generator)))
-        tree = scipy.spatial.KDTree(cloud,
-                                    compact_nodes=False,
-                                    balanced_tree=False)
+        tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
         pdd_, _ = tree.query(motif, k=cloud.shape[0], workers=-1)
 
     k = np.argwhere(np.all(pdd >= min_val, axis=0))[0][0]

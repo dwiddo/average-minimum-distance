@@ -1,10 +1,7 @@
-"""Contains I/O tools, including a .CIF reader and CSD reader
-(``csd-python-api`` only) to extract periodic set representations
-of crystals which can be passed to :func:`.calculate.AMD` and :func:`.calculate.PDD`.
-
-These intermediate :class:`.periodicset.PeriodicSet` representations can be written
-to a .hdf5 file with :class:`SetWriter`, which can be read back with :class:`SetReader`.
-This is much faster than rereading a .CIF and recomputing invariants.
+"""Tools for reading crystals from files, or from the CSD with ``csd-python-api``. 
+The readers return :class:`.periodicset.PeriodicSet` objects representing the 
+crystal which can be passed to :func:`.calculate.AMD` and :func:`.calculate.PDD` 
+to get their invariants.
 """
 
 import os
@@ -15,7 +12,7 @@ from typing import Callable, Iterable, Sequence, Tuple
 import numpy as np
 import ase.io.cif
 import ase.data
-import ase.spacegroup.spacegroup
+from ase.spacegroup.spacegroup import parse_sitesym
 
 from . import utils
 from .periodicset import PeriodicSet
@@ -127,25 +124,55 @@ class _Reader:
 
 
 class CifReader(_Reader):
-    """Read all structures in a .CIF with ``ase`` or ``ccdc``
-    (``csd-python-api`` only), yielding  :class:`.periodicset.PeriodicSet`
-    objects which can be passed to :func:`.calculate.AMD` or
-    :func:`.calculate.PDD`.
+    """Read all structures in a .cif file or all files in a folder 
+    with ase or csd-python-api (if installed), yielding 
+    :class:`.periodicset.PeriodicSet` s.
 
-    Examples:
+    Parameters
+    ----------
+    path : str
+        Path to a .cif file or directory. (Other files are accepted when using
+        ``reader='ccdc'``, if csd-python-api is installed.)
+    reader : str, optional
+        The backend package used for parsing. Default is :code:`ase`,
+        to use csd-python-api change to :code:`ccdc`. The ccdc reader should 
+        be able to read any format accepted by :class:`ccdc.io.EntryReader`,
+        though only cifs have been tested.
+    remove_hydrogens : bool, optional
+        Remove Hydrogens from the crystal.
+    disorder : str, optional
+        Controls how disordered structures are handled. Default is ``skip`` which skips any crystal 
+        with disorder, since disorder conflicts with the periodic set model. To read disordered 
+        structures anyway, choose either :code:`ordered_sites` to remove sites with disorder or 
+        :code:`all_sites` include all sites regardless.
+    heaviest_component : bool, optional
+        csd-python-api only. Removes all but the heaviest molecule in the asymmeric unit,
+        intended for removing solvents. 
+    show_warnings : bool, optional
+        Controls whether warnings that arise during reading are printed.
 
+    Yields
+    ------
+    :class:`.periodicset.PeriodicSet`
+        Represents the crystal as a periodic set, consisting of a finite set of points (motif)
+        and lattice (unit cell). Contains other useful data, e.g. the crystal's name and
+        information about the asymmetric unit for calculation.
+
+    Examples
+    --------
+    
         ::
 
             # Put all crystals in a .CIF in a list
             structures = list(amd.CifReader('mycif.cif'))
 
+            # Can also accept path to a directory, reading all files inside
+            structures = list(amd.CifReader('path/to/folder'))
+
             # Reads just one if the .CIF has just one crystal
             periodic_set = amd.CifReader('mycif.cif').read_one()
 
-            # If a folder has several .CIFs each with one crystal, use
-            structures = list(amd.CifReader('path/to/folder', folder=True))
-
-            # Make list of AMDs (with k=100) of crystals in a .CIF
+            # List of AMDs (k=100) of crystals in a .CIF
             amds = [amd.AMD(periodic_set, 100) for periodic_set in amd.CifReader('mycif.cif')]
     """
 
@@ -153,7 +180,6 @@ class CifReader(_Reader):
             self,
             path,
             reader='ase',
-            folder=False,
             remove_hydrogens=False,
             disorder='skip',
             heaviest_component=False,
@@ -190,14 +216,16 @@ class CifReader(_Reader):
                                           disorder=disorder,
                                           heaviest_component=heaviest_component)
 
-        if folder:
-            generator = self._folder_generator(path, file_parser, extensions)
-        else:
+        if os.path.isfile(path):
             generator = file_parser(path)
+        elif os.path.isdir(path):
+            generator = self._generate_from_dir(path, file_parser, extensions)
+        else:
+            raise FileNotFoundError(f'No such file or directory: {path}')
 
         self._generator = self._map(converter, generator)
 
-    def _folder_generator(self, path, file_parser, extensions):
+    def _generate_from_dir(self, path, file_parser, extensions):
         for file in os.listdir(path):
             suff = os.path.splitext(file)[1][1:]
             if suff.lower() in extensions:
@@ -206,38 +234,64 @@ class CifReader(_Reader):
 
 
 class CSDReader(_Reader):
-    """Read Entries from the CSD, yielding :class:`.periodicset.PeriodicSet` objects.
+    """Read structures from the CSD with csd-python-api, yielding 
+    :class:`.periodicset.PeriodicSet` s.
 
-    The CSDReader returns :class:`.periodicset.PeriodicSet` objects which can be passed
-    to :func:`.calculate.AMD` or :func:`.calculate.PDD`.
+    Parameters
+    ----------
+    refcodes : List[str], optional
+        List of CSD refcodes to read. If None or 'CSD', iterates over the whole CSD.
+    families : bool, optional
+        Read all entries whose refcode starts with the given strings, or 'families' 
+        (e.g. giving 'DEBXIT' reads all entries starting with DEBXIT).
+    remove_hydrogens : bool, optional
+        Remove hydrogens from the crystal.
+    disorder : str, optional
+        Controls how disordered structures are handled. Default is ``skip`` which skips any crystal 
+        with disorder, since disorder conflicts with the periodic set model. To read disordered 
+        structures anyway, choose either :code:`ordered_sites` to remove sites with disorder or 
+        :code:`all_sites` include all sites regardless.
+    heaviest_component : bool, optional
+        csd-python-api only. Removes all but the heaviest molecule in the asymmeric unit,
+        intended for removing solvents. 
+    show_warnings : bool, optional
+        Controls whether warnings that arise during reading are printed.
 
-    Examples:
+    Yields
+    ------
+    :class:`.periodicset.PeriodicSet`
+        Represents the crystal as a periodic set, consisting of a finite set of points (motif)
+        and lattice (unit cell). Contains other useful data, e.g. the crystal's name and
+        information about the asymmetric unit for calculation.
 
-        Get crystals with refcodes in a list::
+    Examples
+    --------
+    
+        ::
 
+            # Put these entries in a list
             refcodes = ['DEBXIT01', 'DEBXIT05', 'HXACAN01']
             structures = list(amd.CSDReader(refcodes))
 
-        Read refcode families (any whose refcode starts with strings in the list)::
+            # Read refcode families (any whose refcode starts with strings in the list)
+            refcode_families = ['ACSALA', 'HXACAN']
+            structures = list(amd.CSDReader(refcode_families, families=True))
 
-            refcodes = ['ACSALA', 'HXACAN']
-            structures = list(amd.CSDReader(refcodes, families=True))
-
-        Create a generic reader, read crystals by name with :meth:`CSDReader.entry()`::
-
-            reader = amd.CSDReader()
-            debxit01 = reader.entry('DEBXIT01')
-
-            # looping over this generic reader will yield all CSD entries
-            for periodic_set in reader:
-                ...
-
-        Make list of AMD (with k=100) for crystals in these families::
-
+            # Get AMDs (k=100) for crystals in these families
             refcodes = ['ACSALA', 'HXACAN']
             amds = []
             for periodic_set in amd.CSDReader(refcodes, families=True):
                 amds.append(amd.AMD(periodic_set, 100))
+
+            # Giving the reader nothing reads from the whole CSD.
+            reader = amd.CSDReader()
+            
+            # looping over this generic reader will yield all CSD entries
+            for periodic_set in reader:
+                ...
+            
+            # or, read structures by refcode on demand
+            debxit01 = reader.entry('DEBXIT01')
     """
 
     def __init__(
@@ -295,7 +349,7 @@ class CSDReader(_Reader):
         self._generator = self._map(converter, generator)
 
     def entry(self, refcode: str, **kwargs) -> PeriodicSet:
-        """Read a PeriodicSet given any CSD refcode."""
+        """Read a crystal given a CSD refcode, returning a :class:`.periodicset.PeriodicSet`."""
 
         entry = self._entry_reader.entry(refcode)
         periodic_set = entry_to_periodicset(entry, **kwargs)
@@ -322,7 +376,8 @@ def entry_to_periodicset(
         disorder='skip',
         heaviest_component=False
 ) -> PeriodicSet:
-    """ccdc.entry.Entry --> PeriodicSet."""
+    """:class:`ccdc.entry.Entry` --> :class:`amd.periodicset.PeriodicSet`.
+    Entry is the type returned by :class:`ccdc.io.EntryReader`."""
 
     crystal = entry.crystal
 
@@ -371,7 +426,7 @@ def entry_to_periodicset(
     if asym_unit.shape[0] == 0:
         raise _ParseError(f'{crystal.identifier}: Has no valid sites')
 
-    frac_motif, asym_inds, multiplicities, inverses = expand_asym_unit(asym_unit, sitesym)
+    frac_motif, asym_inds, multiplicities, inverses = _expand_asym_unit(asym_unit, sitesym)
     full_types = np.array([asym_types[i] for i in inverses])
     motif = frac_motif @ cell
 
@@ -390,7 +445,9 @@ def cifblock_to_periodicset(
         remove_hydrogens=False,
         disorder='skip'
 ) -> PeriodicSet:
-    """ase.io.cif.CIFBlock --> PeriodicSet."""
+    """:class:`ase.io.cif.CIFBlock` --> :class:`amd.periodicset.PeriodicSet`. 
+    CIFBlock is the type returned by :class:`ase.io.cif.parse_cif`.
+    """
 
     cell = block.get_cell().array
 
@@ -430,7 +487,7 @@ def cifblock_to_periodicset(
                  if _atom_has_disorder(lab, occ)))
 
     if remove_hydrogens:
-        remove_sites.extend((i for i, sym in enumerate(asym_types) if sym in 'HD'))
+        remove_sites.extend((i for i, num in enumerate(asym_types) if num == 1))
 
     asym_unit = np.delete(asym_unit, remove_sites, axis=0)
     asym_types = [s for i, s in enumerate(asym_types) if i not in remove_sites]
@@ -445,7 +502,7 @@ def cifblock_to_periodicset(
     if asym_unit.shape[0] == 0:
         raise _ParseError(f'{block.name}: Has no valid sites')
 
-    frac_motif, asym_inds, multiplicities, inverses = expand_asym_unit(asym_unit, sitesym)
+    frac_motif, asym_inds, multiplicities, inverses = _expand_asym_unit(asym_unit, sitesym)
     full_types = np.array([asym_types[i] for i in inverses])
     motif = frac_motif @ cell
 
@@ -459,7 +516,7 @@ def cifblock_to_periodicset(
     return PeriodicSet(motif, cell, **tags)
 
 
-def expand_asym_unit(
+def _expand_asym_unit(
         asym_unit: np.ndarray,
         sitesym: Sequence[str]
 ) -> Tuple[np.ndarray, ...]:
@@ -469,7 +526,7 @@ def expand_asym_unit(
     fractional motif, asymmetric unit indices, multiplicities and inverses.
     """
 
-    rotations, translations = ase.spacegroup.spacegroup.parse_sitesym(sitesym)
+    rotations, translations = parse_sitesym(sitesym)
     all_sites = []
     asym_inds = [0]
     multiplicities = []

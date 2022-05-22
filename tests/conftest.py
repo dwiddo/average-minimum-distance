@@ -1,6 +1,6 @@
-import pytest
 import os
 import pickle
+import pytest
 
 
 @pytest.fixture(scope='session', autouse=True)

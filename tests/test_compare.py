@@ -1,7 +1,7 @@
 import os
+import numpy as np
 import pytest
 import amd
-import numpy as np
 
 
 def test_PDD_pdist(root_dir, reference_data):

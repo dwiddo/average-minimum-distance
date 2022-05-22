@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+
+import re
 from setuptools import setup, find_packages
 
 description = (
@@ -33,13 +36,8 @@ install_requires = [
 	'scipy>=1.6.1',
 	'ase>=3.22.0',
 	'h5py>=3.3.0',
+    'progressbar2>=4.0.0',
 ]
-
-extras_require = {
-    'ccdc': [
-        'csd-python-api',
-    ],
-}
 
 project_urls = {
     'Source Code': 'https://github.com/dwiddo/average-minimum-distance/',
@@ -47,24 +45,28 @@ project_urls = {
 	'Changelog': 'https://github.com/dwiddo/average-minimum-distance/blob/master/CHANGELOG.md',
 }
 
+with open(r'amd/__init__.py') as f:
+    version = re.search("__version__ = '(.*)'", f.read()).group(1)
+
+
 kw = {
-    'name':             			 'average-minimum-distance',
-    'version':          			 '1.2.1',
-    'description':      			 description,
-    'long_description': 			 open('README.md').read(),
+    'name': 'average-minimum-distance',
+    'version': version,
+    'description': description,
+    'long_description': open('README.md').read(),
     'long_description_content_type': 'text/markdown',
-    'author':           			 'Daniel Widdowson',
-    'author_email':     			 'sgdwiddo@liverpool.ac.uk',
-    'license':          			 license,
-    'keywords':         			 keywords,
-    'url':              			 'https://github.com/dwiddo/average-minimum-distance',
-    'project_urls':					 project_urls,
-    'classifiers':      			 classifiers,
-    'python_requires':				 '>=3.7',
-    'install_requires': 			 install_requires,
-    'extras_require':   			 extras_require,
-    'packages':         			 find_packages(),
-    'include_package_data':          True,
+    'author': 'Daniel Widdowson',
+    'author_email': 'D.E.Widdowson@liverpool.ac.uk',
+    'license': license,
+    'keywords': keywords,
+    'url': 'https://github.com/dwiddo/average-minimum-distance',
+    'project_urls': project_urls,
+    'classifiers': classifiers,
+    'python_requires': '>=3.7',
+    'install_requires': install_requires,
+    'extras_require': {'ccdc': ['csd-python-api']},
+    'packages': find_packages(),
+    'include_package_data': True,
 }
 
 if __name__ == '__main__':

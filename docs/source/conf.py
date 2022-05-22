@@ -11,6 +11,7 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 import os
+import re
 import sys
 sys.path.insert(0, os.path.abspath(r'../..'))
 
@@ -22,8 +23,8 @@ project = 'average-minimum-distance'
 copyright = '2022, Daniel Widdowson'
 author = 'Daniel Widdowson'
 
-# The full version, including alpha/beta/rc tags
-release = '1.2.1'
+with open(r'../../amd/__init__.py') as f:
+    version = re.search("__version__ = '(.*)'", f.read()).group(1)
 
 MOCK_MODULES = [
     'ccdc',
@@ -43,10 +44,18 @@ extensions = [
     'sphinx.ext.autodoc', 
     'sphinx.ext.coverage', 
     'sphinx.ext.napoleon',
+    'sphinx.ext.intersphinx',
     'sphinx_rtd_theme',
     'sphinx_rtd_dark_mode',
     'm2r2',
 ]
+
+intersphinx_mapping = {
+    'numpy': ('https://numpy.org/doc/stable/', None),
+    'scipy': ('https://docs.scipy.org/doc/scipy/', None),
+    'ase': ('https://wiki.fysik.dtu.dk/ase/', None),
+    'ccdc': ('https://downloads.ccdc.cam.ac.uk/documentation/API/', None)
+}
 
 # autodoc_typehints = "description"
 source_suffix = ['.rst', '.md']
