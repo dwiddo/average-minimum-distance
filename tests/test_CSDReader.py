@@ -10,7 +10,7 @@ def refcode_families():
 def test_CSDReader(reference_data, refcode_families):
 
     if not amd.io._CSD_PYTHON_API_ENABLED:
-        pytest.skip(f'Skipping CSDReader test as csd-python-api is not installed.')
+        pytest.skip(f'Skipping test_CSDReader as csd-python-api is not installed.')
 
     references = reference_data['CSD_families']
     read_in = list(amd.CSDReader(refcode_families, show_warnings=False, families=True))
