@@ -19,7 +19,11 @@ def reference_data(root_dir):
 
     refs = {}
     for name in filenames:
-        with open(os.path.join(root_dir, filenames[name] + '.pkl'), 'rb') as f:
-            refs[name] = pickle.load(f)
+        path = os.path.join(root_dir, filenames[name] + '.pkl')
+        with open(path, 'rb') as f:
+            data = pickle.load(f)
+            if not data:
+                raise ValueError(f'Data not found in path {path}')
+            refs[name] = data
 
     return refs

@@ -9,7 +9,7 @@
 
 Implements fingerprints (*isometry invariants*) of crystal structures based on geometry: average minimum distances (AMD) and point-wise distance distributions (PDD). Includes .cif reading tools.
 
-- **Paper:** *Average minimum distances of periodic point sets – foundational invariants for mapping periodic crystals*. MATCH Communications in Mathematical and in Computer Chemistry, 87(3), 529-559 (2022). DOI <https://doi.org/10.46793/match.87-3.529W>, arXiv <https://arxiv.org/abs/2009.02488>
+- **Paper:** *Average minimum distances of periodic point sets - foundational invariants for mapping periodic crystals*. MATCH Communications in Mathematical and in Computer Chemistry, 87(3), 529-559 (2022). DOI <https://doi.org/10.46793/match.87-3.529W>, arXiv <https://arxiv.org/abs/2009.02488>
 - **PyPI project:** <https://pypi.org/project/average-minimum-distance>
 - **Documentation:** <https://average-minimum-distance.readthedocs.io>
 - **Source code:** <https://github.com/dwiddo/average-minimum-distance>
@@ -160,7 +160,7 @@ for i in range(len(set1)):
 
 Use the following bib reference to cite us.
 
-*Average minimum distances of periodic point sets – foundational invariants for mapping periodic crystals*. MATCH Communications in Mathematical and in Computer Chemistry, 87(3), 529-559 (2022). <https://doi.org/10.46793/match.87-3.529W>.
+*Average minimum distances of periodic point sets - foundational invariants for mapping periodic crystals*. MATCH Communications in Mathematical and in Computer Chemistry, 87(3), 529-559 (2022). <https://doi.org/10.46793/match.87-3.529W>.
 
 ```bibtex
 @article{amd2022,

@@ -10,6 +10,7 @@ import warnings
 from typing import Callable, Iterable, Sequence, Tuple
 
 import numpy as np
+import numba
 import ase.io.cif
 import ase.data
 from ase.spacegroup.spacegroup import parse_sitesym
@@ -29,6 +30,8 @@ def _custom_warning(message, category, filename, lineno, *args, **kwargs):
 
 warnings.formatwarning = _custom_warning
 
+_READERS = {'ase', 'ccdc', 'pycodcif'}
+_DISORDER_OPTIONS = {'skip', 'ordered_sites', 'all_sites'}
 _EQUIV_SITE_TOL = 1e-3
 _ATOM_SITE_FRACT_TAGS = [
     '_atom_site_fract_x',
@@ -64,7 +67,14 @@ class _Reader:
         self._generator = self._map(iterable, self._X_to_PSet)
     """
 
-    _DISORDER_OPTIONS = {'skip', 'ordered_sites', 'all_sites'}
+    __slots__ = [
+        'remove_hydrogens',
+        'disorder',
+        'heaviest_component',
+        'show_warnings',
+        'current_filename',
+        '_generator',
+    ]
 
     def __init__(
             self,
@@ -74,8 +84,8 @@ class _Reader:
             show_warnings=True,
     ):
 
-        if disorder not in _Reader._DISORDER_OPTIONS:
-            raise ValueError(f'disorder parameter {disorder} must be one of {_Reader._DISORDER_OPTIONS}')
+        if disorder not in _DISORDER_OPTIONS:
+            raise ValueError(f'disorder parameter {disorder} must be one of {_DISORDER_OPTIONS}')
 
         self.remove_hydrogens = remove_hydrogens
         self.disorder = disorder
@@ -88,12 +98,12 @@ class _Reader:
         yield from self._generator
 
     def read_one(self):
-        """Read the next (or first) item."""
+        """Read the next (usually first and/or only) item."""
         return next(iter(self._generator))
 
     def _map(self, func: Callable, iterable: Iterable) -> Iterable[PeriodicSet]:
-        """Iterates over iterable, passing items through parser and yielding the result.
-        Applies warning and include_if filters, catches bad structures and warns.
+        """Iterates over iterable, passing items through parser and 
+        yielding the result. Catches bad structures and warns.
         """
 
         if not self.show_warnings:
@@ -193,15 +203,15 @@ class CifReader(_Reader):
             show_warnings=show_warnings,
         )
 
-        if reader not in ('ase', 'ccdc'):
-            raise ValueError(f'Invalid reader {reader}; must be ase or ccdc.')
+        if reader not in _READERS:
+            raise ValueError(f'Invalid reader {reader}; must be one of f{_READERS}.')
 
-        if reader == 'ase' and heaviest_component:
-            raise NotImplementedError('Parameter heaviest_component not implimented for ase, only ccdc.')
+        if reader in ('ase', 'pycodcif'):
+            if heaviest_component:
+                raise NotImplementedError('Parameter heaviest_component only implimented for reader="ccdc".')
 
-        if reader == 'ase':
             extensions = {'cif'}
-            file_parser = ase.io.cif.parse_cif
+            file_parser = functools.partial(ase.io.cif.parse_cif, reader=reader)
             converter = functools.partial(cifblock_to_periodicset,
                                           remove_hydrogens=remove_hydrogens,
                                           disorder=disorder)
@@ -294,6 +304,8 @@ class CSDReader(_Reader):
             debxit01 = reader.entry('DEBXIT01')
     """
 
+    __slots__ = ['_entry_reader']
+
     def __init__(
             self,
             refcodes=None,
@@ -348,13 +360,6 @@ class CSDReader(_Reader):
         generator = self._ccdc_generator(refcodes)
         self._generator = self._map(converter, generator)
 
-    def entry(self, refcode: str, **kwargs) -> PeriodicSet:
-        """Read a crystal given a CSD refcode, returning a :class:`.periodicset.PeriodicSet`."""
-
-        entry = self._entry_reader.entry(refcode)
-        periodic_set = entry_to_periodicset(entry, **kwargs)
-        return periodic_set
-
     def _ccdc_generator(self, refcodes):
         """Generates ccdc Entries from CSD refcodes."""
 
@@ -369,6 +374,12 @@ class CSDReader(_Reader):
                 except RuntimeError:    # if self.show_warnings?
                     warnings.warn(f'Identifier {refcode} not found in database')
 
+    def entry(self, refcode: str, **kwargs) -> PeriodicSet:
+        """Read a crystal given a CSD refcode, returning a :class:`.periodicset.PeriodicSet`."""
+        entry = self._entry_reader.entry(refcode)
+        periodic_set = entry_to_periodicset(entry, **kwargs)
+        return periodic_set
+
 
 def entry_to_periodicset(
         entry,
@@ -377,7 +388,44 @@ def entry_to_periodicset(
         heaviest_component=False
 ) -> PeriodicSet:
     """:class:`ccdc.entry.Entry` --> :class:`amd.periodicset.PeriodicSet`.
-    Entry is the type returned by :class:`ccdc.io.EntryReader`."""
+    Entry is the type returned by :class:`ccdc.io.EntryReader`.
+
+    Parameters
+    ----------
+    entry : :class:`ccdc.entry.Entry`
+        A ccdc Entry object representing a database entry.
+    remove_hydrogens : bool, optional
+        Remove Hydrogens from the crystal.
+    disorder : str, optional
+        Controls how disordered structures are handled. Default is ``skip`` which skips any crystal 
+        with disorder, since disorder conflicts with the periodic set model. To read disordered 
+        structures anyway, choose either :code:`ordered_sites` to remove sites with disorder or 
+        :code:`all_sites` include all sites regardless.
+    heaviest_component : bool, optional
+        Removes all but the heaviest molecule in the asymmeric unit,
+        intended for removing solvents. 
+
+    Returns
+    -------
+    :class:`.periodicset.PeriodicSet`
+        Represents the crystal as a periodic set, consisting of a finite set of points (motif)
+        and lattice (unit cell). Contains other useful data, e.g. the crystal's name and
+        information about the asymmetric unit for calculation.
+
+    Raises
+    ------
+    _ParseError
+        Raised if the structure cannot (or should not) be parsed.
+        Specifically raised when:
+            - entry.has_3d_structure is False
+            - disorder == 'skip' and any of:
+                any disorder flag is True,
+                any atom has fractional occupancy,
+                any atom's label ends with '?'
+            - entry.crystal.molecule.all_atoms_have_sites is False
+            - a.fractional_coordinates is None for any a in entry.crystal.disordered_molecule
+            - motif is empty after removing H or disordered sites
+    """
 
     crystal = entry.crystal
 
@@ -447,6 +495,37 @@ def cifblock_to_periodicset(
 ) -> PeriodicSet:
     """:class:`ase.io.cif.CIFBlock` --> :class:`amd.periodicset.PeriodicSet`. 
     CIFBlock is the type returned by :class:`ase.io.cif.parse_cif`.
+
+    Parameters
+    ----------
+    block : :class:`ase.io.cif.CIFBlock`
+        An ase CIFBlock object representing a crystal.
+    remove_hydrogens : bool, optional
+        Remove Hydrogens from the crystal.
+    disorder : str, optional
+        Controls how disordered structures are handled. Default is ``skip`` which skips any crystal 
+        with disorder, since disorder conflicts with the periodic set model. To read disordered 
+        structures anyway, choose either :code:`ordered_sites` to remove sites with disorder or 
+        :code:`all_sites` include all sites regardless.
+
+    Returns
+    -------
+    :class:`.periodicset.PeriodicSet`
+        Represents the crystal as a periodic set, consisting of a finite set of points (motif)
+        and lattice (unit cell). Contains other useful data, e.g. the crystal's name and
+        information about the asymmetric unit for calculation.
+
+    Raises
+    ------
+    _ParseError
+        Raised if the structure cannot (or should not) be parsed.
+        Specifically raised when:
+            - no sites found or motif is empty after removing H or disordered sites
+            - a site has missing coordinates
+            - disorder == 'skip' and any of:
+                any disorder flag is True,
+                any atom has fractional occupancy,
+                any atom's label ends with '?'
     """
 
     cell = block.get_cell().array
@@ -458,6 +537,10 @@ def cifblock_to_periodicset(
         if None in asym_motif:
             raise _ParseError(f'{block.name}: Has no sites')
         asym_unit = np.array(asym_motif) @ np.linalg.inv(cell)
+
+    if any(None in coords for coords in asym_unit):
+        raise _ParseError(f'{block.name}: Has atoms without sites')
+
     asym_unit = np.mod(np.array(asym_unit).T, 1)
 
     try:
@@ -572,17 +655,17 @@ def _expand_asym_unit(
 
 
 def _atom_has_disorder(label, occupancy):
-    """Return True if atom has disorder and False otherwise."""
+    """Return True if label ends with ? or occupancy < 1."""
     return label.endswith('?') or (np.isscalar(occupancy) and occupancy < 1)
 
 
+@numba.njit()
 def _unique_sites(asym_unit):
-    site_diffs1 = np.abs(asym_unit[:, None] - asym_unit)
+    site_diffs1 = np.abs(np.expand_dims(asym_unit, 1) - asym_unit)
     site_diffs2 = np.abs(site_diffs1 - 1)
-    overlapping = np.triu(np.all(
-        (site_diffs1 <= _EQUIV_SITE_TOL) | (site_diffs2 <= _EQUIV_SITE_TOL),
-        axis=-1), 1)
-    return ~overlapping.any(axis=0)
+    sites_neq_mask = np.logical_and((site_diffs1 > _EQUIV_SITE_TOL), (site_diffs2 > _EQUIV_SITE_TOL))
+    overlapping = np.triu(sites_neq_mask.sum(axis=-1) == 0, 1)
+    return overlapping.sum(axis=0) == 0
 
 
 def _heaviest_component(molecule):

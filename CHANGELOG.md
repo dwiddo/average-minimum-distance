@@ -2,7 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.2] - 21/05/2022
+## [1.2.3] - 28/05/2022
+
+### Added
+
+- AMD/PDD and EMD speed up of ~10-20%.
+
+- Support for reader `pycodcif` (CIF v2.0) in `CifReader` through `ase`, if installed.
+
+### Removed
+
+- Removing module `pset_io` in favour of pickle.
+
+## [1.2.2] - 25/05/2022
 
 ### Added
 

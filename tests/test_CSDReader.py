@@ -7,10 +7,9 @@ def refcode_families():
     return ['DEBXIT', 'GLYCIN', 'HXACAN', 'ACSALA']
 
 
+@pytest.mark.skipif(not amd.io._CSD_PYTHON_API_ENABLED,
+    reason=f'Skipping test_heaviest_component as csd-python-api is not installed.')
 def test_CSDReader(reference_data, refcode_families):
-
-    if not amd.io._CSD_PYTHON_API_ENABLED:
-        pytest.skip(f'Skipping test_CSDReader as csd-python-api is not installed.')
 
     references = reference_data['CSD_families']
     read_in = list(amd.CSDReader(refcode_families, show_warnings=False, families=True))

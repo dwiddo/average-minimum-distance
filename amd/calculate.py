@@ -144,8 +144,7 @@ def PDD(
         if overlapping.any():
             groups = _collapse_into_groups(overlapping)
             weights = np.array([sum(weights[group]) for group in groups])
-            ordering = [group[0] for group in groups]
-            dists = dists[ordering]
+            dists = np.array([np.average(dists[group], axis=0) for group in groups])
 
     pdd = np.hstack((weights[:, None], dists))
 

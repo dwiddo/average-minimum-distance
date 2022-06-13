@@ -49,7 +49,7 @@ def EMD(
     emd_dist, transport_plan = network_simplex(pdd[:, 0], pdd_[:, 0], dm)
 
     if return_transport:
-        return emd_dist, transport_plan.reshape(dm.shape)
+        return emd_dist, transport_plan
 
     return emd_dist
 
