@@ -376,7 +376,9 @@ def make_root(q, parent, size, last, prev, next_node, edge):
         ancestors.insert(0, q)
         q = parent[q]
 
-    for p, q in zip(ancestors[:-1], ancestors[1:]):
+    for i in range(len(ancestors) - 1):
+        p = ancestors[i]
+        q = ancestors[i+1]
         size_p = size[p]
         last_p = last[p]
         prev_q = prev[q]

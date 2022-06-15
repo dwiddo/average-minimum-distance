@@ -82,15 +82,15 @@ def PDD(
         The returned PDD has k+1 columns, an additional first column for row weights.
         k is the number of neighbours considered for each atom in the unit cell 
         to make the PDD.
-    lexsort : bool, optional
+    lexsort : bool, default True
         Lexicographically order the rows. Default True.
-    collapse: bool, optional
+    collapse: bool, default True
         Collapse repeated rows (within the tolerance ``collapse_tol``). Default True.
-    collapse_tol: float, optional
+    collapse_tol: float, default 1e-4
         If two rows have all elements closer than ``collapse_tol``, they are merged and
         weights are given to rows in proportion to the number of times they appeared.
         Default is 0.0001.
-    return_row_groups: bool, optional
+    return_row_groups: bool, default False
         Return data about which PDD rows correspond to which points.
         If True, a tuple is returned ``(pdd, groups)`` where ``groups[i]`` 
         contains the indices of the point(s) corresponding to ``pdd[i]``. 
@@ -219,16 +219,16 @@ def PDD_finite(
     ----------
     motif : numpy.ndarray
         Coordinates of a set of points.
-    lexsort : bool, optional
+    lexsort : bool, default True
         Whether or not to lexicographically order the rows. Default True.
-    collapse: bool, optional
+    collapse: bool, default True
         Whether or not to collapse repeated rows (within the tolerance ``collapse_tol``). 
         Default True.
-    collapse_tol: float
+    collapse_tol: float, default 1e-4
         If two rows have all elements closer than ``collapse_tol``, they are merged and
         weights are given to rows in proportion to the number of times they appeared.
         Default is 0.0001.
-    return_row_groups: bool, optional
+    return_row_groups: bool, default False
         Whether to return data about which PDD rows correspond to which points.
         If True, a tuple is returned ``(pdd, groups)`` where ``groups[i]`` 
         contains the indices of the point(s) corresponding to ``pdd[i]``.
@@ -292,7 +292,7 @@ def PDD_reconstructable(
     periodic_set : :class:`.periodicset.PeriodicSet`  tuple of :class:`numpy.ndarray` s
         A periodic set represented by a :class:`.periodicset.PeriodicSet` or
         by a tuple (motif, cell) with coordinates in Cartesian form and a square unit cell.
-    lexsort : bool, optional
+    lexsort : bool, default True
         Whether or not to lexicographically order the rows. Default True.
 
     Returns
@@ -320,10 +320,9 @@ def PPC(periodic_set: PeriodicSet_or_Tuple) -> float:
     r"""The point packing coefficient (PPC) of ``periodic_set``.
 
     The PPC is a constant of any periodic set determining the
-    asymptotic behaviour of its AMD and PDD as :math:`k \rightarrow \infty`.
-
-    As :math:`k \rightarrow \infty`, the ratio :math:`\text{AMD}_k / \sqrt[n]{k}`
-    approaches the PPC (as does any row of its PDD).
+    asymptotic behaviour of its AMD and PDD. As :math:`k \rightarrow \infty`, 
+    the ratio :math:`\text{AMD}_k / \sqrt[n]{k}` converges to the PPC,
+    as does any row of its PDD.
 
     For a unit cell :math:`U` and :math:`m` motif points in :math:`n` dimensions,
 
@@ -336,7 +335,8 @@ def PPC(periodic_set: PeriodicSet_or_Tuple) -> float:
     Parameters
     ----------
     periodic_set : :class:`.periodicset.PeriodicSet` or tuple of
-        ndarrays (motif, cell) representing the periodic set in Cartesian form.
+        :class:`numpy.ndarray` s (motif, cell) representing the periodic set 
+        in Cartesian form.
 
     Returns
     -------

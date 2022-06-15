@@ -3,10 +3,12 @@
 
 from typing import List, Optional, Union
 import warnings
+from itertools import combinations
+from functools import partial
 
 import numpy as np
 from scipy.spatial.distance import cdist, pdist
-from progressbar import ProgressBar
+from joblib import Parallel, delayed
 
 from ._network_simplex import network_simplex
 
@@ -26,11 +28,11 @@ def EMD(
         PDD of a crystal.
     pdd\_ : numpy.ndarray
         PDD of a crystal.
-    metric : str or callable, optional
+    metric : str or callable, default 'chebyshev'
         EMD between PDDs requires defining a distance between PDD rows.
         By default, Chebyshev (L-infinity) distance is chosen as with AMDs.
         Accepts any metric accepted by :func:`scipy.spatial.distance.cdist`.
-    return_transport: bool, optional
+    return_transport: bool, default False
         Return a tuple ``(distance, transport_plan)`` with the optimal transport.
 
     Returns
@@ -44,7 +46,7 @@ def EMD(
         Thrown if ``pdd`` and ``pdd_`` do not have the same number of 
         columns (``k`` value).
     """
-    # put kwargs back! make sure it works with amd_extras, everywhere EMD is used!
+
     dm = cdist(pdd[:, 1:], pdd_[:, 1:], metric=metric, **kwargs)
     emd_dist, transport_plan = network_simplex(pdd[:, 0], pdd_[:, 0], dm)
 
@@ -71,16 +73,16 @@ def AMD_cdist(
         A list of AMDs.
     amds\_ : array_like
         A list of AMDs.
-    metric : str or callable, optional
+    metric : str or callable, default 'chebyshev'
         Usually AMDs are compared with the Chebyshev (L-infinitys) distance.
         Can take any metric accepted by :func:`scipy.spatial.distance.cdist`.
-    low_memory : bool, optional
+    low_memory : bool, default False
         Use a slower but more memory efficient method for
         large collections of AMDs (Chebyshev metric only).
 
     Returns
     -------
-    dm : :class:`numpy.ndarray`
+    dm : numpy.ndarray
         A distance matrix shape ``(len(amds), len(amds_))``.
         ``dm[ij]`` is the distance (given by ``metric``) 
         between ``amds[i]`` and ``amds[j]``.
@@ -120,16 +122,16 @@ def AMD_pdist(
     ----------
     amds : array_like
         An array/list of AMDs.
-    metric : str or callable, optional
+    metric : str or callable, default 'chebyshev'
         Usually AMDs are compared with the Chebyshev (L-infinity) distance.
         Can take any metric accepted by :func:`scipy.spatial.distance.pdist`.
-    low_memory : bool, optional
+    low_memory : bool, default False
         Optionally use a slightly slower but more memory efficient method for
         large collections of AMDs (Chebyshev metric only).
 
     Returns
     -------
-    :class:`numpy.ndarray`
+    numpy.ndarray
         Returns a condensed distance matrix. Collapses a square distance
         matrix into a vector, just keeping the upper half. See
         :func:`scipy.spatial.distance.squareform` to convert to a square 
@@ -161,7 +163,8 @@ def PDD_cdist(
         pdds: List[np.ndarray],
         pdds_: List[np.ndarray],
         metric: str = 'chebyshev',
-        verbose=False,
+        n_jobs=None,
+        verbose=0,
         **kwargs
 ) -> np.ndarray:
     r"""Compare two sets of PDDs with each other, returning a distance matrix.
@@ -172,13 +175,19 @@ def PDD_cdist(
         A list of PDDs.
     pdds\_ : List[numpy.ndarray]
         A list of PDDs.
-    metric : str or callable, optional
+    metric : str or callable, default 'chebyshev'
         Usually PDD rows are compared with the Chebyshev/l-infinity distance.
         Can take any metric accepted by :func:`scipy.spatial.distance.cdist`.
+    n_jobs : int, default None
+        Maximum number of concurrent jobs for parallel processing with joblib.
+        Set to -1 to use the maximum possible. Note that for small inputs (< 100), 
+        using parallel processing may be slower than the default n_jobs=None.
+    verbose : int, default 0
+        The verbosity level. Higher = more verbose, see joblib.Parallel.
 
     Returns
     -------
-    :class:`numpy.ndarray`
+    numpy.ndarray
         Returns a distance matrix shape ``(len(pdds), len(pdds_))``.
         The :math:`ij` th entry is the distance between ``pdds[i]``
         and ``pdds_[j]`` given by Earth mover's distance.
@@ -194,25 +203,20 @@ def PDD_cdist(
 
     kwargs.pop('return_transport', None)
 
-    n, m = len(pdds), len(pdds_)
-    dm = np.empty((n, m))
-    
-    if verbose:
-        bar = ProgressBar(max_value=n * m)
-
-    for i in range(n):
-        for j in range(m):
-            dm[i, j] = EMD(pdds[i], pdds_[j], metric=metric, **kwargs)
-            if verbose:
-                bar.update(m * i + j)
-
-    return dm
+    # TODO: put results into preallocated empty array in place
+    dm = Parallel(backend='multiprocessing', n_jobs=n_jobs, verbose=verbose)(
+        delayed(partial(EMD, metric=metric, **kwargs))(pdds[i], pdds_[j])
+        for j in range(len(pdds_)) for i in range(len(pdds))
+    )
+    dm = np.array(dm)
+    return dm.reshape((len(pdds), len(pdds_)))
 
 
 def PDD_pdist(
         pdds: List[np.ndarray],
         metric: str = 'chebyshev',
-        verbose=False,
+        n_jobs=None,
+        verbose=0,
         **kwargs
 ) -> np.ndarray:
     """Compare a set of PDDs pairwise, returning a condensed distance matrix.
@@ -221,39 +225,33 @@ def PDD_pdist(
     ----------
     pdds : List[numpy.ndarray]
         A list of PDDs.
-    metric : str or callable, optional
+    metric : str or callable, default 'chebyshev'
         Usually PDD rows are compared with the Chebyshev/l-infinity distance.
         Can take any metric accepted by :func:`scipy.spatial.distance.pdist`.
+    n_jobs : int, default None
+        Maximum number of concurrent jobs for parallel processing with joblib.
+        Set to -1 to use the maximum possible. Note that for small inputs (< 100), 
+        using parallel processing may be slower than the default n_jobs=None.
+    verbose : int, default 0
+        The verbosity level. Higher = more verbose, see joblib.Parallel for more.
 
     Returns
     -------
-    :class:`numpy.ndarray`
+    numpy.ndarray
         Returns a condensed distance matrix. Collapses a square
         distance matrix into a vector just keeping the upper half. See
         :func:`scipy.spatial.distance.squareform` to convert to a square 
         distance matrix or for more on condensed distance matrices.
     """
 
-    if isinstance(pdds, np.ndarray):
-        if len(pdds.shape) == 2:
-            pdds = [pdds]
-
     kwargs.pop('return_transport', None)
 
-    m = len(pdds)
-    cdm_len = (m * (m - 1)) // 2
-    cdm = np.empty(cdm_len, dtype=np.double)
-    if verbose:
-        bar = ProgressBar(max_value=cdm_len)
-
-    inds = ((i, j) for i in range(0, m - 1) for j in range(i + 1, m))
-
-    for r, (i, j) in enumerate(inds):
-        cdm[r] = EMD(pdds[i], pdds[j], metric=metric, **kwargs)
-        if verbose:
-            bar.update(r)
-
-    return cdm
+    # TODO: put results into preallocated empty array in place
+    ret = Parallel(backend='multiprocessing', n_jobs=n_jobs, verbose=verbose)(
+        delayed(partial(EMD, metric=metric, **kwargs))(pdds[i], pdds[j])
+        for i, j in combinations(range(len(pdds)), 2)
+    )
+    return np.array(ret)
 
 
 def emd(

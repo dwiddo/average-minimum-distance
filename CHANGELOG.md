@@ -2,9 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.3] - 28/05/2022
+## [1.2.3] - 15/06/2022
 
 ### Added
+
+- `PDD_pdist` and `PDD_cdist` now support parallel processing with the keyword argument `n_jobs`. The argument `verbose` has changed to accept an integer which is passed to `joblib.Parallel` to control the level of verbosity.
 
 - AMD/PDD and EMD speed up of ~10-20%.
 
@@ -13,6 +15,8 @@ All notable changes to this project will be documented in this file.
 ### Removed
 
 - Removing module `pset_io` in favour of pickle.
+
+- Dependencies `progressbar2` and `h5py` removed.
 
 ## [1.2.2] - 25/05/2022
 

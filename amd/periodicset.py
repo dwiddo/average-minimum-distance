@@ -13,12 +13,23 @@ import numpy as np
 
 class PeriodicSet:
     """A periodic set is the mathematical representation of a crystal by putting a
-    single point in the center of every atom. A periodic set is defined by a basis
-    (unit cell) and collection of points (motif) which repeats according to the basis.
+    single point in the center of every atom. It is defined by a basis (unit cell) 
+    and collection of points (motif) which repeats according to the basis.
 
     :class:`PeriodicSet` s are returned by the readers in the :mod:`.io` module.
     Instances of this object can be passed to :func:`.calculate.AMD` or
     :func:`.calculate.PDD` to calculate the invariant.
+
+    Parameters
+    ----------
+    motif : numpy.ndarray
+        Cartesian coords of the motif, shape (no points, dims).
+    cell : numpy.ndarray
+        Cartesian coords of the unit cell, shape (dims, dims).
+    name : str, optional
+        Name of the periodic set.
+    kwargs
+        Additional data to store with the PeriodicSet.
     """
 
     def __init__(

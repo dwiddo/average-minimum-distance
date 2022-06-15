@@ -35,8 +35,7 @@ install_requires = [
     'numba>=0.55.0',
 	'scipy>=1.6.1',
 	'ase>=3.22.0',
-	'h5py>=3.3.0',
-    'progressbar2>=4.0.0',
+    'joblib>=1.1.0',
 ]
 
 project_urls = {
