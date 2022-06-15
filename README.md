@@ -22,9 +22,9 @@ A crystal is an arrangement of atoms which periodically repeats according to som
 
 ## Description of AMD and PDD
 
-Essentially, the point-wise distance distribution (PDD) of a crystal records the environment of each atom in a unit cell. It does this by listing distances to neighbouring atoms in order, closest first. When PDDs are compared we try to find an optimal matching of these environments, so a small distance between PDDs means the lists of distances to neighbours of atoms in one crystal line up with the other.
+Essentially, the point-wise distance distribution (PDD) of a crystal records the environment of each atom in a unit cell. It does this by listing distances to their neighbouring atoms in order, closest first. When PDDs are compared we try to find an optimal matching of these environments, so a small distance between PDDs means the lists of distances to neighbours of atoms in one crystal line up with the other. This is done in a way that is independent of the choice of unit cell.
 
-The average minimum distance (AMD) averages the PDD over over atoms in the unit cell. In theory this loses some information about the structure. As AMDs are vectors, comparing them is much faster than comparing PDDs.
+The average minimum distance (AMD) averages the PDD over over atoms in the unit cell to make a single vector. In theory this loses some information about the crystal, but in practice two crystals which distinguished by their PDDs are also by their AMDs. As AMDs are vectors, comparing them is much faster than comparing PDDs.
 
 ### A more formal description
 

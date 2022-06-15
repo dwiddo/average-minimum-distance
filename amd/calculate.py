@@ -150,7 +150,8 @@ def PDD(
 
     if lexsort:
         lex_ordering = np.lexsort(np.rot90(dists))
-        groups = [groups[i] for i in lex_ordering]
+        if return_row_groups:
+            groups = [groups[i] for i in lex_ordering]
         pdd = pdd[lex_ordering]
 
     if return_row_groups:
