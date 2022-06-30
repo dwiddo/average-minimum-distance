@@ -138,7 +138,7 @@ def PDD(
     else:
         weights = multiplicities / np.sum(multiplicities)
 
-    if collapse:
+    if collapse and collapse_tol > 0:
         overlapping = pdist(dists, metric='chebyshev')
         overlapping = overlapping < collapse_tol
         if overlapping.any():

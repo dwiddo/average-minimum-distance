@@ -2,19 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.3] - 15/06/2022
+## [1.4] - 27/06/2022
 
 ### Added
 
 - `PDD_pdist` and `PDD_cdist` now support parallel processing with the keyword argument `n_jobs`. The argument `verbose` has changed to accept an integer which is passed to `joblib.Parallel` to control the level of verbosity.
 
-- AMD/PDD and EMD speed up of ~10-20%.
+- AMD/PDD and EMD speed improvements. AMD and PDD now use `pykdtree` to find nearest neighbours of motif points, which is much faster. The number of threads used by `pykdtree` can be controlled with the standard OpenMP environment variable OMP_NUM_THREADS. Before importing `amd` or `numpy`, do `import os; os.environ["OMP_NUM_THREADS"] = "4"` to set 4 threads, for example.
 
 - Support for reader `pycodcif` (CIF v2.0) in `CifReader` through `ase`, if installed.
 
 ### Removed
 
-- Removing module `pset_io` in favour of pickle.
+- Removing module `pset_io` and in favour of pickle.
 
 - Dependencies `progressbar2` and `h5py` removed.
 

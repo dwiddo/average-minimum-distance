@@ -247,11 +247,11 @@ def PDD_pdist(
     kwargs.pop('return_transport', None)
 
     # TODO: put results into preallocated empty array in place
-    ret = Parallel(n_jobs=n_jobs, verbose=verbose)(
+    dm = Parallel(n_jobs=n_jobs, verbose=verbose)(
         delayed(partial(EMD, metric=metric, **kwargs))(pdds[i], pdds[j])
         for i, j in combinations(range(len(pdds)), 2)
     )
-    return np.array(ret)
+    return np.array(dm)
 
 def emd(
         pdd: np.ndarray,

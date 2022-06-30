@@ -24,6 +24,8 @@ more details about specific tasks.
    amd.periodicset
    amd.utils
 
+.. mdinclude:: amd
+
 .. mdinclude:: ../../README.md
 
 Indices and tables

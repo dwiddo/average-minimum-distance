@@ -5,7 +5,8 @@ import itertools
 
 import numpy as np
 import numba
-import scipy.spatial
+from scipy.spatial.distance import cdist
+from scipy.spatial import KDTree
 
 from . import _nearest_neighbours
 from . import utils
@@ -170,9 +171,7 @@ def _neighbour_set(cell, prec):
     origin = np.zeros((1, cell.shape[0]))
     cloud_generator = _nearest_neighbours.generate_concentric_cloud(origin, cell)
     cloud = np.concatenate((next(cloud_generator), next(cloud_generator)))
-    tree = scipy.spatial.KDTree(cloud,
-                                compact_nodes=False,
-                                balanced_tree=False)
+    tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
     dists, inds = tree.query(vecs, k=k_, workers=-1)
     dists_ = np.empty_like(dists)
 
@@ -181,9 +180,7 @@ def _neighbour_set(cell, prec):
         cloud = np.vstack((cloud,
                            next(cloud_generator),
                            next(cloud_generator)))
-        tree = scipy.spatial.KDTree(cloud,
-                                    compact_nodes=False,
-                                    balanced_tree=False)
+        tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
         dists_, inds = tree.query(vecs, k=k_, workers=-1)
 
     tmp_inds = np.unique(inds[:, 1:].flatten())
@@ -197,7 +194,7 @@ def _neighbour_set(cell, prec):
     # so, check if the dist to 0 is leq (within tol) than dist to all other lattice points
     nn_norms = np.linalg.norm(neighbour_set, axis=-1)
     halves_norms = nn_norms / 2
-    halves_to_lattice_dists = scipy.spatial.distance.cdist(neighbour_set_half, neighbour_set)
+    halves_to_lattice_dists = cdist(neighbour_set_half, neighbour_set)
 
     # Do I need to + PREC?
     # inds of voronoi neighbours in cloud

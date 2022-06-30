@@ -1,5 +1,5 @@
-numpy>=1.21,<1.22
-numba>=0.55.0
+numpy>=1.22,<1.23
+numba>=0.55.2
 scipy>=1.6.1
 ase>=3.22.0
 joblib>=1.1.0

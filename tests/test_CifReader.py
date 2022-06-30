@@ -13,7 +13,6 @@ def cif_paths(root_dir):
 
 
 def test_CifReader(cif_paths, reference_data):
-
     for name in cif_paths:
         references = reference_data[name]
         read_in = list(amd.CifReader(cif_paths[name], show_warnings=True))

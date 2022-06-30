@@ -7,22 +7,23 @@
 [![MATCH Paper](https://img.shields.io/badge/DOI-10.46793%2Fmatch.87--3.529W-blue)](https://doi.org/10.46793/match.87-3.529W)
 [![CC-0 license](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-blue.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
-Implements fingerprints (*isometry invariants*) of crystal structures based on geometry: average minimum distances (AMD) and point-wise distance distributions (PDD). Includes .cif reading tools.
+Implements fingerprints (*isometry invariants*) of crystal structures based on geometry: average minimum distances (AMD) and pointwise distance distributions (PDD). Includes .cif reading tools.
 
-- **Paper:** *Average minimum distances of periodic point sets - foundational invariants for mapping periodic crystals*. MATCH Communications in Mathematical and in Computer Chemistry, 87(3), 529-559 (2022). DOI <https://doi.org/10.46793/match.87-3.529W>, arXiv <https://arxiv.org/abs/2009.02488>
 - **PyPI project:** <https://pypi.org/project/average-minimum-distance>
 - **Documentation:** <https://average-minimum-distance.readthedocs.io>
 - **Source code:** <https://github.com/dwiddo/average-minimum-distance>
-
-If you use our code in your work, cite us with the reference at the bottom of this page: [click here jump to it](#citeus).
+- **References** ([jump to bib references](#citeus)):
+  - *Average minimum distances of periodic point sets - foundational invariants for mapping periodic crystals*. MATCH Communications in Mathematical and in Computer Chemistry, 87(3):529-559 (2022). <https://doi.org/10.46793/match.87-3.529W>
+  - *Pointwise distance distributions of periodic point sets*. arXiv preprint arXiv:2108.04798 (2021). <https://arxiv.org/abs/2108.04798>
+  - *Analogy Powered by Prediction and Structural Invariants: Computationally Led Discovery of a Mesoporous Hydrogen-Bonded Organic Cage Crystal*. Journal of the American Chemical Society, 144(22):9893–9901 (2022). <https://doi.org/10.1021/jacs.2c02653>
 
 ## What's amd?
 
-A crystal is an arrangement of atoms which periodically repeats according to some lattice. Crystals are usually given by listing parameters defining the lattice (or unit cell) and the atomic coordinates, e.g. in a .cif file, but this representation is ambiguous because different .cif files can define the same crystal. This package implements new *isometric invariants* based on inter-point distances which are guaranteed to take the same value for all (isometrically) equivalent representations of a crystal, called average minimum distances (AMDs) and point-wise distance distributions (PDDs). These invariants are also continuous, meaning crystals which are similar have similar AMDs and PDDs.
+The typical representation of a crystal as a motif and cell is ambiguous, as there are many ways to define the same crystal. This package implements *isometric invariants*, called average minimum distances (AMD) and pointwise distance distributions (PDD), which always take the same value for any two (isometrically) identical input crystals. They do this in a continuous way, so similar crystals have similar invariants.
 
-## Description of AMD and PDD
+### Description of AMD and PDD
 
-Essentially, the point-wise distance distribution (PDD) of a crystal records the environment of each atom in a unit cell. It does this by listing distances to their neighbouring atoms in order, closest first. When PDDs are compared we try to find an optimal matching of these environments, so a small distance between PDDs means the lists of distances to neighbours of atoms in one crystal line up with the other. This is done in a way that is independent of the choice of unit cell.
+The pointwise distance distribution (PDD) of a crystal records the environment of each atom in a unit cell. It does this by listing distances to their neighbouring atoms in order, closest first. When PDDs are compared we try to find an optimal matching of these environments, so a small distance between PDDs means the lists of distances to neighbours of atoms in one crystal line up with the other. This is done in a way that is independent of the choice of unit cell.
 
 The average minimum distance (AMD) averages the PDD over over atoms in the unit cell to make a single vector. In theory this loses some information about the crystal, but in practice two crystals which distinguished by their PDDs are also by their AMDs. As AMDs are vectors, comparing them is much faster than comparing PDDs.
 
@@ -165,12 +166,23 @@ Use the following bib reference to cite us.
 ```bibtex
 @article{amd2022,
   title = {Average Minimum Distances of periodic point sets - foundational invariants for mapping periodic crystals},
-  author = {Daniel Widdowson and Marco M Mosca and Angeles Pulido and Vitaliy Kurlin and Andrew I Cooper},
+  author = {Widdowson, Daniel and Mosca, Marco M and Pulido, Angeles and Kurlin, Vitaliy and Cooper, Andrew I},
   journal = {MATCH Communications in Mathematical and in Computer Chemistry},
   doi = {10.46793/match.87-3.529W},
   volume = {87},
   number = {3},
   pages = {529-559},
   year = {2022}
+}
+```
+
+```bibtex
+@misc{pdd2022,
+  doi = {10.48550/ARXIV.2108.04798},
+  url = {https://arxiv.org/abs/2108.04798},
+  author = {Widdowson, Daniel and Kurlin, Vitaliy},
+  title = {Pointwise distance distributions of periodic point sets},
+  publisher = {arXiv},
+  year = {2021},
 }
 ```

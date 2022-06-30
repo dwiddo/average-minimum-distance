@@ -67,15 +67,6 @@ class _Reader:
         self._generator = self._map(iterable, self._X_to_PSet)
     """
 
-    __slots__ = [
-        'remove_hydrogens',
-        'disorder',
-        'heaviest_component',
-        'show_warnings',
-        'current_filename',
-        '_generator',
-    ]
-
     def __init__(
             self,
             remove_hydrogens=False,
@@ -91,7 +82,6 @@ class _Reader:
         self.disorder = disorder
         self.heaviest_component = heaviest_component
         self.show_warnings = show_warnings
-        self.current_filename = None
         self._generator = []
 
     def __iter__(self):
@@ -126,9 +116,6 @@ class _Reader:
             for warning in warning_msgs:
                 msg = f'{periodic_set.name}: {warning.message}'
                 warnings.warn(msg, category=warning.category)
-
-            if self.current_filename:
-                periodic_set.tags['filename'] = self.current_filename
 
             yield periodic_set
 
@@ -239,7 +226,6 @@ class CifReader(_Reader):
         for file in os.listdir(path):
             suff = os.path.splitext(file)[1][1:]
             if suff.lower() in extensions:
-                self.current_filename = file
                 yield from file_parser(os.path.join(path, file))
 
 
@@ -351,7 +337,6 @@ class CSDReader(_Reader):
                 if not (refcode in seen or seen_add(refcode))]
 
         self._entry_reader = ccdc.io.EntryReader('CSD')
-
         converter = functools.partial(entry_to_periodicset,
                                       remove_hydrogens=remove_hydrogens,
                                       disorder=disorder,
@@ -371,13 +356,21 @@ class CSDReader(_Reader):
                 try:
                     entry = self._entry_reader.entry(refcode)
                     yield entry
-                except RuntimeError:    # if self.show_warnings?
-                    warnings.warn(f'Identifier {refcode} not found in database')
+                except RuntimeError:
+                    warnings.warn(f'{refcode}: not found in database')
 
     def entry(self, refcode: str, **kwargs) -> PeriodicSet:
-        """Read a crystal given a CSD refcode, returning a :class:`.periodicset.PeriodicSet`."""
+        """Read a crystal given a CSD refcode, returning a :class:`.periodicset.PeriodicSet`.
+        If given kwargs, overrides the kwargs given to the Reader."""
+
+        kwargs_ = {
+            'remove_hydrogens': self.remove_hydrogens,
+            'disorder': self.disorder,
+            'heaviest_component': self.heaviest_component
+        }
+        kwargs_.update(kwargs)
         entry = self._entry_reader.entry(refcode)
-        periodic_set = entry_to_periodicset(entry, **kwargs)
+        periodic_set = entry_to_periodicset(entry, **kwargs_)
         return periodic_set
 
 
@@ -414,17 +407,16 @@ def entry_to_periodicset(
 
     Raises
     ------
-    _ParseError
-        Raised if the structure cannot (or should not) be parsed.
-        Specifically raised when:
-            - entry.has_3d_structure is False
-            - disorder == 'skip' and any of:
-                any disorder flag is True,
-                any atom has fractional occupancy,
-                any atom's label ends with '?'
-            - entry.crystal.molecule.all_atoms_have_sites is False
-            - a.fractional_coordinates is None for any a in entry.crystal.disordered_molecule
-            - motif is empty after removing H or disordered sites
+    _ParseError :
+        Raised if the structure can/should not be parsed for the following reasons:
+        1. entry.has_3d_structure is False,
+        2. disorder == 'skip' and any of:
+            (a) any disorder flag is True,
+            (b) any atom has fractional occupancy,
+            (c) any atom's label ends with '?',
+        3. entry.crystal.molecule.all_atoms_have_sites is False,
+        4. a.fractional_coordinates is None for any a in entry.crystal.disordered_molecule,
+        5. motif is empty after removing H, disordered sites or solvents.
     """
 
     crystal = entry.crystal
@@ -449,8 +441,11 @@ def entry_to_periodicset(
     if heaviest_component and len(molecule.components) > 1:
         molecule = _heaviest_component(molecule)
 
-    if not molecule.all_atoms_have_sites or \
-        any(a.fractional_coordinates is None for a in molecule.atoms):
+    if any(a.fractional_coordinates is None for a in molecule.atoms):
+        warnings.warn(f'{crystal.identifier} has atoms without sites')
+        molecule.remove_atoms(a for a in molecule.atoms if a.fractional_coordinates is None)
+
+    if not molecule.all_atoms_have_sites:
         raise _ParseError(f'{crystal.identifier}: Has atoms without sites')
 
     crystal.molecule = molecule
@@ -518,14 +513,13 @@ def cifblock_to_periodicset(
     Raises
     ------
     _ParseError
-        Raised if the structure cannot (or should not) be parsed.
-        Specifically raised when:
-            - no sites found or motif is empty after removing H or disordered sites
-            - a site has missing coordinates
-            - disorder == 'skip' and any of:
-                any disorder flag is True,
-                any atom has fractional occupancy,
-                any atom's label ends with '?'
+        Raised if the structure can/should not be parsed for the following reasons:
+        1. no sites found or motif is empty after removing H or disordered sites,
+        2. a site has missing coordinates,
+        3. disorder == 'skip' and any of:
+            (a) any disorder flag is True,
+            (b) any atom has fractional occupancy,
+            (c) any atom's label ends with '?'.
     """
 
     cell = block.get_cell().array
@@ -663,7 +657,8 @@ def _atom_has_disorder(label, occupancy):
 def _unique_sites(asym_unit):
     site_diffs1 = np.abs(np.expand_dims(asym_unit, 1) - asym_unit)
     site_diffs2 = np.abs(site_diffs1 - 1)
-    sites_neq_mask = np.logical_and((site_diffs1 > _EQUIV_SITE_TOL), (site_diffs2 > _EQUIV_SITE_TOL))
+    sites_neq_mask = np.logical_and((site_diffs1 > _EQUIV_SITE_TOL), 
+                                    (site_diffs2 > _EQUIV_SITE_TOL))
     overlapping = np.triu(sites_neq_mask.sum(axis=-1) == 0, 1)
     return overlapping.sum(axis=0) == 0
 

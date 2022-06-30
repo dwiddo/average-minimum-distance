@@ -11,7 +11,7 @@ def root_dir():
 @pytest.fixture(scope='session', autouse=True)
 def reference_data(root_dir):
 
-    filenames = {   # .pkl files with PeriodicSets.
+    filenames = {   # root_dir contains .pkl files with PeriodicSets
         'cubic':           'cubic',
         'T2_experimental': 'T2_experimental',
         'CSD_families':    'CSD_families',

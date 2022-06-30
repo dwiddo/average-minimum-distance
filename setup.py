@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
+"""average-minimum-distance: isometrically invariant crystal fingerprints
+
+Implements fingerprints (isometry invariants) of crystals
+based on geometry: average minimum distances (AMD) and
+point-wise distance distributions (PDD). Includes tools to
+read crystals from files or the CSD.
+"""
 
 import re
 from setuptools import setup, find_packages
 
-description = (
-    'Implements fingerprints (isometry invariants) of crystals '
-    'based on geometry: average minimum distances (AMD) and '
-    'point-wise distance distributions (PDD). '
-    'Includes tools to read crystals from files or the CSD.'
-)
 
 license = 'Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License'
 
@@ -30,23 +31,19 @@ classifiers = [
     'Programming Language :: Python :: 3 :: Only',
 ]
 
-install_requires = [
-	'numpy>=1.21',
-    'numba>=0.55.0',
-	'scipy>=1.6.1',
-	'ase>=3.22.0',
-    'joblib>=1.1.0',
-]
-
 project_urls = {
     'Source Code': 'https://github.com/dwiddo/average-minimum-distance/',
     'Documentation': 'https://average-minimum-distance.readthedocs.io/en/latest/',
-	'Changelog': 'https://github.com/dwiddo/average-minimum-distance/blob/master/CHANGELOG.md',
+    'Changelog': 'https://github.com/dwiddo/average-minimum-distance/blob/master/CHANGELOG.md',
 }
+
+description = " ".join(__doc__.split('\n')[2:])
+
+with open(r'requirements.txt') as f:
+    install_requires = [req.strip() for req in f.readlines()]
 
 with open(r'amd/__init__.py') as f:
     version = re.search("__version__ = '(.*)'", f.read()).group(1)
-
 
 kw = {
     'name': 'average-minimum-distance',
