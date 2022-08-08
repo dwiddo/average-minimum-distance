@@ -37,8 +37,14 @@ project_urls = {
 
 description = " ".join(__doc__.split('\n')[2:])
 
-with open(r'requirements.txt') as f:
-    install_requires = [req.strip() for req in f.readlines()]
+install_requires = [
+    'numpy>=1.21,<1.23',
+    'numba>=0.55.2',
+    'scipy>=1.6.1',
+    'ase>=3.22.0',
+    'joblib>=1.1.0',
+    'pandas>=1.3.0',
+]
 
 with open(r'amd/__init__.py') as f:
     version = re.search("__version__ = '(.*)'", f.read()).group(1)
