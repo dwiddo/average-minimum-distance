@@ -15,7 +15,7 @@ import ase.io.cif
 import ase.data
 from ase.spacegroup.spacegroup import parse_sitesym
 
-from . import utils
+from .utils import cellpar_to_cell
 from .periodicset import PeriodicSet
 
 try:
@@ -30,42 +30,26 @@ def _custom_warning(message, category, filename, lineno, *args, **kwargs):
 
 warnings.formatwarning = _custom_warning
 
-_READERS = {'ase', 'ccdc', 'pycodcif'}
-_DISORDER_OPTIONS = {'skip', 'ordered_sites', 'all_sites'}
 _EQUIV_SITE_TOL = 1e-3
+_DISORDER_OPTIONS = {'skip', 'ordered_sites', 'all_sites'}
 _ATOM_SITE_FRACT_TAGS = [
     '_atom_site_fract_x',
     '_atom_site_fract_y',
-    '_atom_site_fract_z',]
+    '_atom_site_fract_z',
+]
 _ATOM_SITE_CARTN_TAGS = [
     '_atom_site_cartn_x',
     '_atom_site_cartn_y',
-    '_atom_site_cartn_z',]
+    '_atom_site_cartn_z',
+]
 _SYMOP_TAGS = [
     '_space_group_symop_operation_xyz',
     '_space_group_symop.operation_xyz',
-    '_symmetry_equiv_pos_as_xyz',]
-
-
-class _ParseError(ValueError):
-    """Raised when an item cannot be parsed into a periodic set."""
-    pass
+    '_symmetry_equiv_pos_as_xyz',
+]
 
 
 class _Reader:
-    """Base Reader class. Contains parsers for converting ase CifBlock
-    and ccdc Entry objects to PeriodicSets.
-    Intended to be inherited and then a generator set to self._generator.
-    First make a new method for _Reader converting object to PeriodicSet
-    (e.g. named _X_to_PSet). Then make this class outline:
-    class XReader(_Reader):
-        def __init__(self, ..., **kwargs):
-        super().__init__(**kwargs)
-        # setup and checks
-        # make 'iterable' which yields objects to be converted (e.g. CIFBlock, Entry)
-        # set self._generator like this
-        self._generator = self._map(iterable, self._X_to_PSet)
-    """
 
     def __init__(
             self,
@@ -88,36 +72,11 @@ class _Reader:
         yield from self._generator
 
     def read_one(self):
-        """Read the next (usually first and/or only) item."""
-        return next(iter(self._generator))
-
-    def _map(self, func: Callable, iterable: Iterable) -> Iterable[PeriodicSet]:
-        """Iterates over iterable, passing items through parser and 
-        yielding the result. Catches bad structures and warns.
-        """
-
-        if not self.show_warnings:
-            warnings.simplefilter('ignore')
-
-        for item in iterable:
-
-            with warnings.catch_warnings(record=True) as warning_msgs:
-
-                parse_failed = False
-                try:
-                    periodic_set = func(item)
-                except _ParseError as err:
-                    parse_failed = str(err)
-
-            if parse_failed:
-                warnings.warn(parse_failed)
-                continue
-
-            for warning in warning_msgs:
-                msg = f'{periodic_set.name}: {warning.message}'
-                warnings.warn(msg, category=warning.category)
-
-            yield periodic_set
+        """Read the first, and usually the only, item."""
+        try:
+            return next(iter(self._generator))
+        except StopIteration:
+            return None
 
 
 class CifReader(_Reader):
@@ -190,9 +149,6 @@ class CifReader(_Reader):
             show_warnings=show_warnings,
         )
 
-        if reader not in _READERS:
-            raise ValueError(f'Invalid reader {reader}; must be one of f{_READERS}.')
-
         if reader in ('ase', 'pycodcif'):
             if heaviest_component:
                 raise NotImplementedError('Parameter heaviest_component only implimented for reader="ccdc".')
@@ -213,6 +169,9 @@ class CifReader(_Reader):
                                           disorder=disorder,
                                           heaviest_component=heaviest_component)
 
+        else:
+            raise ValueError(f'Invalid reader {reader}.')
+
         if os.path.isfile(path):
             generator = file_parser(path)
         elif os.path.isdir(path):
@@ -220,7 +179,7 @@ class CifReader(_Reader):
         else:
             raise FileNotFoundError(f'No such file or directory: {path}')
 
-        self._generator = self._map(converter, generator)
+        self._generator = _map(converter, generator, self.show_warnings)
 
     def _generate_from_dir(self, path, file_parser, extensions):
         for file in os.listdir(path):
@@ -290,8 +249,6 @@ class CSDReader(_Reader):
             debxit01 = reader.entry('DEBXIT01')
     """
 
-    __slots__ = ['_entry_reader']
-
     def __init__(
             self,
             refcodes=None,
@@ -320,30 +277,65 @@ class CSDReader(_Reader):
         else:
             refcodes = [refcodes] if isinstance(refcodes, str) else list(refcodes)
 
-        # families parameter reads all crystals with ids starting with passed refcodes
         if families:
-            all_refcodes = []
-            for refcode in refcodes:
-                query = ccdc.search.TextNumericSearch()
-                query.add_identifier(refcode)
-                hits = [hit.identifier for hit in query.search()]
-                all_refcodes.extend(hits)
-
-            # filter to unique refcodes
-            seen = set()
-            seen_add = seen.add
-            refcodes = [
-                refcode for refcode in all_refcodes
-                if not (refcode in seen or seen_add(refcode))]
+            refcodes = _refcodes_from_families(refcodes)
 
         self._entry_reader = ccdc.io.EntryReader('CSD')
         converter = functools.partial(entry_to_periodicset,
-                                      remove_hydrogens=remove_hydrogens,
-                                      disorder=disorder,
-                                      heaviest_component=heaviest_component)
+                                      remove_hydrogens=self.remove_hydrogens,
+                                      disorder=self.disorder,
+                                      heaviest_component=self.heaviest_component)
 
         generator = self._ccdc_generator(refcodes)
-        self._generator = self._map(converter, generator)
+        self._generator = _map(converter, generator, self.show_warnings)
+
+    def entry(self, refcode: str, **kwargs) -> PeriodicSet:
+        """Read a crystal given a CSD refcode, returning a :class:`.periodicset.PeriodicSet`.
+        If given kwargs, overrides the kwargs given to the Reader."""
+
+        try:
+            entry = self._entry_reader.entry(refcode)
+        except RuntimeError:
+            warnings.warn(f'{refcode} not found in database')
+
+        kwargs_ = {
+            'remove_hydrogens': self.remove_hydrogens,
+            'disorder': self.disorder,
+            'heaviest_component': self.heaviest_component
+        }
+        kwargs_.update(kwargs)
+        converter = functools.partial(entry_to_periodicset, **kwargs_)
+
+        if 'show_warnings' in kwargs:
+            show_warnings = kwargs['show_warnings']
+        else:
+            show_warnings = self.show_warnings
+
+        try:
+            periodic_set = next(iter(_map(converter, [entry], show_warnings)))
+        except StopIteration:
+            periodic_set = None
+
+        return periodic_set
+
+    def family(self, refcode_family: str, **kwargs):
+        
+        kwargs_ = {
+            'remove_hydrogens': self.remove_hydrogens,
+            'disorder': self.disorder,
+            'heaviest_component': self.heaviest_component
+        }
+        kwargs_.update(kwargs)
+        converter = functools.partial(entry_to_periodicset, **kwargs_)
+        refcodes = _refcodes_from_families([refcode_family])
+        generator = self._ccdc_generator(refcodes)
+
+        if 'show_warnings' in kwargs:
+            show_warnings = kwargs['show_warnings']
+        else:
+            show_warnings = self.show_warnings
+
+        yield from _map(converter, generator, show_warnings)
 
     def _ccdc_generator(self, refcodes):
         """Generates ccdc Entries from CSD refcodes."""
@@ -357,21 +349,12 @@ class CSDReader(_Reader):
                     entry = self._entry_reader.entry(refcode)
                     yield entry
                 except RuntimeError:
-                    warnings.warn(f'{refcode}: not found in database')
+                    warnings.warn(f'{refcode} not found in database')
 
-    def entry(self, refcode: str, **kwargs) -> PeriodicSet:
-        """Read a crystal given a CSD refcode, returning a :class:`.periodicset.PeriodicSet`.
-        If given kwargs, overrides the kwargs given to the Reader."""
 
-        kwargs_ = {
-            'remove_hydrogens': self.remove_hydrogens,
-            'disorder': self.disorder,
-            'heaviest_component': self.heaviest_component
-        }
-        kwargs_.update(kwargs)
-        entry = self._entry_reader.entry(refcode)
-        periodic_set = entry_to_periodicset(entry, **kwargs_)
-        return periodic_set
+class _ParseError(ValueError):
+    """Raised when an item cannot be parsed into a periodic set."""
+    pass
 
 
 def entry_to_periodicset(
@@ -422,14 +405,14 @@ def entry_to_periodicset(
     crystal = entry.crystal
 
     if not entry.has_3d_structure:
-        raise _ParseError(f'{crystal.identifier}: Has no 3D structure')
+        raise _ParseError(f'{crystal.identifier} has no 3D structure')
 
     molecule = crystal.disordered_molecule
 
     if disorder == 'skip':
         if crystal.has_disorder or entry.has_disorder or \
             any(_atom_has_disorder(a.label, a.occupancy) for a in molecule.atoms):
-            raise _ParseError(f'{crystal.identifier}: Has disorder')
+            raise _ParseError(f'{crystal.identifier} has disorder')
 
     elif disorder == 'ordered_sites':
         molecule.remove_atoms(a for a in molecule.atoms
@@ -441,46 +424,48 @@ def entry_to_periodicset(
     if heaviest_component and len(molecule.components) > 1:
         molecule = _heaviest_component(molecule)
 
+    # nonsensical results are likely if not all atoms have sites, but attempt to read anyway
     if any(a.fractional_coordinates is None for a in molecule.atoms):
-        warnings.warn(f'{crystal.identifier} has atoms without sites')
+        warnings.warn(f'has atoms without sites')
         molecule.remove_atoms(a for a in molecule.atoms if a.fractional_coordinates is None)
+        # raise _ParseError(f'{crystal.identifier} has atoms without sites')
 
     if not molecule.all_atoms_have_sites:
-        raise _ParseError(f'{crystal.identifier}: Has atoms without sites')
+        raise _ParseError(f'{crystal.identifier} has atoms without sites')
 
     crystal.molecule = molecule
     asym_atoms = crystal.asymmetric_unit_molecule.atoms
     asym_unit = np.array([tuple(a.fractional_coordinates) for a in asym_atoms])
     asym_unit = np.mod(asym_unit, 1)
     asym_types = [a.atomic_number for a in asym_atoms]
-    cell = utils.cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
+    cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
 
     sitesym = crystal.symmetry_operators
     if not sitesym:
-        sitesym = ['x,y,z', ]
+        sitesym = ['x,y,z']
 
     if disorder != 'all_sites':
         keep_sites = _unique_sites(asym_unit)
         if not np.all(keep_sites):
-            warnings.warn(f'{crystal.identifier}: May have overlapping sites; duplicates will be removed')
+            warnings.warn(f'may have overlapping sites; duplicates will be removed')
         asym_unit = asym_unit[keep_sites]
         asym_types = [sym for sym, keep in zip(asym_types, keep_sites) if keep]
 
     if asym_unit.shape[0] == 0:
-        raise _ParseError(f'{crystal.identifier}: Has no valid sites')
+        raise _ParseError(f'{crystal.identifier} has no valid sites')
 
     frac_motif, asym_inds, multiplicities, inverses = _expand_asym_unit(asym_unit, sitesym)
     full_types = np.array([asym_types[i] for i in inverses])
     motif = frac_motif @ cell
 
-    tags = {
+    kwargs = {
         'name': crystal.identifier,
         'asymmetric_unit': asym_inds,
         'wyckoff_multiplicities': multiplicities,
         'types': full_types
     }
 
-    return PeriodicSet(motif, cell, **tags)
+    return PeriodicSet(motif, cell, **kwargs)
 
 
 def cifblock_to_periodicset(
@@ -517,9 +502,8 @@ def cifblock_to_periodicset(
         1. no sites found or motif is empty after removing H or disordered sites,
         2. a site has missing coordinates,
         3. disorder == 'skip' and any of:
-            (a) any disorder flag is True,
-            (b) any atom has fractional occupancy,
-            (c) any atom's label ends with '?'.
+            (a) any atom has fractional occupancy,
+            (b) any atom's label ends with '?'.
     """
 
     cell = block.get_cell().array
@@ -529,11 +513,11 @@ def cifblock_to_periodicset(
     if None in asym_unit:
         asym_motif = [block.get(name) for name in _ATOM_SITE_CARTN_TAGS]
         if None in asym_motif:
-            raise _ParseError(f'{block.name}: Has no sites')
+            raise _ParseError(f'{block.name} has no sites')
         asym_unit = np.array(asym_motif) @ np.linalg.inv(cell)
 
     if any(None in coords for coords in asym_unit):
-        raise _ParseError(f'{block.name}: Has atoms without sites')
+        raise _ParseError(f'{block.name} has atoms without sites')
 
     asym_unit = np.mod(np.array(asym_unit).T, 1)
 
@@ -557,7 +541,7 @@ def cifblock_to_periodicset(
     if occupancies is not None:
         if disorder == 'skip':
             if any(_atom_has_disorder(lab, occ) for lab, occ in zip(labels, occupancies)):
-                raise _ParseError(f'{block.name}: Has disorder')
+                raise _ParseError(f'{block.name} has disorder')
         elif disorder == 'ordered_sites':
             remove_sites.extend(
                 (i for i, (lab, occ) in enumerate(zip(labels, occupancies))
@@ -572,25 +556,25 @@ def cifblock_to_periodicset(
     if disorder != 'all_sites':
         keep_sites = _unique_sites(asym_unit)
         if not np.all(keep_sites):
-            warnings.warn(f'{block.name}: May have overlapping sites; duplicates will be removed')
+            warnings.warn(f'may have overlapping sites; duplicates will be removed')
         asym_unit = asym_unit[keep_sites]
         asym_types = [sym for sym, keep in zip(asym_types, keep_sites) if keep]
 
     if asym_unit.shape[0] == 0:
-        raise _ParseError(f'{block.name}: Has no valid sites')
+        raise _ParseError(f'{block.name} has no valid sites')
 
     frac_motif, asym_inds, multiplicities, inverses = _expand_asym_unit(asym_unit, sitesym)
     full_types = np.array([asym_types[i] for i in inverses])
     motif = frac_motif @ cell
 
-    tags = {
+    kwargs = {
         'name': block.name,
         'asymmetric_unit': asym_inds,
         'wyckoff_multiplicities': multiplicities,
         'types': full_types
     }
 
-    return PeriodicSet(motif, cell, **tags)
+    return PeriodicSet(motif, cell, **kwargs)
 
 
 def _expand_asym_unit(
@@ -632,7 +616,7 @@ def _expand_asym_unit(
                     if inverses[ind] == inv:
                         pass
                     else:
-                        warnings.warn(f'Equivalent sites at positions {inverses[ind]}, {inv}')
+                        warnings.warn(f'has equivalent sites at positions {inverses[ind]}, {inv}')
             else:
                 all_sites.append(site_)
                 inverses.append(inv)
@@ -679,3 +663,52 @@ def _heaviest_component(molecule):
     largest_component_ind = np.argmax(np.array(component_weights))
     molecule = molecule.components[largest_component_ind]
     return molecule
+
+
+def _refcodes_from_families(refcode_families):
+    """List of strings --> all CSD refcodes starting with one of the strings.
+    Intended to be passed a list of families and return all refcodes in them."""
+    all_refcodes = []
+    for refcode in refcode_families:
+        query = ccdc.search.TextNumericSearch()
+        query.add_identifier(refcode)
+        hits = [hit.identifier for hit in query.search()]
+        all_refcodes.extend(hits)
+
+    # filter to unique refcodes
+    seen = set()
+    seen_add = seen.add
+    refcodes = [
+        refcode for refcode in all_refcodes
+        if not (refcode in seen or seen_add(refcode))]
+
+    return refcodes
+
+
+def _map(func: Callable, iterable: Iterable, show_warnings: bool):
+    """Iterates over iterable, passing items through func and yielding the result. 
+    Catches _ParseError and warnings, optionally printing them.
+    """
+
+    if not show_warnings:
+        warnings.simplefilter('ignore')
+
+    for item in iterable:
+
+        with warnings.catch_warnings(record=True) as warning_msgs:
+
+            parse_failed = False
+            try:
+                periodic_set = func(item)
+            except _ParseError as err:
+                parse_failed = str(err)
+
+        if parse_failed:
+            warnings.warn(parse_failed)
+            continue
+
+        for warning in warning_msgs:
+            msg = f'{periodic_set.name} {warning.message}'
+            warnings.warn(msg, category=warning.category)
+
+        yield periodic_set

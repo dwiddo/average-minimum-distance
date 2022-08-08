@@ -8,8 +8,8 @@ import numba
 from scipy.spatial.distance import cdist
 from scipy.spatial import KDTree
 
-from . import _nearest_neighbours
-from . import utils
+from ._nns import generate_concentric_cloud
+from .utils import diameter
 
 
 def reconstruct(pdd, cell):
@@ -45,7 +45,7 @@ def reconstruct(pdd, cell):
     if dims not in (2, 3):
         raise ValueError('Reconstructing from PDD only implemented for 2 and 3 dimensions')
 
-    diam = utils.diameter(cell)
+    diam = diameter(cell)
     motif = [np.zeros((dims, ))]    # set first point as origin wlog, return if 1 motif point
 
     if pdd.shape[0] == 1:
@@ -53,7 +53,7 @@ def reconstruct(pdd, cell):
         return motif
 
     # finding lattice distances so we can ignore them
-    cloud_generator = _nearest_neighbours.generate_concentric_cloud(np.array(motif), cell)
+    cloud_generator = generate_concentric_cloud(np.array(motif), cell)
     cloud = []
     next(cloud_generator)
     l = next(cloud_generator)
@@ -169,7 +169,7 @@ def _neighbour_set(cell, prec):
     vecs = np.array(vecs)
 
     origin = np.zeros((1, cell.shape[0]))
-    cloud_generator = _nearest_neighbours.generate_concentric_cloud(origin, cell)
+    cloud_generator = generate_concentric_cloud(origin, cell)
     cloud = np.concatenate((next(cloud_generator), next(cloud_generator)))
     tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
     dists, inds = tree.query(vecs, k=k_, workers=-1)

@@ -2,21 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.4] - 27/06/2022
+## [1.3.0] - 08/08/2022
 
 ### Added
 
+- Convenience function `compare` added as a flexible, easy way to compare crystals by AMD or PDD. This addition also added the dependency `pandas` to the package.
+
 - `PDD_pdist` and `PDD_cdist` now support parallel processing with the keyword argument `n_jobs`. The argument `verbose` has changed to accept an integer which is passed to `joblib.Parallel` to control the level of verbosity.
 
-- AMD/PDD and EMD speed improvements. AMD and PDD now use `pykdtree` to find nearest neighbours of motif points, which is much faster. The number of threads used by `pykdtree` can be controlled with the standard OpenMP environment variable OMP_NUM_THREADS. Before importing `amd` or `numpy`, do `import os; os.environ["OMP_NUM_THREADS"] = "4"` to set 4 threads, for example.
+- AMD/PDD and EMD speed improvements.
 
 - Support for reader `pycodcif` (CIF v2.0) in `CifReader` through `ase`, if installed.
 
+### Changed
+
+- Significant changes were made to `amd.PeriodicSet`, so old versions of this object are no longer compatible with the package. They no longer have a generic `.tags` dictionary for additional data.
+
 ### Removed
 
-- Removing module `pset_io` and in favour of pickle.
+- Module `pset_io` removed in favour of just using `pickle` on a list.
 
-- Dependencies `progressbar2` and `h5py` removed.
+- Removed dependencies `progressbar2` (PDD comparison progress bar now through `joblib.Parallel`) and `h5py` (used in module `pset_io`).
 
 ## [1.2.2] - 25/05/2022
 

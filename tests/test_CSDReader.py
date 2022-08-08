@@ -18,6 +18,5 @@ def test_CSDReader(reference_data, refcode_families):
         pytest.fail(f'There are {len(references)} references, but {len(read_in)} structures were read.')
     
     for s, s_ in zip(read_in, references):
-        print(s, s_)
-        if not s == s_:
+        if not s == s_['PeriodicSet']:
             pytest.fail(f'Structure {s.name} is different from reference.')

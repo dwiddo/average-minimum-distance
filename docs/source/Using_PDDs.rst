@@ -1,8 +1,8 @@
 Using PDDs
 ==========
 
-Calculating PDDs
-----------------
+Calculation
+-----------
 
 The pointwise distance distribution (PDD) of a crystal is given by ``amd.PDD()``.
 It accepts a crystal and an integer k, returning the :math:`\text{PDD}_k` as a 2D
@@ -53,8 +53,8 @@ Setting ``return_row_groups=True`` makes the function return a tuple ``(pdd, gro
 indices are for the asymmetric unit of the set, whose indices in ``periodic_set.motif`` are 
 accessible through ``periodic_set.asymmetric_unit``.
 
-Comparing by PDD
-----------------
+Comparison
+----------
 
 The `Earth mover's distance <https://en.wikipedia.org/wiki/Earth_mover%27s_distance>`_ is
 the appropriate metric to compare PDDs. The :mod:`amd.compare` module contains functions 
@@ -88,10 +88,11 @@ The metric used to compare PDD matrices is always Earth mover's distance, but th
 between the rows of PDDs (so there's a different Earth mover's distance for each choice of metric).
 
 
-Comparison options
-******************
+Comparison options and multiprocessing
+**************************************
 
 ``amd.PDD_cdist`` and ``amd.PDD_pdist`` share the following optional arguments:
 
-* ``metric`` chooses the metric used to compare PDD rows, as explained above. See scipy's cdist/pdist for a list of accepted metrics.
-* ``verbose`` (default ``False``) prints an ETA to the terminal. 
+* ``metric`` (default ``chebyshev``) chooses the metric used to compare PDD rows, as explained above. See scipy's cdist/pdist for a list of accepted metrics.
+* ``n_jobs`` (new in 1.2.3, default ``None``) is the number of cores to use for multiprocessing (passed to ``joblib.Parallel``). Pass -1 to use the maximum.
+* ``verbose`` (changed in 1.2.3, default 0) controls the verbosity level, increasing with larger numbers. This is passed to ``joblib.Parallel``, see their documentation for details.

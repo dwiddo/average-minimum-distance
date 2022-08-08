@@ -19,10 +19,11 @@ neighbours are found (number of columns = no of points - 1).
 
     amd_dist = np.amax(np.abs(trap_amd - kite_amd))
 
-Inverse design
---------------
+Reconstruction of a periodic set from its PDD
+---------------------------------------------
 It is possible to reconstruct a periodic set up to isometry from its PDD if the periodic set 
 satisfies certain conditions (a 'general position') and the PDD has enough columns. This is 
 implemented via the functions :func:`amd.PDD_reconstructable`, which returns the PDD 
 of a periodic set with enough columns, and :func:`amd.reconstruct` which returns 
-the motif given the PDD and unit cell.
+the motif given the PDD and unit cell. Reconstruction is not optimised and very slow for 
+most real crystals, it's also not well tested and may not work for some crystals.

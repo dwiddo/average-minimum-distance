@@ -9,8 +9,8 @@ import collections
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
 
-from . import utils
-from ._nearest_neighbours import nearest_neighbours, nearest_neighbours_minval
+from .utils import diameter
+from ._nns import nearest_neighbours, nearest_neighbours_minval
 from .periodicset import PeriodicSet
 
 PeriodicSet_or_Tuple = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
@@ -24,7 +24,7 @@ def AMD(
 
     Parameters
     ----------
-    periodic_set : :class:`.periodicset.PeriodicSet`  tuple of :class:`numpy.ndarray` s
+    periodic_set : :class:`.periodicset.PeriodicSet` or tuple of :class:`numpy.ndarray` s
         A periodic set represented by a :class:`.periodicset.PeriodicSet` or
         by a tuple (motif, cell) with coordinates in Cartesian form and a square unit cell.
     k : int
@@ -38,10 +38,10 @@ def AMD(
 
     Examples
     --------
-    Make list of AMDs with k = 100 for crystals in mycif.cif::
+    Make list of AMDs with k = 100 for crystals in data.cif::
 
         amds = []
-        for periodic_set in amd.CifReader('mycif.cif'):
+        for periodic_set in amd.CifReader('data.cif'):
             amds.append(amd.AMD(periodic_set, 100))
   
     Make list of AMDs with k = 10 for crystals in these CSD refcode families::
@@ -58,9 +58,9 @@ def AMD(
         cubic_amd = amd.AMD((motif, cell), 100)
     """
 
-    motif, cell, asymmetric_unit, multiplicities = _extract_motif_and_cell(periodic_set)
-    pdd, _, _ = nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
-    return np.average(pdd, axis=0, weights=multiplicities)
+    motif, cell, asymmetric_unit, weights = _extract_motif_cell(periodic_set)
+    pdd, _, _ = nearest_neighbours(motif, cell, asymmetric_unit, k)
+    return np.average(pdd, axis=0, weights=weights)
 
 
 def PDD(
@@ -107,10 +107,10 @@ def PDD(
 
     Examples
     --------
-    Make list of PDDs with ``k=100`` for crystals in mycif.cif::
+    Make list of PDDs with ``k=100`` for crystals in data.cif::
 
         pdds = []
-        for periodic_set in amd.CifReader('mycif.cif'):
+        for periodic_set in amd.CifReader('data.cif'):
             # do not lexicographically order rows
             pdds.append(amd.PDD(periodic_set, 100, lexsort=False))
 
@@ -129,18 +129,12 @@ def PDD(
         cubic_amd = amd.PDD((motif, cell), 100)
     """
 
-    motif, cell, asymmetric_unit, multiplicities = _extract_motif_and_cell(periodic_set)
-    dists, _, _ = nearest_neighbours(motif, cell, k, asymmetric_unit=asymmetric_unit)
+    motif, cell, asymmetric_unit, weights = _extract_motif_cell(periodic_set)
+    dists, _, _ = nearest_neighbours(motif, cell, asymmetric_unit, k)
     groups = [[i] for i in range(len(dists))]
 
-    if multiplicities is None:
-        weights = np.full((motif.shape[0], ), 1 / motif.shape[0])
-    else:
-        weights = multiplicities / np.sum(multiplicities)
-
     if collapse and collapse_tol > 0:
-        overlapping = pdist(dists, metric='chebyshev')
-        overlapping = overlapping < collapse_tol
+        overlapping = pdist(dists, metric='chebyshev') < collapse_tol
         if overlapping.any():
             groups = _collapse_into_groups(overlapping)
             weights = np.array([sum(weights[group]) for group in groups])
@@ -265,8 +259,7 @@ def PDD_finite(
         if overlapping.any():
             groups = _collapse_into_groups(overlapping)
             weights = np.array([sum(weights[group]) for group in groups])
-            ordering = [group[0] for group in groups]
-            dists = dists[ordering]
+            dists = np.array([np.average(dists[group], axis=0) for group in groups])
 
     pdd = np.hstack((weights[:, None], dists))
 
@@ -302,13 +295,13 @@ def PDD_reconstructable(
         An ndarray, the PDD of ``periodic_set`` with enough columns to be reconstructable.
     """
 
-    motif, cell, _, _ = _extract_motif_and_cell(periodic_set)
+    motif, cell, _, _ = _extract_motif_cell(periodic_set)
     dims = cell.shape[0]
 
     if dims not in (2, 3):
         raise ValueError('Reconstructing from PDD only implemented for 2 and 3 dimensions')
 
-    min_val = utils.diameter(cell) * 2
+    min_val = diameter(cell) * 2
     pdd = nearest_neighbours_minval(motif, cell, min_val)
 
     if lexsort:
@@ -345,7 +338,7 @@ def PPC(periodic_set: PeriodicSet_or_Tuple) -> float:
         The PPC of ``periodic_set``.
     """
 
-    motif, cell, _, _ = _extract_motif_and_cell(periodic_set)
+    motif, cell, _, _ = _extract_motif_cell(periodic_set)
     m, n = motif.shape
     det = np.linalg.det(cell)
     t = (n - n % 2) / 2
@@ -368,33 +361,32 @@ def AMD_estimate(periodic_set: PeriodicSet_or_Tuple, k: int) -> np.ndarray:
     :math:`V_n` is the volume of a unit sphere in :math:`n`-dimensional space.
     """
 
-    motif, cell, _, _ = _extract_motif_and_cell(periodic_set)
+    motif, cell, _, _ = _extract_motif_cell(periodic_set)
     n = motif.shape[1]
     c = PPC((motif, cell))
     return np.array([(x ** (1. / n)) * c for x in range(1, k + 1)])
 
 
-def _extract_motif_and_cell(periodic_set: PeriodicSet_or_Tuple):
-    """`periodic_set` is either a :class:`.periodicset.PeriodicSet`, or
+def _extract_motif_cell(pset: PeriodicSet_or_Tuple):
+    """`pset` is either a :class:`.periodicset.PeriodicSet`, or
     a tuple of ndarrays (motif, cell). If possible, extracts the asymmetric unit
-    and wyckoff multiplicities and returns them, otherwise returns None.
+    and wyckoff multiplicities.
     """
 
-    asymmetric_unit, multiplicities = None, None
-
-    if isinstance(periodic_set, PeriodicSet):
-        motif, cell = periodic_set.motif, periodic_set.cell
-
-        if 'asymmetric_unit' in periodic_set.tags and 'wyckoff_multiplicities' in periodic_set.tags:
-            asymmetric_unit = periodic_set.asymmetric_unit
-            multiplicities = periodic_set.wyckoff_multiplicities
-
-    elif isinstance(periodic_set, np.ndarray):
-        motif, cell = periodic_set, None
+    if isinstance(pset, PeriodicSet):
+        motif, cell = pset.motif, pset.cell
+        if pset.asymmetric_unit is None or pset.wyckoff_multiplicities is None:
+            asymmetric_unit = motif
+            weights = np.full((len(motif), ), 1 / len(motif))
+        else:
+            asymmetric_unit = pset.motif[pset.asymmetric_unit]
+            weights = pset.wyckoff_multiplicities / np.sum(pset.wyckoff_multiplicities)
     else:
-        motif, cell = periodic_set[0], periodic_set[1]
+        motif, cell = pset
+        asymmetric_unit = motif
+        weights = np.full((len(motif), ), 1 / len(motif))
 
-    return motif, cell, asymmetric_unit, multiplicities
+    return motif, cell, asymmetric_unit, weights
 
 
 def _collapse_into_groups(overlapping):

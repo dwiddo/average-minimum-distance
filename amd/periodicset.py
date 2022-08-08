@@ -23,13 +23,19 @@ class PeriodicSet:
     Parameters
     ----------
     motif : numpy.ndarray
-        Cartesian coords of the motif, shape (no points, dims).
+        Cartesian (orthogonal) coordinates of the motif, shape (no points, dims).
     cell : numpy.ndarray
-        Cartesian coords of the unit cell, shape (dims, dims).
+        Cartesian (orthogonal) square array representing the unit cell, shape (dims, dims).
+        Use :func:`.utils.cellpar_to_cell` to convert 6 cell parameters to an orthogonal square matrix.
     name : str, optional
         Name of the periodic set.
-    kwargs
-        Additional data to store with the PeriodicSet.
+    asymmetric_unit : numpy.ndarray, optional
+        Indices for the asymmetric unit, pointing to the motif.
+    wyckoff_multiplicities : numpy.ndarray, optional
+        Wyckoff multiplicities of each atom in the asymmetric unit
+        (number of unique sites generated under all symmetries).
+    types : numpy.ndarray, optional
+        Array of atomic numbers of motif points.
     """
 
     def __init__(
@@ -37,12 +43,17 @@ class PeriodicSet:
             motif: np.ndarray,
             cell: np.ndarray,
             name: Optional[str] = None,
-            **kwargs):
+            asymmetric_unit: Optional[np.ndarray] = None,
+            wyckoff_multiplicities: Optional[np.ndarray] = None,
+            types : Optional[np.ndarray] = None
+    ):
 
         self.motif = motif
         self.cell = cell
         self.name = name
-        self.tags = kwargs
+        self.asymmetric_unit = asymmetric_unit
+        self.wyckoff_multiplicities = wyckoff_multiplicities
+        self.types = types
 
     def __str__(self):
 
@@ -50,8 +61,8 @@ class PeriodicSet:
         return f"PeriodicSet({self.name}: {m} motif points in {dims} dimensions)"
 
     def __repr__(self):
-        return f"PeriodicSet(name: {self.name}, cell: {self.cell}, motif: {self.motif}, tags: {self.tags})"
-
+        return f"PeriodicSet(name: {self.name}, cell: {self.cell}, motif shape {self.motif.shape})"
+ 
     # used for debugging, checks if the motif/cell agree point for point
     # (disregarding order), NOT up to isometry.
     def __eq__(self, other):
@@ -68,29 +79,7 @@ class PeriodicSet:
         if not np.all((np.amin(diffs, axis=0) <= 1e-6) & (np.amin(diffs, axis=-1) <= 1e-6)):
             return False
 
-        shared_tags = set(self.tags.keys()).intersection(set(other.tags.keys()))
-        for tag in shared_tags:
-            if np.isscalar(self.tags[tag]):
-                if self.tags[tag] != other.tags[tag]:
-                    return False
-            elif isinstance(self.tags[tag], np.ndarray):
-                if not np.allclose(self.tags[tag], other.tags[tag]):
-                    return False
-            elif isinstance(self.tags[tag], list):
-                for i, i_ in zip(self.tags[tag], other.tags[tag]):
-                    if i != i_:
-                        return False
-
         return True
-
-    def __getattr__(self, attr):
-
-        if 'tags' not in self.__dict__:
-            self.tags = {}
-        if attr in self.tags:
-            return self.tags[attr]
-
-        raise AttributeError(f"{self.__class__.__name__} object has no attribute or tag {attr}")
 
     def __ne__(self, other):
         return not self.__eq__(other)

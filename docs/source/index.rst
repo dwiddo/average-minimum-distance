@@ -1,13 +1,12 @@
-Welcome to average-minimum-distance's documentation!
-====================================================
-
-Read below to get started with amd, or follow these links for
-more details about specific tasks.
+Below is the readme for amd, explaining what it is and how to use it.
+More detailed documentation can be found in the sidebar.
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Common tasks
+   :hidden:
+   :maxdepth: 2
 
+   Quick_reference
+   Description_of_AMD_PDD
    Reading_cifs
    Reading_from_the_CSD
    Using_AMDs
@@ -15,6 +14,7 @@ more details about specific tasks.
    Miscellaneous
 
 .. toctree::
+   :hidden:
    :maxdepth: 2
    :caption: Modules
 

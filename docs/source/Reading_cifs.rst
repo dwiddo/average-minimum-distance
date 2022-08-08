@@ -1,5 +1,5 @@
-Reading .cifs
-=============
+Reading cifs
+============
 
 If you have a .cif file, use :class:`amd.CifReader` to extract the crystals::
 

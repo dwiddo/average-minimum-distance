@@ -21,7 +21,7 @@ def test_CifReader(cif_paths, reference_data):
             pytest.fail(f'There are {len(references)} references, but {len(read_in)} structures were read.')
 
         for s, s_ in zip(read_in, references):
-            if not s == s_:
+            if not s == s_['PeriodicSet']:
                 pytest.fail(f'Structure {s.name} read with CifReader disagrees with reference.')
 
 

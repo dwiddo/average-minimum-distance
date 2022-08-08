@@ -1,8 +1,8 @@
 Using AMDs
 ==========
 
-Calculating AMDs
-----------------
+Calculation
+-----------
 
 The average minimum distance (AMD) of a crystal is given by ``amd.AMD()``. 
 It accepts a crystal and an integer k, returning :math:`\text{AMD}_k` as a 1D NumPy array. 
@@ -32,19 +32,19 @@ arrays, in Cartesian form::
 
 Each AMD returned by ``amd.AMD(crystal, k)`` is a vector length ``k``.
 
-*Note:* The AMD of a crystal can be obtained from its PDD. If both are needed,
-calculate the PDD and then use ``amd.calculate.PDD_to_AMD()``.
+*Note:* The AMD of a crystal can be calculated from its PDD. If both are needed,
+you can calculate the PDD and then use ``amd.calculate.PDD_to_AMD()``.
 
-Comparing by AMD
-----------------
+Comparison
+----------
 
-AMDs are just vectors that can be compared with any metric, but the :mod:`amd.compare` module has functions to compare for you.
+AMDs are just vectors that can be compared with any metric, but the :mod:`amd.compare` module has functions to compare AMDs for you.
 
 :func:`.compare.AMD_pdist` and :func:`.compare.AMD_cdist` are like scipy's functions 
 ``pdist`` and ``cdist``. ``pdist`` takes a set and compares all elements pairwise, 
 whereas ``cdist`` takes two sets and compares elements in one with the other. 
 ``cdist`` returns a 2D distance matrix, but ``pdist`` returns a condensed distance matrix 
-(see `scipy's pdist function <https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.pdist.html>`_). 
+(see `scipy's pdist <https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.pdist.html>`_). 
 The default metric for AMD comparisons is l-infinity, but it can be changed to any metric
 accepted by scipy's pdist/cdist. ::
 

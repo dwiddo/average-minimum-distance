@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """average-minimum-distance: isometrically invariant crystal fingerprints
 
-Implements fingerprints (isometry invariants) of crystals
-based on geometry: average minimum distances (AMD) and
-point-wise distance distributions (PDD). Includes tools to
-read crystals from files or the CSD.
+Implements fingerprints (isometry invariants) of crystals based on geometry: 
+average minimum distances (AMD) and point-wise distance distributions (PDD).
 """
 
 import re

@@ -8,7 +8,7 @@ def test_PDD_pdist(root_dir, reference_data):
     for name in reference_data:
         if len(reference_data[name]) == 1:
             continue
-        pdds = [s.pdd for s in reference_data[name]]
+        pdds = [s['PDD100'] for s in reference_data[name]]
         cdm = amd.PDD_pdist(pdds)
         loaded = np.load(os.path.join(root_dir, rf'{name}_cdm.npz'))
         reference_cdm = loaded['cdm']

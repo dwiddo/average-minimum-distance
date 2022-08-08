@@ -1,7 +1,7 @@
 """Implements core function nearest_neighbours used for AMD and PDD calculations."""
 
 import collections
-from typing import Iterable, Optional
+from typing import Iterable
 from itertools import product
 
 import numba
@@ -12,45 +12,39 @@ from scipy.spatial import KDTree
 def nearest_neighbours(
         motif: np.ndarray,
         cell: np.ndarray,
-        k: int,
-        asymmetric_unit: Optional[np.ndarray] = None):
+        x: np.ndarray,
+        k: int):
     """
     Given a periodic set represented by (motif, cell) and an integer k, find
-    the k nearest neighbours of the motif points in the periodic set.
-
-    Note that cloud and inds are not used yet but may be in the future.
+    the k nearest neighbours in the periodic set to points in x.
 
     Parameters
     ----------
     motif : numpy.ndarray
-        Cartesian coords of the full motif, shape (no points, dims).
+        Orthogonal (Cartesian) coords of the motif, shape (no points, dims).
     cell : numpy.ndarray
-        Cartesian coords of the unit cell, shape (dims, dims).
+        Orthogonal (Cartesian) coords of the unit cell, shape (dims, dims).
+    x : numpy.ndarray
+        Array of points to query for neighbours. For invariants of crystals
+        this is the asymmetric unit.
     k : int
-        Number of nearest neighbours to find for each motif point.
-    asymmetric_unit : numpy.ndarray, optional
-        Indices pointing to an asymmetric unit in motif.
+        Number of nearest neighbours to find for each point in x.
 
     Returns
     -------
     pdd : numpy.ndarray
-        An array shape (motif.shape[0], k) of distances from each motif
-        point to its k nearest neighbours in order. Points do not count
-        as their own nearest neighbour. E.g. the distance to the n-th
-        nearest neighbour of the m-th motif point is pdd[m][n].
+        Array shape (motif.shape[0], k) of distances from points in x
+        to their k nearest neighbours in the periodic set, in order.
+        E.g. pdd[m][n] is the distance from x[m] to its n-th nearest
+        neighbour in the periodic set.
     cloud : numpy.ndarray
-        The collection of points in the periodic set that were generated
+        Collection of points in the periodic set that was generated
         during the nearest neighbour search.
     inds : numpy.ndarray
-        An array shape (motif.shape[0], k) containing the indices of
+        Array shape (motif.shape[0], k) containing the indices of
         nearest neighbours in cloud. E.g. the n-th nearest neighbour to
         the m-th motif point is cloud[inds[m][n]].
     """
-
-    if asymmetric_unit is not None:
-        asym_unit = motif[asymmetric_unit]
-    else:
-        asym_unit = motif
 
     cloud_generator = generate_concentric_cloud(motif, cell)
     n_points = 0
@@ -63,21 +57,22 @@ def nearest_neighbours(
     cloud = np.concatenate(cloud)
 
     tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
-    pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
+    pdd_, inds = tree.query(x, k=k+1, workers=-1)
     pdd = np.zeros_like(pdd_)
 
     while not np.allclose(pdd, pdd_, atol=1e-12, rtol=0):
         pdd = pdd_
         cloud = np.vstack((cloud, next(cloud_generator)))
         tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
-        pdd_, inds = tree.query(asym_unit, k=k+1, workers=-1)
+        pdd_, inds = tree.query(x, k=k+1, workers=-1)
 
     return pdd_[:, 1:], cloud, inds[:, 1:]
 
 
 def nearest_neighbours_minval(motif, cell, min_val):
-    """PDD large enough to be reconstructed from
-    (such that last col values all > 2 * diam(cell))."""
+    """The same as nearest_neighbours except a value is given instead of an
+    integer k and the result has at least enough columns so all values in 
+    the last column are at least the given value."""
 
     cloud_generator = generate_concentric_cloud(motif, cell)
 
