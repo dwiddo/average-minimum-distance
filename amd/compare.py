@@ -109,11 +109,11 @@ def compare(crystals, crystals_=None, by='AMD', k=100, **kwargs):
 
     if by == 'AMD':
         invs = [AMD(s, k) for s in crystals]
-        compare_kwargs.pop('n_jobs')
-        compare_kwargs.pop('verbose')
+        compare_kwargs.pop('n_jobs', None)
+        compare_kwargs.pop('verbose', None)
     elif by == 'PDD':
         invs = [PDD(s, k, lexsort=False, **calc_kwargs) for s in crystals]
-        compare_kwargs.pop('low_memory')
+        compare_kwargs.pop('low_memory', None)
 
     names = [s.name for s in crystals]
 
@@ -408,9 +408,9 @@ def _extract_periodicsets(item, **reader_kwargs):
     if isinstance(item, PeriodicSet):
         return [item]
     elif isinstance(item, str) and not os.path.isfile(item) and not os.path.isdir(item):
-        reader_kwargs.pop('reader')
+        reader_kwargs.pop('reader', None)
         return list(CSDReader(item, **reader_kwargs))
     else:
-        reader_kwargs.pop('families')
-        reader_kwargs.pop('refcodes')
+        reader_kwargs.pop('families', None)
+        reader_kwargs.pop('refcodes', None)
         return list(CifReader(item, **reader_kwargs))
