@@ -12,8 +12,8 @@ from setuptools import setup, find_packages
 license = 'Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License'
 
 keywords = (
-    'isometry, invariant, crystal, amd, pdd, similarity, average, '
-    'minimum, point-wise, distance, cif'
+    'isometry, invariant, descriptor, crystal, amd, pdd, '
+    'similarity, average, minimum, pointwise, distance, cif'
 )
 
 classifiers = [
