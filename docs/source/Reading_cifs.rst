@@ -34,6 +34,7 @@ Reading options
         remove_hydrogens=False,      # remove Hydrogens
         disorder='skip',             # handling disorder
         heaviest_component=False,    # just keep the heaviest component in asym unit
+        molecular_centres=False,     # read centres of molecules
         show_warnings=True           # silence warnings
     )
 

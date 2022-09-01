@@ -56,7 +56,8 @@ class _Reader:
             remove_hydrogens=False,
             disorder='skip',
             heaviest_component=False,
-            show_warnings=True,
+            molecular_centres=False,
+            show_warnings=True
     ):
 
         if disorder not in _DISORDER_OPTIONS:
@@ -65,6 +66,7 @@ class _Reader:
         self.remove_hydrogens = remove_hydrogens
         self.disorder = disorder
         self.heaviest_component = heaviest_component
+        self.molecular_centres = molecular_centres
         self.show_warnings = show_warnings
         self._generator = []
 
@@ -103,7 +105,10 @@ class CifReader(_Reader):
         :code:`all_sites` include all sites regardless.
     heaviest_component : bool, optional
         csd-python-api only. Removes all but the heaviest molecule in the asymmeric unit,
-        intended for removing solvents. 
+        intended for removing solvents.
+    molecular_centres : bool, default False
+        csd-python-api only. Extract the centres of molecules in the unit cell and store 
+        in attribute molecular_centres.
     show_warnings : bool, optional
         Controls whether warnings that arise during reading are printed.
 
@@ -139,6 +144,7 @@ class CifReader(_Reader):
             remove_hydrogens=False,
             disorder='skip',
             heaviest_component=False,
+            molecular_centres=False,
             show_warnings=True,
     ):
 
@@ -146,28 +152,39 @@ class CifReader(_Reader):
             remove_hydrogens=remove_hydrogens,
             disorder=disorder,
             heaviest_component=heaviest_component,
-            show_warnings=show_warnings,
+            molecular_centres=molecular_centres,
+            show_warnings=show_warnings
         )
 
         if reader in ('ase', 'pycodcif'):
+
             if heaviest_component:
                 raise NotImplementedError('Parameter heaviest_component only implimented for reader="ccdc".')
+            if molecular_centres:
+                raise NotImplementedError('Parameter molecular_centres only implimented for reader="ccdc".')
 
             extensions = {'cif'}
             file_parser = functools.partial(ase.io.cif.parse_cif, reader=reader)
-            converter = functools.partial(cifblock_to_periodicset,
-                                          remove_hydrogens=remove_hydrogens,
-                                          disorder=disorder)
+            converter = functools.partial(
+                cifblock_to_periodicset,
+                remove_hydrogens=self.remove_hydrogens,
+                disorder=self.disorder
+            )
 
         elif reader == 'ccdc':
+
             if not _CSD_PYTHON_API_ENABLED:
                 raise ImportError("Failed to import csd-python-api; check it is installed and licensed.")
+
             extensions = ccdc.io.EntryReader.known_suffixes
             file_parser = ccdc.io.EntryReader
-            converter = functools.partial(entry_to_periodicset,
-                                          remove_hydrogens=remove_hydrogens,
-                                          disorder=disorder,
-                                          heaviest_component=heaviest_component)
+            converter = functools.partial(
+                entry_to_periodicset,
+                remove_hydrogens=self.remove_hydrogens,
+                disorder=self.disorder,
+                molecular_centres=self.molecular_centres,
+                heaviest_component=self.heaviest_component
+            )
 
         else:
             raise ValueError(f'Invalid reader {reader}.')
@@ -207,8 +224,9 @@ class CSDReader(_Reader):
         structures anyway, choose either :code:`ordered_sites` to remove sites with disorder or 
         :code:`all_sites` include all sites regardless.
     heaviest_component : bool, optional
-        csd-python-api only. Removes all but the heaviest molecule in the asymmeric unit,
-        intended for removing solvents. 
+        Removes all but the heaviest molecule in the asymmeric unit, intended for removing solvents.
+    molecular_centres : bool, default False
+        Extract the centres of molecules in the unit cell and store in attribute molecular_centres.
     show_warnings : bool, optional
         Controls whether warnings that arise during reading are printed.
 
@@ -256,6 +274,7 @@ class CSDReader(_Reader):
             remove_hydrogens=False,
             disorder='skip',
             heaviest_component=False,
+            molecular_centres=False,
             show_warnings=True,
     ):
 
@@ -263,6 +282,7 @@ class CSDReader(_Reader):
             remove_hydrogens=remove_hydrogens,
             disorder=disorder,
             heaviest_component=heaviest_component,
+            molecular_centres=molecular_centres,
             show_warnings=show_warnings,
         )
 
@@ -284,6 +304,7 @@ class CSDReader(_Reader):
         converter = functools.partial(entry_to_periodicset,
                                       remove_hydrogens=self.remove_hydrogens,
                                       disorder=self.disorder,
+                                      molecular_centres=self.molecular_centres,
                                       heaviest_component=self.heaviest_component)
 
         generator = self._ccdc_generator(refcodes)
@@ -319,12 +340,14 @@ class CSDReader(_Reader):
         return periodic_set
 
     def family(self, refcode_family: str, **kwargs):
-        
+
         kwargs_ = {
             'remove_hydrogens': self.remove_hydrogens,
             'disorder': self.disorder,
-            'heaviest_component': self.heaviest_component
+            'heaviest_component': self.heaviest_component,
+            'molecular_centres': self.molecular_centres
         }
+
         kwargs_.update(kwargs)
         converter = functools.partial(entry_to_periodicset, **kwargs_)
         refcodes = _refcodes_from_families([refcode_family])
@@ -361,7 +384,8 @@ def entry_to_periodicset(
         entry,
         remove_hydrogens=False,
         disorder='skip',
-        heaviest_component=False
+        heaviest_component=False,
+        molecular_centres=False
 ) -> PeriodicSet:
     """:class:`ccdc.entry.Entry` --> :class:`amd.periodicset.PeriodicSet`.
     Entry is the type returned by :class:`ccdc.io.EntryReader`.
@@ -379,7 +403,9 @@ def entry_to_periodicset(
         :code:`all_sites` include all sites regardless.
     heaviest_component : bool, optional
         Removes all but the heaviest molecule in the asymmeric unit,
-        intended for removing solvents. 
+        intended for removing solvents.
+    molecular_centres : bool, default False
+        Extract the centres of molecules in the unit cell and store in attribute molecular_centres.
 
     Returns
     -------
@@ -465,7 +491,13 @@ def entry_to_periodicset(
         'types': full_types
     }
 
-    return PeriodicSet(motif, cell, **kwargs)
+    periodic_set = PeriodicSet(motif, cell, **kwargs)
+
+    if molecular_centres:
+        frac_centres = frac_molecular_centres(entry.crystal)
+        periodic_set.molecular_centres = frac_centres @ cell
+
+    return periodic_set
 
 
 def cifblock_to_periodicset(
@@ -575,6 +607,21 @@ def cifblock_to_periodicset(
     }
 
     return PeriodicSet(motif, cell, **kwargs)
+
+
+def frac_molecular_centres(crystal):
+    """Returns any geometric centres of molecules in the unit cell.
+    Expects a ccdc Crystal object and returns fractional coordiantes."""
+
+    frac_centres = []
+    for comp in crystal.packing(inclusion='CentroidIncluded').components:
+        coords = [a.fractional_coordinates for a in comp.atoms]
+        x, y, z = zip(*coords)
+        m = len(coords)
+        frac_centres.append((sum(x) / m, sum(y) / m, sum(z) / m))
+    frac_centres = np.mod(np.array(frac_centres), 1)
+    keep_inds = _unique_sites(frac_centres)
+    return frac_centres[keep_inds]
 
 
 def _expand_asym_unit(
