@@ -415,11 +415,11 @@ def PDD_pdist(
 
     if n_jobs is not None and n_jobs > 1:
         # TODO: put results into preallocated empty array in place
-        dm = Parallel(backend=backend, n_jobs=n_jobs, verbose=verbose)(
+        cdm = Parallel(backend=backend, n_jobs=n_jobs, verbose=verbose)(
             delayed(partial(EMD, metric=metric, **kwargs))(pdds[i], pdds[j])
             for i, j in combinations(range(len(pdds)), 2)
         )
-        dm = np.array(dm)
+        cdm = np.array(cdm)
     
     else:
         m = len(pdds)
@@ -432,7 +432,7 @@ def PDD_pdist(
             cdm[r] = EMD(pdds[i], pdds[j], metric=metric, **kwargs)
             if verbose:
                 bar.update(r)
-    return dm
+    return cdm
 
 
 def emd(
