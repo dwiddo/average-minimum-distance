@@ -47,16 +47,15 @@ extensions = [
     'sphinx.ext.intersphinx',
     'sphinx_rtd_theme',
     'sphinx_rtd_dark_mode',
-    'sphinx_mdinclude',
+    'm2r2',
 ]
 
 intersphinx_mapping = {
-    'numpy':  ('https://numpy.org/doc/stable/', None),
-    'scipy':  ('https://docs.scipy.org/doc/scipy/', None),
+    'numpy': ('https://numpy.org/doc/stable/', None),
+    'scipy': ('https://docs.scipy.org/doc/scipy/', None),
     'pandas': ('https://pandas.pydata.org/docs/', None),
-    'ase':    ('https://wiki.fysik.dtu.dk/ase/', None),
-    'joblib': ('https://joblib.readthedocs.io/en/latest/', None),
-    'ccdc':   ('https://downloads.ccdc.cam.ac.uk/documentation/API/', None)
+    'ase': ('https://wiki.fysik.dtu.dk/ase/', None),
+    'ccdc': ('https://downloads.ccdc.cam.ac.uk/documentation/API/', None)
 }
 
 # autodoc_typehints = "description"

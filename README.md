@@ -1,4 +1,4 @@
-# average-minimum-distance: geometry based crystal descriptors
+# average-minimum-distance: isometrically invariant crystal fingerprints
 
 [![PyPI](https://img.shields.io/pypi/v/average-minimum-distance.svg)](https://pypi.org/project/average-minimum-distance/)
 [![Status](https://img.shields.io/pypi/status/average-minimum-distance)](https://pypi.org/project/average-minimum-distance/)
@@ -7,24 +7,24 @@
 [![MATCH Paper](https://img.shields.io/badge/DOI-10.46793%2Fmatch.87--3.529W-blue)](https://doi.org/10.46793/match.87-3.529W)
 [![CC-0 license](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-blue.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
-Implements descriptors of crystal structures based on geometry (*isometry invariants*): average minimum distances (AMD) and pointwise distance distributions (PDD).
+Implements fingerprints (*isometry invariants*) of crystal structures based on geometry: average minimum distances (AMD) and pointwise distance distributions (PDD).
 
 - **PyPI project:** <https://pypi.org/project/average-minimum-distance>
 - **Documentation:** <https://average-minimum-distance.readthedocs.io>
 - **Source code:** <https://github.com/dwiddo/average-minimum-distance>
-- **References** ([bib references at the bottom of this page](#citeus)):
+- **References** ([jump to bib references](#citeus)):
   - *Average minimum distances of periodic point sets - foundational invariants for mapping periodic crystals*. MATCH Communications in Mathematical and in Computer Chemistry, 87(3):529-559 (2022). <https://doi.org/10.46793/match.87-3.529W>
   - *Pointwise distance distributions of periodic point sets*. arXiv preprint arXiv:2108.04798 (2021). <https://arxiv.org/abs/2108.04798>
 
 ## What's amd?
 
-The typical representation of a crystal as a motif and unit cell is ambiguous, as there are many ways to define the same crystal. This package implements new *isometric invariants*: average minimum distances (AMD) and pointwise distance distributions (PDD), which take the same value for any two crystals related by an *isometry* (rotation, translation, or reflection). They do this in a continuous way, so similar crystals have a small distance between their invariants.
+The typical representation of a crystal as a motif and cell is ambiguous, as there are many ways to define the same crystal. This package implements new *isometric invariants*: average minimum distances (AMD) and pointwise distance distributions (PDD), which always take the same value for any two (isometrically) identical input crystals. They do this in a continuous way, so similar crystals have a small distance between their invariants.
 
 ### Brief description of AMD and PDD
 
-The pointwise distance distribution (PDD) records the environment of each atom in a unit cell by listing the distances from each atom to neighbouring atoms in order, with some extra steps to ensure it is independent of choice of unit cell and motif. A PDD is a collection of lists, each with an attached weight. Two PDDs are compared by finding an optimal matching between the two sets of lists while respecting the weights ([Earth Mover's distance](https://doi.org/10.46793/match.87-3.529W)), and when the crystals are geometrically identical there is always a perfect matching resulting in a distance of zero.
+The pointwise distance distribution (PDD) records the environment of each atom in a unit cell by listing the distances from each atom to neighbouring atoms in order, with some extra steps to ensure independence of cell and motif. A PDD is a collection of lists with attached weights (a matrix). Two PDDs are compared by finding an optimal matching between the two sets of lists while respecting the weights ([Earth Mover's distance](https://doi.org/10.46793/match.87-3.529W)), and when the crystals are geometrically identical (regardless of choice of motif and cell) there is always a perfect matching resulting in a distance of zero.
 
-The average minimum distance (AMD) averages the PDD over atoms in a unit cell to make a vector, which keeps the important properties of the PDD. Since AMDs are just vectors, comparing by AMD is much faster than PDD, but an AMD contains less information in theory.
+The average minimum distance (AMD) averages the PDD over atoms in a unit cell to make a vector, which is also the same for any choice of cell and motif. Since AMDs are just vectors, comparing by AMD is much faster than PDD, though AMD contains less information in theory.
 
 Both AMD and PDD have a parameter k, the number of nearest neighbours to consider for each atom, which is the length of the AMD vector or the number of columns in the PDD (plus an extra column for weights of rows).
 
@@ -51,15 +51,15 @@ A [pandas DataFrame](https://pandas.pydata.org/pandas-docs/stable/reference/api/
 df = amd.compare('crystals_1.cif', 'crystals_2.cif' by='AMD', k=100)
 ```
 
-Either first or second argument can be lists of cif paths (or file objects) which are combined in the final distance matrix.
+Either first or second argument can be lists of cif paths (or file objects) which are combined in the final distance matrix. 
 
-```amd.compare()``` does three things: reads crystals, calculates their AMD/PDD, and compares them. These steps can be done separately for more flexibility (e.g, saving the  descriptors to a file), explained below. ```amd.compare()``` accepts most of the optional parameters from any of these steps, see the documentation for details.
+```amd.compare()``` reads crystals and calculates their AMD or PDD, but throws them away. It may be faster to save these to a file (e.g. `pickle`), see sections below on how to separately read, calculate and compare.
 
 If `csd-python-api` is installed, the compare function can also accept one or more CSD refcodes or other file formats instead of cifs (pass ```reader='ccdc'```).
 
 ### Choosing a value of k
 
-The parameter k of the invariants is the number of neighbouring atoms considered for each atom in the unit cell. Two crystals with the same unit molecule will have a small AMD/PDD distance for small enough k. A larger k will mean the environments of atoms in one crystal must line up with those in the other up to a larger radius to have a small AMD/PDD distance. Very large k does not mean better comparisons, as the invariants start to converge to depend only on density.
+The parameter k of the invariants is the number of nearest neighbour atoms considered for each atom in the unit cell, e.g. k = 5 looks at the 5 nearest neighbours of each atom. Two crystals with the same unit molecule will have a small AMD/PDD distance for small enough k. A larger k will mean the environments of atoms in one crystal must line up with those in the other up to a larger radius to have a small AMD/PDD distance. Very large k does not mean better comparisons, as the invariants start to converge to depend only on density.
 
 ### Reading crystals from a file, calculating the AMDs and PDDs
 

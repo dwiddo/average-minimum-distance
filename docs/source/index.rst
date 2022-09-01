@@ -24,6 +24,8 @@ More detailed documentation can be found in the sidebar.
    amd.periodicset
    amd.utils
 
+.. mdinclude:: amd
+
 .. mdinclude:: ../../README.md
 
 Indices and tables

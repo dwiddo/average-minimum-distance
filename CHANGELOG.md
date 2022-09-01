@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.2] - 01/09/2022
+## [1.3.0] - 08/08/2022
 
 ### Added
 
@@ -10,21 +10,19 @@ All notable changes to this project will be documented in this file.
 
 - `PDD_pdist` and `PDD_cdist` now support parallel processing with the keyword argument `n_jobs`. The argument `verbose` has changed to accept an integer which is passed to `joblib.Parallel` to control the level of verbosity.
 
-- Comparison by molecular centres added (``csd-python-api`` only). The readers now accept ``molecular_centres`` (default ``False``), which give the yielded `PeriodicSet` objects an attribute ``.molecular_centres``, an array of the centres of molecules. The `amd.compare` function also supports the `.molecular_centres` argument, if `True` the molecular centres will be used for comparison instead of atomic centres.
-
 - AMD/PDD and EMD speed improvements.
 
 - Support for reader `pycodcif` (CIF v2.0) in `CifReader` through `ase`, if installed.
 
 ### Changed
 
-- Significant changes were made to `amd.PeriodicSet`, so old versions of this object are no longer compatible with the package (versions after 1.3 are not backwards compatible). They no longer have a generic `.tags` dictionary for additional data.
-
-- `progressbar2` is planned to be removed. It is still in use for PDD comparisons without parallel processing, otherwise `joblib.Parallel` provides its own progress bar.
+- Significant changes were made to `amd.PeriodicSet`, so old versions of this object are no longer compatible with the package. They no longer have a generic `.tags` dictionary for additional data.
 
 ### Removed
 
-- Module `pset_io` removed in favour of just using `pickle` on a list. `h5py` has consequently been removed as a dependency.
+- Module `pset_io` removed in favour of just using `pickle` on a list.
+
+- Removed dependencies `progressbar2` (PDD comparison progress bar now through `joblib.Parallel`) and `h5py` (used in module `pset_io`).
 
 ## [1.2.2] - 25/05/2022
 

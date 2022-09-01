@@ -1,16 +1,16 @@
-"""General utility functions."""
+"""Helpful utility functions, e.g. unit cell diameter, converting
+cell parameters to Cartesian form, and an ETA class."""
 
 from typing import Tuple
+from amd.periodicset import PeriodicSet
 
 import numpy as np
 import numba
 from scipy.spatial.distance import squareform
 
-from .periodicset import PeriodicSet
-
 
 def diameter(cell):
-    """Diameter of a unit cell (as a square matrix in Cartesian/Orthogonal form)
+    """Diameter of a unit cell (as a square matrix in Cartesian form)
     in 3 or fewer dimensions."""
 
     dims = cell.shape[0]
@@ -69,7 +69,7 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
 @numba.njit()
 def cellpar_to_cell_2D(a, b, alpha):
     """2D unit cell parameters a,b,α --> cell as 2x2 ndarray."""
-
+    
     cell = np.zeros((2, 2))
     cell[0, 0] = a
     cell[1, 0] = b * np.cos(alpha * np.pi / 180.)

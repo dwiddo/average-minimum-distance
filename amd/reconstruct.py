@@ -36,7 +36,6 @@ def reconstruct(pdd, cell):
     ndarray
         The reconstructed motif of the periodic set.
     """
-
     # TODO: get a more reduced neighbour set
     # TODO: find all shared distances in a big operation at the start? could be faster
     # TODO: move PREC variable to its proper place

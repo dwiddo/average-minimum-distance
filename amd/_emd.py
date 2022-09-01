@@ -11,28 +11,12 @@ import numpy as np
 
 @numba.njit(cache=True)
 def network_simplex(source_demands, sink_demands, network_costs):
-    """Given two sets of weights and a cost matrix on two distributions,
-    calculate the Earth mover's distance (Wasserstien metric).
-
+    """
     This is a port of the network simplex algorithm implented by Loïc Séguin-C
     for the networkx package to allow acceleration via the numba package.
     Copyright (C) 2010 Loïc Séguin-C. loicseguin@gmail.com
-    All rights reserved. BSD license.
-
-    Parameters
-    ----------
-    source_demands : numpy.ndarray
-        Weights of the first distribution.
-    sink_demands : numpy.ndarray
-        Weights of the second distribution.
-    network_costs : numpy.ndarray
-        Cost matrix giving distances between elements of the two distributions.
-        Shape (len(source_demands), len(sink_demands)).
-
-    Returns
-    -------
-    (emd, plan) : Tuple[float, numpy.ndarray]
-        A tuple of the Earth mover's distance and the optimal matching. 
+    All rights reserved.
+    BSD license.
 
     References
     ----------
