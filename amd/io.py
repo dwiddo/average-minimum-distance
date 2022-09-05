@@ -159,9 +159,9 @@ class CifReader(_Reader):
         if reader in ('ase', 'pycodcif'):
 
             if heaviest_component:
-                raise NotImplementedError('Parameter heaviest_component only implimented for reader="ccdc".')
+                raise NotImplementedError('Parameter heaviest_component only implemented for reader="ccdc".')
             if molecular_centres:
-                raise NotImplementedError('Parameter molecular_centres only implimented for reader="ccdc".')
+                raise NotImplementedError('Parameter molecular_centres only implemented for reader="ccdc".')
 
             extensions = {'cif'}
             file_parser = functools.partial(ase.io.cif.parse_cif, reader=reader)
