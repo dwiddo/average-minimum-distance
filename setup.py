@@ -43,7 +43,8 @@ install_requires = [
     'scipy>=1.6.1',
     'ase>=3.22.0',
     'joblib>=1.1.0',
-    'pandas>=1.3.0',
+    'pandas>=1.2.5',
+    'progressbar2>=4.0.0',
 ]
 
 with open(r'amd/__init__.py') as f:
@@ -67,6 +68,11 @@ kw = {
     'extras_require': {'ccdc': ['csd-python-api']},
     'packages': find_packages(),
     'include_package_data': True,
+    'entry_points': {
+        'console_scripts': [
+            'amd.compare = amd.cli:main',
+        ]
+    }
 }
 
 if __name__ == '__main__':

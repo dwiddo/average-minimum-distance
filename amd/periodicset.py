@@ -56,12 +56,11 @@ class PeriodicSet:
         self.types = types
 
     def __str__(self):
-
-        m, dims = self.motif.shape
-        return f"PeriodicSet({self.name}: {m} motif points in {dims} dimensions)"
+        return repr(self)
 
     def __repr__(self):
-        return f"PeriodicSet(name: {self.name}, cell: {self.cell}, motif shape {self.motif.shape})"
+        cell_volume = round(np.linalg.det(self.cell), 1)
+        return f'PeriodicSet(name={self.name}; {len(self.motif)} motif points, cell volume {cell_volume})'
  
     # used for debugging, checks if the motif/cell agree point for point
     # (disregarding order), NOT up to isometry.

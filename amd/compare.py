@@ -77,7 +77,7 @@ def compare(
 
     by = by.upper()
     if by not in ('AMD', 'PDD'):
-        raise ValueError(f"parameter 'by' in compare accepts 'AMD' or 'PDD', was passed {by}")
+        raise ValueError(f"parameter 'by' accepts 'AMD' or 'PDD', was passed {by}")
 
     reader_kwargs = {
         'reader': 'ase',

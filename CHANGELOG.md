@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.3] - 01/09/2022
+
+### Added
+
+- Command-line interface added to use `amd.compare` and save results to file.
+
 ## [1.3.2] - 01/09/2022
 
 ### Added
