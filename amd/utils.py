@@ -6,8 +6,6 @@ import numpy as np
 import numba
 from scipy.spatial.distance import squareform
 
-from .periodicset import PeriodicSet
-
 
 def diameter(cell):
     """Diameter of a unit cell (as a square matrix in Cartesian/Orthogonal form)
@@ -20,10 +18,10 @@ def diameter(cell):
         d = np.amax(np.linalg.norm(np.array([cell[0] + cell[1], cell[0] - cell[1]]), axis=-1))
     elif dims == 3:
         diams = np.array([
-            cell[0] + cell[1] + cell[2],
-            cell[0] + cell[1] - cell[2],
-            cell[0] - cell[1] + cell[2],
-            -cell[0] + cell[1] + cell[2]
+              cell[0] + cell[1] + cell[2],
+              cell[0] + cell[1] - cell[2],
+              cell[0] - cell[1] + cell[2],
+            - cell[0] + cell[1] + cell[2]
         ])
         d =  np.amax(np.linalg.norm(diams, axis=-1))
     else:
@@ -37,7 +35,7 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     3D unit cell parameters a,b,c,α,β,γ --> cell as 3x3 NumPy array.
     """
 
-    eps = 2 * np.spacing(90.0)
+    eps = 2 * np.spacing(90.0)  # ~1.4e-14
 
     cos_alpha = 0. if abs(abs(alpha) - 90.) < eps else np.cos(alpha * np.pi / 180.)
     cos_beta = 0. if abs(abs(beta) - 90.) < eps else np.cos(beta * np.pi / 180.)
@@ -76,6 +74,27 @@ def cellpar_to_cell_2D(a, b, alpha):
     cell[1, 1] = b * np.sin(alpha * np.pi / 180.)
 
     return cell
+
+
+def cell_to_cellpar(cell):
+    """Unit cell as a 3x3 NumPy array -> list of 6 lengths + angles."""
+    lengths = np.linalg.norm(cell, axis=-1)
+    angles = []
+    for i, j in [(1, 2), (0, 2), (0, 1)]:
+        ang_rad = np.arccos(np.dot(cell[i], cell[j]) / (lengths[i] * lengths[j]))
+        angles.append(np.rad2deg(ang_rad))
+    return np.concatenate((lengths, np.array(angles)))
+
+
+def cell_to_cellpar_2D(cell):
+    """Unit cell as a 2x2 NumPy array -> list of 2 lengths and an angle."""
+    cellpar = np.zeros((3, ))
+    lengths = np.linalg.norm(cell, axis=-1)
+    ang_rad = np.arccos(np.dot(cell[0], cell[1]) / (lengths[0] * lengths[1]))
+    cellpar[0] = lengths[0]
+    cellpar[1] = lengths[1]
+    cellpar[2] = np.rad2deg(ang_rad)
+    return cellpar
 
 
 def neighbours_from_distance_matrix(
@@ -126,20 +145,6 @@ def neighbours_from_distance_matrix(
     inds = np.take_along_axis(inds, sorted_inds, axis=-1)
     nn_dm = np.take_along_axis(nn_dm, sorted_inds, axis=-1)
     return nn_dm, inds
-
-
-def lattice_cubic(scale=1, dims=3):
-    """Return a pair ``(motif, cell)`` representing a hexagonal lattice, passable to
-    ``amd.AMD()`` or ``amd.PDD()``. """
-
-    return PeriodicSet(np.zeros((1, dims)), np.identity(dims) * scale)
-
-
-def lattice_hexagonal(scale=1):
-    """Dimension 3 only. Return a pair ``(motif, cell)`` representing a cubic lattice, 
-    passable to ``amd.AMD()`` or ``amd.PDD()``."""
-
-    return PeriodicSet(np.zeros((1, 3)), cellpar_to_cell(scale, scale, scale, 90, 90, 120))
 
 
 def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):

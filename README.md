@@ -59,7 +59,7 @@ If `csd-python-api` is installed, the compare function can also accept one or mo
 
 ### Choosing a value of k
 
-The parameter k of the invariants is the number of neighbouring atoms considered for each atom in the unit cell. Two crystals with the same unit molecule will have a small AMD/PDD distance for small enough k. A larger k will mean the environments of atoms in one crystal must line up with those in the other up to a larger radius to have a small AMD/PDD distance. Very large k does not mean better comparisons, as the invariants start to converge to depend only on density.
+The parameter k of the invariants is the number of neighbouring atoms considered for each atom in the unit cell. Two crystals with the same unit molecule will have a small AMD/PDD distance for small enough k. A larger k will mean the environments of atoms in one crystal must line up with those in the other up to a larger radius to have a small AMD/PDD distance.
 
 ### Reading crystals from a file, calculating the AMDs and PDDs
 
@@ -162,7 +162,7 @@ Use the following bib references to cite AMD or PDD.
 *Average minimum distances of periodic point sets - foundational invariants for mapping periodic crystals*. MATCH Communications in Mathematical and in Computer Chemistry, 87(3), 529-559 (2022). <https://doi.org/10.46793/match.87-3.529W>.
 
 ```bibtex
-@article{10.46793/match.87-3.529W,
+@article{widdowson2022average,
   title = {Average Minimum Distances of periodic point sets - foundational invariants for mapping periodic crystals},
   author = {Widdowson, Daniel and Mosca, Marco M and Pulido, Angeles and Kurlin, Vitaliy and Cooper, Andrew I},
   journal = {MATCH Communications in Mathematical and in Computer Chemistry},
@@ -174,13 +174,15 @@ Use the following bib references to cite AMD or PDD.
 }
 ```
 
-*Pointwise distance distributions of periodic point sets*. arXiv preprint arXiv:2108.04798 (2021). <https://arxiv.org/abs/2108.04798>.
+*Resolving the data ambiguity for periodic crystals*. Advances in Neural Information Processing Systems (NeurIPS 2022), v.35, <https://arxiv.org/abs/2108.04798>.
 
 ```bibtex
-@misc{arXiv:2108.04798,
+@misc{widdowson2022resolving,
+  title = {Resolving the data ambiguity for periodic crystals},
   author = {Widdowson, Daniel and Kurlin, Vitaliy},
-  title = {Pointwise distance distributions of periodic point sets},
-  year = {2021},
+  journal = {Advances in Neural Information Processing Systems (Proceedings of NeurIPS 2022)},
+  volume={35},
+  year = {2022},
   eprint = {arXiv:2108.04798},
 }
 ```

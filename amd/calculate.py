@@ -342,12 +342,13 @@ def PPC(periodic_set: PeriodicSet_or_Tuple) -> float:
     m, n = motif.shape
     det = np.linalg.det(cell)
     t = (n - n % 2) / 2
-    if n % 2 == 0:
-        V = (np.pi ** t) / np.math.factorial(t)
-    else:
-        V = (2 * np.math.factorial(t) * (4 * np.pi) ** t) / np.math.factorial(n)
 
-    return (det / (m * V)) ** (1./n)
+    if n % 2 == 0:
+        v = (np.pi ** t) / np.math.factorial(t)
+    else:
+        v = (2 * np.math.factorial(t) * (4 * np.pi) ** t) / np.math.factorial(n)
+
+    return (det / (m * v)) ** (1. / n)
 
 
 def AMD_estimate(periodic_set: PeriodicSet_or_Tuple, k: int) -> np.ndarray:
@@ -363,8 +364,7 @@ def AMD_estimate(periodic_set: PeriodicSet_or_Tuple, k: int) -> np.ndarray:
 
     motif, cell, _, _ = _extract_motif_cell(periodic_set)
     n = motif.shape[1]
-    c = PPC((motif, cell))
-    return np.array([(x ** (1. / n)) * c for x in range(1, k + 1)])
+    return PPC((motif, cell)) * np.power(np.arange(1, k + 1), 1. / n)
 
 
 def _extract_motif_cell(pset: PeriodicSet_or_Tuple):

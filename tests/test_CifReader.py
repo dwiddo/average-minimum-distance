@@ -11,7 +11,6 @@ def cif_paths(root_dir):
     ]
     return {name: os.path.join(root_dir, f'{name}.cif') for name in cif_names}
 
-
 def test_CifReader(cif_paths, reference_data):
     for name in cif_paths:
         references = reference_data[name]
@@ -49,14 +48,17 @@ def test_equiv_sites(equiv_sites_cif_path):
 def T2_alpha_cif_path(root_dir):
     return os.path.join(root_dir, 'T2-alpha-solvent.cif')
 
-@pytest.mark.skipif(not amd.io._CSD_PYTHON_API_ENABLED,
-    reason=f'Skipping test_heaviest_component as csd-python-api is not installed.')
-def test_heaviest_component(T2_alpha_cif_path):
+def test_heaviest_component(T2_alpha_cif_path, ccdc_enabled):
 
-    s = amd.CifReader(T2_alpha_cif_path, 
-                      reader='ccdc',
-                      disorder='all_sites',
-                      heaviest_component=True).read_one()
+    if not ccdc_enabled:
+        pytest.skip('Skipping test_CSDReader as csd-python-api is not installed.')
+
+    s = amd.CifReader(
+        T2_alpha_cif_path, 
+        reader='ccdc',
+        disorder='all_sites',
+        heaviest_component=True
+    ).read_one()
 
     if not s.asymmetric_unit.shape[0] == 26:
         pytest.fail(f'Heaviest component test failed.')

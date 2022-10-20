@@ -60,7 +60,7 @@ def nearest_neighbours(
     pdd_, inds = tree.query(x, k=k+1, workers=-1)
     pdd = np.zeros_like(pdd_)
 
-    while not np.allclose(pdd, pdd_, atol=1e-12, rtol=0):
+    while not np.allclose(pdd, pdd_, atol=1e-10, rtol=0):
         pdd = pdd_
         cloud = np.vstack((cloud, next(cloud_generator)))
         tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
@@ -130,10 +130,10 @@ def generate_concentric_cloud(
     int_lattice_generator = generate_integer_lattice(cell.shape[0])
 
     while True:
-        int_lattice = next(int_lattice_generator) @ cell
-        layer = np.empty((m * len(int_lattice), cell.shape[0]))
+        lattice = next(int_lattice_generator) @ cell
+        layer = np.empty((m * len(lattice), cell.shape[0]))
 
-        for i, translation in enumerate(int_lattice):
+        for i, translation in enumerate(lattice):
             layer[m*i:m*(i+1)] = motif + translation
 
         yield layer
@@ -180,8 +180,54 @@ def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
 
         positive_int_lattice = np.array(positive_int_lattice)
         batches = _reflect_positive_lattice(positive_int_lattice)
-        yield np.array(np.concatenate(batches))
+        yield np.concatenate(batches)
         d += 1
+
+
+@numba.njit()
+def _dist(xy, z):
+    s = z ** 2
+    for val in xy:
+        s += val ** 2
+    return s
+
+
+def generate_even_cloud(motif, cell):
+    m = len(motif)
+    lattice_generator = generate_even_lattice(cell)
+
+    while True:
+        lattice = next(lattice_generator)
+        layer = np.empty((m * len(lattice), cell.shape[0]))
+
+        for i, translation in enumerate(lattice):
+            layer[m * i : m * (i + 1)] = motif + translation
+
+        yield layer
+
+
+def generate_even_lattice(cell):
+    n = cell.shape[0]
+    cell_lengths = np.linalg.norm(cell, axis=-1)
+    ratios = np.amax(cell_lengths) / cell_lengths
+    approx_ratios = np.copy(ratios)
+    xyz = np.zeros(n, dtype=int)
+
+    while True:
+
+        xyz_ = np.floor(approx_ratios).astype(int)
+        pve_int_lattice = []
+        for axis in range(n):
+            generators = [range(0, xyz_[d]) for d in range(axis)]
+            generators.append(range(xyz[axis], xyz_[axis]))
+            generators.extend(range(0, xyz[d]) for d in range(axis + 1, n))
+            pve_int_lattice.extend(product(*generators))
+
+        pve_int_lattice = np.array(pve_int_lattice)
+        pos_int_lat_cloud = np.concatenate(_reflect_positive_lattice(pve_int_lattice))
+        yield pos_int_lat_cloud @ cell
+        xyz = xyz_
+        approx_ratios += ratios
 
 
 @numba.njit()
@@ -216,14 +262,6 @@ def _reflect_positive_lattice(positive_int_lattice):
     return batches
 
 
-@numba.njit()
-def _dist(xy, z):
-    s = z ** 2
-    for val in xy:
-        s += val ** 2
-    return s
-
-
 # # @numba.njit()
 # def cartesian_product(n, repeat):
 #     arrays = [np.arange(n)] * repeat
@@ -231,3 +269,12 @@ def _dist(xy, z):
 #     for i, a in enumerate(np.ix_(*arrays)):
 #         arr[..., i] = a
 #     return arr.reshape(-1, repeat)
+
+
+def cartesian_product(*arrays):
+    la = len(arrays)
+    # dtype = np.result_type(*arrays)
+    arr = np.empty([len(a) for a in arrays] + [la])
+    for i, a in enumerate(np.ix_(*arrays)):
+        arr[...,i] = a
+    return arr.reshape(-1, la)

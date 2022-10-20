@@ -19,7 +19,7 @@ Module                 Description
 ===================    ==============================================================
 """
 
-__version__ = '1.3.3'
+__version__ = '1.3.3a1'
 __author__ = 'Daniel Widdowson'
 __maintainer__ = 'Daniel Widdowson'
 __email__ = 'D.E.Widdowson@liverpool.ac.uk'
@@ -30,6 +30,5 @@ __copyright__ = "Copyright 2022, Daniel Widdowson"
 from .calculate import *
 from .compare import *
 from .io import *
-from .periodicset import PeriodicSet
-from .reconstruct import reconstruct
+from .periodicset import *
 from .utils import *

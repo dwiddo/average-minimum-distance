@@ -17,6 +17,7 @@ from .io import CifReader, CSDReader
 from .calculate import AMD, PDD
 from ._emd import network_simplex
 from .periodicset import PeriodicSet
+from .utils import neighbours_from_distance_matrix
 
 
 def compare(
@@ -24,6 +25,7 @@ def compare(
         crystals_=None,
         by='AMD',
         k=100,
+        nearest=None,
         **kwargs
 ) -> pd.DataFrame:
     r"""Given one or two sets of periodic set(s), refcode(s) or cif(s), compare them
@@ -42,6 +44,9 @@ def compare(
         Invariant to compare by, either 'AMD' or 'PDD'.
     k : int, default 100
         k value to use for the invariants (length of AMD, or number of columns in PDD).
+    nearest : int, deafult None
+        Find a number of nearest neighbours in the second set for each in the first, rather than a
+        full distance matrix.
 
     Returns
     -------
@@ -131,7 +136,7 @@ def compare(
         compare_kwargs.pop('verbose', None)
 
         if crystals_ is None:
-            dm = squareform(AMD_pdist(invs, **compare_kwargs))
+            dm = AMD_pdist(invs, **compare_kwargs)
         else:
             invs_ = [AMD(s, k) for s in crystals_]
             dm = AMD_cdist(invs, invs_, **compare_kwargs)
@@ -142,12 +147,25 @@ def compare(
         compare_kwargs.pop('low_memory', None)
 
         if crystals_ is None:
-            dm = squareform(PDD_pdist(invs, **compare_kwargs))
+            dm = PDD_pdist(invs, **compare_kwargs)
         else:
-            invs_ = [PDD(s, k) for s in crystals_]
+            invs_ = [PDD(s, k, **calc_kwargs) for s in crystals_]
             dm = PDD_cdist(invs, invs_, **compare_kwargs)
 
-    return pd.DataFrame(dm, index=names, columns=names_)
+    if nearest:
+        nn_dm, inds = neighbours_from_distance_matrix(nearest, dm)
+        data = {}
+        for i in range(nearest):
+            data['ID ' + str(i+1)] = [names_[j] for j in inds[:, i]]
+            data['DIST ' + str(i+1)] = nn_dm[:, i]
+        df = pd.DataFrame(data, index=names)
+
+    else:
+        if dm.ndim == 1:
+            dm = squareform(dm)
+        df = pd.DataFrame(dm, index=names, columns=names_)
+
+    return df
 
 
 def EMD(
@@ -453,7 +471,8 @@ def _unwrap_periodicset_list(psets_or_str, **reader_kwargs):
     if isinstance(psets_or_str, PeriodicSet):
         return [psets_or_str]
     elif isinstance(psets_or_str, list):
-        return [s for item in psets_or_str for s in _extract_periodicsets(item, **reader_kwargs)]
+        return [s for item in psets_or_str 
+                for s in _extract_periodicsets(item, **reader_kwargs)]
     else:
         return _extract_periodicsets(psets_or_str, **reader_kwargs)
 
