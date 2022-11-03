@@ -1,4 +1,4 @@
-"""Command line interface for :func:`.compare.compare`.
+"""Command line interface for :func:`amd.compare() <.compare.compare>`.
 """
 
 import argparse

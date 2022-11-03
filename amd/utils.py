@@ -1,6 +1,9 @@
 """General utility functions."""
 
 from typing import Tuple
+import sys
+import time
+import datetime
 
 import numpy as np
 import numba
@@ -107,15 +110,15 @@ def neighbours_from_distance_matrix(
     ----------
     n : int
         Number of nearest neighbours to find for each item.
-    dm : numpy.ndarray
+    dm : :class:`numpy.ndarray`
         2D distance matrix or 1D condensed distance matrix.
 
     Returns
     -------
-    nn_dm, inds : Tuple[numpy.ndarray, numpy.ndarray] 
-        ``nn_dm[i][j]`` is the distance from item ``i`` to its ``j+1`` st
+    (nn_dm, inds) : Tuple[:class:`numpy.ndarray`, :class:`numpy.ndarray`] 
+        ``nn_dm[i][j]`` is the distance from item :math:`i` to its :math:`j+1` st
         nearest neighbour, and ``inds[i][j]`` is the index of this neighbour 
-        (``j+1`` since index 0 is the first nearest neighbour).
+        (:math:`j+1` since index 0 is the first nearest neighbour).
     """
 
     inds = None
@@ -178,3 +181,57 @@ def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
         raise ValueError(f'random_cell only implimented for dimensions 2 and 3 (passed {dims})')
 
     return cell
+
+
+class _ETA:
+    """Pass total amount to do on construction,
+    then call .update() on every loop."""
+
+    # epochtime_{n+1} = factor * epochtime + (1-factor) * epochtime_{n}
+    _moving_av_factor = 0.3
+
+    def __init__(self, to_do, update_rate=1000):
+        self.to_do = to_do
+        self.update_rate = update_rate
+        self.counter = 0
+        self.start_time = time.perf_counter()
+        self.tic = self.start_time
+        self.time_per_epoch = None
+        self.done = False
+
+    def update(self):
+
+        self.counter += 1
+
+        if self.counter == self.to_do:
+            sys.stdout.write(self.finished())
+            self.done = True
+            return
+
+        elif self.counter > self.to_do:
+            return
+
+        if not self.counter % self.update_rate:
+            sys.stdout.write(self._end_epoch())
+
+    def finished(self):
+        total = time.time() - self.start_time
+        msg = f'Total time: {round(total, 2)}s, ' \
+              f'n passes: {self.counter} ' \
+              f'({round(self.to_do/total, 2)} items/s)\r\n'
+        return msg
+
+    def _end_epoch(self):
+        toc = time.perf_counter()
+        epoch_time = toc - self.tic
+        if self.time_per_epoch is None:
+            self.time_per_epoch = epoch_time
+        else:
+            self.time_per_epoch = _ETA._moving_av_factor * epoch_time + \
+                                  (1 - _ETA._moving_av_factor) * self.time_per_epoch
+            
+        percent = round(100 * self.counter / self.to_do, 2)
+        remaining = int(((self.to_do - self.counter) / self.update_rate) * self.time_per_epoch)
+        eta = str(datetime.timedelta(seconds=remaining))
+        self.tic = toc
+        return f'{percent}%, ETA {eta}' + ' ' * 20 + '\r'

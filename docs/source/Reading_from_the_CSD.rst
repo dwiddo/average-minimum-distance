@@ -14,19 +14,9 @@ If ``None`` or ``'CSD'`` are passed instead of refcodes, it reads the whole CSD:
     refcodes = ['ACSALA', 'HXACAN']
     structures = list(amd.CSDReader(refcodes, families=True))
 
-    # Create a generic reader, read crystals 'on demand' with CSDReader.entry()
-    reader = amd.CSDReader()
-    debxit01 = reader.entry('DEBXIT01')
-    
-    # looping over this generic reader will yield all CSD entries
-    for periodic_set in reader:
+    # Giving the reader nothing reads from the whole CSD.
+    for periodic_set in amd.CSDReader():
         ...
-
-    # Make list of AMDs for crystals in these families
-    refcodes = ['ACSALA', 'HXACAN']
-    amds = []
-    for structure in amd.CSDReader(refcodes, families=True):
-        amds.append(amd.AMD(structure, 100))
 
 The :class:`CSDReader` returns :class:`.periodicset.PeriodicSet` objects representing the crystals,
 which can be passed to :func:`amd.AMD` or :func:`amd.PDD` to calculate their invariants. 

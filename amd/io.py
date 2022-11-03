@@ -1,14 +1,15 @@
-"""Tools for reading crystals from files, or from the CSD with 
-``csd-python-api``. The readers return :class:`.periodicset.PeriodicSet`
-objects representing the crystal which can be passed to 
-:func:`.calculate.AMD` and :func:`.calculate.PDD` to get their invariants.
+"""Tools for reading crystals from files, or from the CSD with
+``csd-python-api``. The readers return
+:class:`amd.PeriodicSet <.periodicset.PeriodicSet>` objects representing the
+crystal which can be passed to :func:`amd.AMD() <.calculate.AMD>` and
+:func:`amd.PDD() <.calculate.PDD>` to get their invariants.
 """
 
 import os
 import re
 import functools
 import warnings
-from typing import Callable, Iterable, Tuple
+from typing import Tuple
 
 import numpy as np
 import numba
@@ -16,11 +17,10 @@ import numba
 import ase.io.cif
 import ase.data
 import ase.spacegroup
-import ase.spacegroup.spacegroup
+from ase.spacegroup.spacegroup import parse_sitesym as ase_parse_sitesym
 
 from .utils import cellpar_to_cell
 from .periodicset import PeriodicSet
-from .data import CIF_TAGS
 
 
 def _custom_warning(message, category, filename, lineno, *args, **kwargs):
@@ -30,6 +30,57 @@ warnings.formatwarning = _custom_warning
 
 _EQUIV_SITE_TOL = 1e-3
 _DISORDER_OPTIONS = {'skip', 'ordered_sites', 'all_sites'}
+
+CIF_TAGS = {
+    'cellpar': [
+        '_cell_length_a', 
+        '_cell_length_b', 
+        '_cell_length_c',
+        '_cell_angle_alpha', 
+        '_cell_angle_beta', 
+        '_cell_angle_gamma',],
+
+    'atom_site_fract': [
+        '_atom_site_fract_x',
+        '_atom_site_fract_y',
+        '_atom_site_fract_z',],
+
+    'atom_site_cartn': [
+        '_atom_site_cartn_x',
+        '_atom_site_cartn_y',
+        '_atom_site_cartn_z',],
+
+    'atom_symbol': [
+        '_atom_site_type_symbol',
+        '_atom_site_label',],
+
+    'symop': [
+        '_symmetry_equiv_pos_as_xyz',
+        '_space_group_symop_operation_xyz',
+        '_space_group_symop.operation_xyz',
+        '_symmetry_equiv_pos_as_xyz_',
+        '_space_group_symop_operation_xyz_',],
+
+    'spacegroup_name': [
+        '_space_group_name_Hall',
+        '_space_group_name_Hall_',
+        '_symmetry_space_group_name_hall',
+        '_symmetry_space_group_name_hall_',
+        '_space_group_name_H-M_alt',
+        '_space_group_name_H-M_alt_',
+        '_symmetry_space_group_name_H-M',
+        '_symmetry_space_group_name_H-M_',
+        '_symmetry_space_group_name_H_M',
+        '_symmetry_space_group_name_H_M_',
+        '_symmetry_space_group_name_h-m',
+        '_symmetry_space_group_name_h-m_',],
+
+    'spacegroup_number': [
+        '_space_group_IT_number',
+        '_symmetry_Int_Tables_number',
+        '_space_group_IT_number_',
+        '_symmetry_Int_Tables_number_',],
+}
 
 
 class _Reader:
@@ -53,23 +104,59 @@ class _Reader:
         self.heaviest_component = heaviest_component
         self.molecular_centres = molecular_centres
         self.show_warnings = show_warnings
-        self._generator = None
+        self._backend_generator = None
+        self._converter = None
 
     def __iter__(self):
-        yield from self._generator
+        if self._backend_generator is None or self._converter is None:
+            raise RuntimeError(f'{self.__class__.__name__} not initialized.')
+        return self
 
-    def read_one(self):
-        """Read the first item."""
-        try:
-            return next(iter(self._generator))
-        except StopIteration:
-            return None
+    def __next__(self):
+        """Iterates over self._backend_generator, passing items through self._converter. 
+        Catches ParseError + warnings raised in self._converter, optionally printing them.
+        """
+
+        if not self.show_warnings:
+            warnings.simplefilter('ignore')
+
+        while True:
+
+            item = next(self._backend_generator) # will raise StopIteration when done
+
+            with warnings.catch_warnings(record=True) as warning_msgs:
+                msg = None
+                try:
+                    periodic_set = self._converter(item)
+                except ParseError as err:
+                    msg = str(err)
+
+            if msg:
+                warnings.warn(msg)
+                continue
+
+            for warning in warning_msgs:
+                msg = f'{periodic_set.name} {warning.message}'
+                warnings.warn(msg, category=warning.category)
+
+            return periodic_set
+
+    def read(self):
+        """Reads the crystal(s), returns one 
+        :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` if there is only
+        one, otherwise returns a list. (Note the return type is not
+        consistent!)"""
+        l = list(self)
+        if len(l) == 1:
+            return l[0]
+        else:
+            return l
 
 
 class CifReader(_Reader):
     """Read all structures in a .cif file or all files in a folder
     with ase or csd-python-api (if installed), yielding
-    :class:`.periodicset.PeriodicSet` s.
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` s.
 
     Parameters
     ----------
@@ -100,7 +187,7 @@ class CifReader(_Reader):
 
     Yields
     ------
-    :class:`.periodicset.PeriodicSet`
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
         Represents the crystal as a periodic set, consisting of a finite set
         of points (motif) and lattice (unit cell). Contains other data, e.g.
         the crystal's name and information about the asymmetric unit.
@@ -117,7 +204,7 @@ class CifReader(_Reader):
             structures = list(amd.CifReader('path/to/folder'))
 
             # Reads just one if the .CIF has just one crystal
-            periodic_set = amd.CifReader('mycif.cif').read_one()
+            periodic_set = amd.CifReader('mycif.cif').read()
 
             # List of AMDs (k=100) of crystals in a .CIF
             amds = [amd.AMD(periodic_set, 100) for periodic_set in amd.CifReader('mycif.cif')]
@@ -142,6 +229,10 @@ class CifReader(_Reader):
             show_warnings=show_warnings
         )
 
+        # file_parser: Callable(path) -> Iterable[External object]
+        # self._converter: Callable(External object) -> PeriodicSet
+        # set options in self._converter with functools.partial
+
         if reader != 'ccdc':
 
             if heaviest_component:
@@ -157,9 +248,8 @@ class CifReader(_Reader):
         if reader in ('ase', 'pycodcif'):
 
             extensions = {'cif'}
-            file_parser = functools.partial(ase.io.cif.parse_cif, 
-                                            reader=reader)
-            converter = functools.partial(
+            file_parser = functools.partial(ase.io.cif.parse_cif, reader=reader)
+            self._converter = functools.partial(
                 periodicset_from_ase_cifblock,
                 remove_hydrogens=self.remove_hydrogens,
                 disorder=self.disorder
@@ -168,8 +258,8 @@ class CifReader(_Reader):
         elif reader == 'pymatgen':
 
             extensions = {'cif'}
-            file_parser = self._pymatgen_cifblock_generator
-            converter = functools.partial(
+            file_parser = CifReader._pymatgen_cifblock_generator
+            self._converter = functools.partial(
                 periodicset_from_pymatgen_cifblock,
                 remove_hydrogens=self.remove_hydrogens,
                 disorder=self.disorder
@@ -177,14 +267,11 @@ class CifReader(_Reader):
 
         elif reader == 'gemmi':
 
-            try:
-                import gemmi.cif
-            except ImportError as _:
-                raise ImportError('Failed to import gemmi.')
+            import gemmi.cif
 
             extensions = {'cif'}
             file_parser = gemmi.cif.read_file
-            converter = functools.partial(
+            self._converter = functools.partial(
                 periodicset_from_gemmi_block,
                 remove_hydrogens=self.remove_hydrogens,
                 disorder=self.disorder
@@ -194,14 +281,14 @@ class CifReader(_Reader):
 
             try:
                 import ccdc.io
-            except (ImportError, RuntimeError) as _:
-                msg = 'Failed to import csd-python-api, please'\
+            except (ImportError, RuntimeError) as e:
+                msg = 'Failed to import csd-python-api, please' \
                       'check it is installed and licensed.'
-                raise ImportError(msg)
+                raise ImportError(msg) from e
 
             extensions = ccdc.io.EntryReader.known_suffixes
             file_parser = ccdc.io.EntryReader
-            converter = functools.partial(
+            self._converter = functools.partial(
                 periodicset_from_ccdc_entry,
                 remove_hydrogens=self.remove_hydrogens,
                 disorder=self.disorder,
@@ -213,13 +300,11 @@ class CifReader(_Reader):
             raise ValueError(f'Unknown reader {reader}.')
 
         if os.path.isfile(path):
-            generator = file_parser(path)
+            self._backend_generator = iter(file_parser(path))
         elif os.path.isdir(path):
-            generator = self._generate_from_dir(path, file_parser, extensions)
+            self._backend_generator = iter(self._generate_from_dir(path, file_parser, extensions))
         else:
             raise FileNotFoundError(f'No such file or directory: {path}')
-
-        self._generator = _map(converter, generator, self.show_warnings)
 
     def _generate_from_dir(self, path, file_parser, extensions):
         for file in os.listdir(path):
@@ -227,6 +312,7 @@ class CifReader(_Reader):
             if suff.lower() in extensions:
                 yield from file_parser(os.path.join(path, file))
 
+    @staticmethod
     def _pymatgen_cifblock_generator(path):
         """Path to .cif --> generator of pymatgen CifBlocks."""
         from pymatgen.io.cif import CifFile
@@ -235,7 +321,7 @@ class CifReader(_Reader):
 
 class CSDReader(_Reader):
     """Read structures from the CSD with csd-python-api, yielding 
-    :class:`.periodicset.PeriodicSet` s.
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` s.
 
     Parameters
     ----------
@@ -265,7 +351,7 @@ class CSDReader(_Reader):
 
     Yields
     ------
-    :class:`.periodicset.PeriodicSet`
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
         Represents the crystal as a periodic set, consisting of a finite set
         of points (motif) and lattice (unit cell). Contains other useful data,
         e.g. the crystal's name and information about the asymmetric unit for
@@ -291,14 +377,8 @@ class CSDReader(_Reader):
                 amds.append(amd.AMD(periodic_set, 100))
 
             # Giving the reader nothing reads from the whole CSD.
-            reader = amd.CSDReader()
-            
-            # looping over this generic reader will yield all CSD entries
-            for periodic_set in reader:
+            for periodic_set in amd.CSDReader():
                 ...
-            
-            # or, read structures by refcode on demand
-            debxit01 = reader.entry('DEBXIT01')
     """
 
     def __init__(
@@ -323,7 +403,7 @@ class CSDReader(_Reader):
         try:
             import ccdc.io
         except (ImportError, RuntimeError) as _:
-            msg = 'Failed to import csd-python-api, please'\
+            msg = 'Failed to import csd-python-api, please' \
                   'check it is installed and licensed.'
             raise ImportError(msg)
 
@@ -341,79 +421,28 @@ class CSDReader(_Reader):
         if families:
             refcodes = _refcodes_from_families(refcodes)
 
-        self._entry_reader = ccdc.io.EntryReader('CSD')
-        converter = functools.partial(
+        # self._entry_reader = ccdc.io.EntryReader('CSD')
+        entry_reader = ccdc.io.EntryReader('CSD')
+        self._converter = functools.partial(
             periodicset_from_ccdc_entry,
             remove_hydrogens=self.remove_hydrogens,
             disorder=self.disorder,
             molecular_centres=self.molecular_centres,
             heaviest_component=self.heaviest_component
         )
-        generator = self._ccdc_generator(refcodes)
-        self._generator = _map(converter, generator, self.show_warnings)
+        self._backend_generator = iter(self._ccdc_generator(refcodes, entry_reader))
 
-    def entry(self, refcode: str, **kwargs) -> PeriodicSet:
-        """Read a crystal given a CSD refcode, returning a
-        :class:`.periodicset.PeriodicSet`. If given kwargs, overrides the
-        kwargs given to the Reader."""
-
-        try:
-            entry = self._entry_reader.entry(refcode)
-        except RuntimeError:
-            warnings.warn(f'{refcode} not found in database')
-
-        kwargs_ = {
-            'remove_hydrogens': self.remove_hydrogens,
-            'disorder': self.disorder,
-            'heaviest_component': self.heaviest_component,
-            'molecular_centres': self.molecular_centres,
-        }
-        kwargs_.update(kwargs)
-        converter = functools.partial(periodicset_from_ccdc_entry, **kwargs_)
-
-        if 'show_warnings' in kwargs:
-            show_warnings = kwargs['show_warnings']
-        else:
-            show_warnings = self.show_warnings
-
-        try:
-            periodic_set = next(iter(_map(converter, [entry], show_warnings)))
-        except StopIteration:
-            periodic_set = None
-
-        return periodic_set
-
-    def family(self, refcode_family: str, **kwargs):
-
-        kwargs_ = {
-            'remove_hydrogens': self.remove_hydrogens,
-            'disorder': self.disorder,
-            'heaviest_component': self.heaviest_component,
-            'molecular_centres': self.molecular_centres
-        }
-
-        kwargs_.update(kwargs)
-        converter = functools.partial(periodicset_from_ccdc_entry, **kwargs_)
-        refcodes = _refcodes_from_families([refcode_family])
-        generator = self._ccdc_generator(refcodes)
-
-        if 'show_warnings' in kwargs:
-            show_warnings = kwargs['show_warnings']
-        else:
-            show_warnings = self.show_warnings
-
-        yield from _map(converter, generator, show_warnings)
-
-    def _ccdc_generator(self, refcodes):
+    @staticmethod
+    def _ccdc_generator(refcodes, entry_reader):
         """Generates ccdc Entries from CSD refcodes."""
 
         if refcodes is None:
-            for entry in self._entry_reader:
+            for entry in entry_reader:
                 yield entry
         else:
             for refcode in refcodes:
                 try:
-                    entry = self._entry_reader.entry(refcode)
+                    entry = entry_reader.entry(refcode)
                     yield entry
                 except RuntimeError:
                     warnings.warn(f'{refcode} not found in database')
@@ -429,7 +458,7 @@ def periodicset_from_ase_cifblock(
         remove_hydrogens=False,
         disorder='skip'
 ) -> PeriodicSet:
-    """:class:`ase.io.cif.CIFBlock` --> :class:`amd.periodicset.PeriodicSet`. 
+    """:class:`ase.io.cif.CIFBlock` --> :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
     CIFBlock is the type returned by :class:`ase.io.cif.parse_cif`.
 
     Parameters
@@ -447,7 +476,7 @@ def periodicset_from_ase_cifblock(
 
     Returns
     -------
-    :class:`.periodicset.PeriodicSet`
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
         Represents the crystal as a periodic set, consisting of a finite set
         of points (motif) and lattice (unit cell). Contains other useful data,
         e.g. the crystal's name and information about the asymmetric unit for
@@ -525,9 +554,9 @@ def periodicset_from_ase_cifblock(
             spg = block.get_spacegroup(True)
             rot, trans = spg.rotations, spg.translations
         except:
-            rot, trans = ase.spacegroup.spacegroup.parse_sitesym(['x,y,z'])
+            rot, trans = ase_parse_sitesym(['x,y,z'])
     else:
-        rot, trans = ase.spacegroup.spacegroup.parse_sitesym(sitesym)
+        rot, trans = ase_parse_sitesym(sitesym)
 
     # (if needed) remove Hydrogens, fract occupancy atoms
     remove_sites = [] # indices of asymmetric unit sites to remove
@@ -573,13 +602,13 @@ def periodicset_from_ase_cifblock(
     return PeriodicSet(motif, cell, **kwargs)
 
 
-# TODO: entrie function needs to be finished.
+# TODO: function needs to be finished.
 def periodicset_from_ase_atoms(
         atoms,
         remove_hydrogens=False,
         disorder='skip'
 ) -> PeriodicSet:
-    """:class:`ase.atoms.Atoms` --> :class:`amd.periodicset.PeriodicSet`.
+    """:class:`ase.atoms.Atoms` --> :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
 
     Parameters
     ----------
@@ -596,7 +625,7 @@ def periodicset_from_ase_atoms(
 
     Returns
     -------
-    :class:`.periodicset.PeriodicSet`
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
         Represents the crystal as a periodic set, consisting of a finite set
         of points (motif) and lattice (unit cell). Contains other useful data,
         e.g. the crystal's name and information about the asymmetric unit for
@@ -649,13 +678,13 @@ def periodicset_from_ase_atoms(
     cell = atoms.get_cell().array
     sg = atoms.info['spacegroup']
     asym_unit = ase.spacegroup.get_basis(atoms)
-    frac_motif, asym_inds, multiplicities, inverses = _expand_asym_unit(asym_unit, sg.rotations, sg.translations)
+    frac_motif, asym_inds, wyc_muls, inverses = _expand_asym_unit(asym_unit, sg.rotations, sg.translations)
     motif = frac_motif @ cell
     
     kwargs = {
         'name': None,
         'asymmetric_unit': asym_inds,
-        'wyckoff_multiplicities': multiplicities,
+        'wyckoff_multiplicities': wyc_muls,
         'types': atoms.get_atomic_numbers()
     }
 
@@ -667,8 +696,7 @@ def periodicset_from_pymatgen_cifblock(
         remove_hydrogens=False,
         disorder='skip',
 ) -> PeriodicSet:
-    """:class:`pymatgen.io.cif.CifBlock` --> 
-    :class:`amd.periodicset.PeriodicSet`.
+    """:class:`pymatgen.io.cif.CifBlock` --> :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
 
     Parameters
     ----------
@@ -685,7 +713,7 @@ def periodicset_from_pymatgen_cifblock(
 
     Returns
     -------
-    :class:`.periodicset.PeriodicSet`
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
         Represents the crystal as a periodic set, consisting of a finite set
         of points (motif) and lattice (unit cell). Contains other useful data,
         e.g. the crystal's name and information about the asymmetric unit for
@@ -702,22 +730,21 @@ def periodicset_from_pymatgen_cifblock(
             (b) any atom's label ends with '?'.
     """
 
-    from pymatgen.io.cif import str2float
     from pymatgen.core.periodic_table import _pt_data
 
     odict = block.data
 
     try:
-        cellpar = [str2float(odict[tag]) for tag in CIF_TAGS['cellpar']]
+        cellpar = [_cif_val_to_float(odict[tag]) for tag in CIF_TAGS['cellpar']]
         cell = cellpar_to_cell(*cellpar)
     except KeyError:
         raise ParseError(f'{block.header} has missing cell information')
 
     # check for missing data ?
-    asym_unit = [[str2float(s) for s in odict.get(name)] 
+    asym_unit = [[_cif_val_to_float(s) for s in odict.get(name)] 
                  for name in CIF_TAGS['atom_site_fract']]
     if None in asym_unit:
-        asym_motif = [[str2float(s) for s in odict.get(name)] 
+        asym_motif = [[_cif_val_to_float(s) for s in odict.get(name)] 
                       for name in CIF_TAGS['atom_site_cartn']]
         if None in asym_motif:
             raise ParseError(f'{block.header} has no sites')
@@ -784,7 +811,7 @@ def periodicset_from_pymatgen_structure(
         remove_hydrogens=False,
         disorder='skip'
 ) -> PeriodicSet:
-    """:class:`pymatgen.core.structure.Structure` --> :class:`amd.periodicset.PeriodicSet`.
+    """:class:`pymatgen.core.structure.Structure` --> :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
     Does not set the name of the periodic set, as there seems to be no such attribute in 
     the pymatgen Structure object.
 
@@ -803,7 +830,7 @@ def periodicset_from_pymatgen_structure(
 
     Returns
     -------
-    :class:`.periodicset.PeriodicSet`
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
         Represents the crystal as a periodic set, consisting of a finite set
         of points (motif) and lattice (unit cell). Contains other useful data,
         e.g. the crystal's name and information about the asymmetric unit for
@@ -846,7 +873,7 @@ def periodicset_from_ccdc_entry(
         heaviest_component=False,
         molecular_centres=False
 ) -> PeriodicSet:
-    """:class:`ccdc.entry.Entry` --> :class:`amd.periodicset.PeriodicSet`.
+    """:class:`ccdc.entry.Entry` --> :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
     Entry is the type returned by :class:`ccdc.io.EntryReader`.
 
     Parameters
@@ -870,7 +897,7 @@ def periodicset_from_ccdc_entry(
 
     Returns
     -------
-    :class:`.periodicset.PeriodicSet`
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
         Represents the crystal as a periodic set, consisting of a finite set
         of points (motif) and lattice (unit cell). Contains other useful data,
         e.g. the crystal's name and information about the asymmetric unit for
@@ -913,7 +940,7 @@ def periodicset_from_ccdc_crystal(
         heaviest_component=False,
         molecular_centres=False
 ) -> PeriodicSet:
-    """:class:`ccdc.crystal.Crystal` --> :class:`amd.periodicset.PeriodicSet`.
+    """:class:`ccdc.crystal.Crystal` --> :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
     Crystal is the type returned by :class:`ccdc.io.CrystalReader`.
 
     Parameters
@@ -937,7 +964,7 @@ def periodicset_from_ccdc_crystal(
 
     Returns
     -------
-    :class:`.periodicset.PeriodicSet`
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
         Represents the crystal as a periodic set, consisting of a finite set
         of points (motif) and lattice (unit cell). Contains other useful data,
         e.g. the crystal's name and information about the asymmetric unit for
@@ -990,7 +1017,7 @@ def periodicset_from_ccdc_crystal(
         frac_centres = _frac_molecular_centres_ccdc(crystal)
         mol_centres = frac_centres @ cell
         return PeriodicSet(mol_centres, cell, name=crystal.identifier)
-    
+
     asym_atoms = crystal.asymmetric_unit_molecule.atoms
     # check for None?
     asym_unit = np.array([tuple(a.fractional_coordinates) for a in asym_atoms])
@@ -1040,7 +1067,7 @@ def periodicset_from_gemmi_block(
         remove_hydrogens=False,
         disorder='skip'
 ) -> PeriodicSet:
-    """:class:`gemmi.cif.Block` --> :class:`amd.periodicset.PeriodicSet`. 
+    """:class:`gemmi.cif.Block` --> :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
     Block is the type returned by :class:`gemmi.cif.read_file`.
 
     Parameters
@@ -1058,7 +1085,7 @@ def periodicset_from_gemmi_block(
 
     Returns
     -------
-    :class:`.periodicset.PeriodicSet`
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
         Represents the crystal as a periodic set, consisting of a finite set
         of points (motif) and lattice (unit cell). Contains other useful data,
         e.g. the crystal's name and information about the asymmetric unit for
@@ -1154,7 +1181,7 @@ def periodicset_from_gemmi_block(
     if not sitesym:
         sitesym = ['x,y,z',]
 
-    rot, trans = ase.spacegroup.spacegroup.parse_sitesym(sitesym)
+    rot, trans = ase_parse_sitesym(sitesym)
     frac_motif, asym_inds, wyc_muls, inverses = _expand_asym_unit(asym_unit, rot, trans)
     full_types = np.array([asym_types[i] for i in inverses])
     motif = frac_motif @ cell
@@ -1167,20 +1194,6 @@ def periodicset_from_gemmi_block(
     }
 
     return PeriodicSet(motif, cell, **kwargs)
-
-
-def _frac_molecular_centres_ccdc(crystal):
-    """Returns any geometric centres of molecules in the unit cell.
-    Expects a ccdc Crystal object and returns fractional coordiantes."""
-
-    frac_centres = []
-    for comp in crystal.packing(inclusion='CentroidIncluded').components:
-        coords = [a.fractional_coordinates for a in comp.atoms]
-        x, y, z = zip(*coords)
-        m = len(coords)
-        frac_centres.append((sum(x) / m, sum(y) / m, sum(z) / m))
-    frac_centres = np.mod(np.array(frac_centres), 1)
-    return frac_centres[_unique_sites(frac_centres)]
 
 
 def _expand_asym_unit(
@@ -1247,7 +1260,7 @@ def _expand_asym_unit(
 
 @numba.njit()
 def _unique_sites(asym_unit):
-    """Uniquify (within io._EQUIV_SITE_TOL) a list of fractional coordinates,
+    """Uniquify (within _EQUIV_SITE_TOL) a list of fractional coordinates,
     considering all points modulo 1. Returns an array of bools such that
     asym_unit[_unique_sites(asym_unit)] is a uniquified list."""
     site_diffs1 = np.abs(np.expand_dims(asym_unit, 1) - asym_unit)
@@ -1271,6 +1284,7 @@ def _parse_sitesym_pymatgen(data):
 
     # try to parse xyz symops
     for symmetry_label in CIF_TAGS['symop']:
+
         xyz = data.get(symmetry_label)
         if not xyz:
             continue
@@ -1284,13 +1298,14 @@ def _parse_sitesym_pymatgen(data):
 
     # try to parse symbol
     if not symops:
+
         for symmetry_label in CIF_TAGS['spacegroup_name']:
 
             sg = data.get(symmetry_label)
             if not sg:
                 continue
+            sg = re.sub(r'[\s_]', '', sg)
 
-            sg = pymatgen.io.cif.sub_spgrp(sg)
             try:
                 spg = pymatgen.io.cif.space_groups.get(sg)
                 if not spg:
@@ -1320,7 +1335,7 @@ def _parse_sitesym_pymatgen(data):
                 continue
 
             try:
-                i = int(pymatgen.io.cif.str2float(num))
+                i = int(_cif_val_to_float(num))
                 symops = SpaceGroup.from_int_number(i).symmetry_ops
                 break
             except ValueError:
@@ -1335,17 +1350,31 @@ def _parse_sitesym_pymatgen(data):
     return rotations, translations
 
 
+def _frac_molecular_centres_ccdc(crystal):
+    """Returns any geometric centres of molecules in the unit cell.
+    Expects a ccdc Crystal object and returns fractional coordiantes."""
+
+    frac_centres = []
+    for comp in crystal.packing(inclusion='CentroidIncluded').components:
+        coords = [a.fractional_coordinates for a in comp.atoms]
+        x, y, z = zip(*coords)
+        m = len(coords)
+        frac_centres.append((sum(x) / m, sum(y) / m, sum(z) / m))
+    frac_centres = np.mod(np.array(frac_centres), 1)
+    return frac_centres[_unique_sites(frac_centres)]
+
+
 def _atom_has_disorder(label, occupancy):
     """Return True if label ends with ? or occupancy is a number < 1."""
     return label.endswith('?') or (np.isscalar(occupancy) and occupancy < 1)
 
 
-def _snap_small_prec_coords(frac_coords):
-    """Find where frac_coords is within 1e-4 of 1/3 or 2/3, change to 1/3 and 2/3.
-    Recommended by pymatgen's CIF parser."""
-    frac_coords[np.abs(1 - 3 * frac_coords) < 1e-4] = 1 / 3.
-    frac_coords[np.abs(1 - 3 * frac_coords / 2) < 1e-4] = 2 / 3.
-    return frac_coords
+# def _snap_small_prec_coords(frac_coords):
+#     """Find where frac_coords is within 1e-4 of 1/3 or 2/3, change to 1/3 and 2/3.
+#     Recommended by pymatgen's CIF parser. May use later."""
+#     frac_coords[np.abs(1 - 3 * frac_coords) < 1e-4] = 1 / 3.
+#     frac_coords[np.abs(1 - 3 * frac_coords / 2) < 1e-4] = 2 / 3.
+#     return frac_coords
 
 
 def _heaviest_component(molecule):
@@ -1403,30 +1432,18 @@ def _gemmi_loop_to_dict(loop):
     return {tag: l for tag, l in zip(loop.tags, tablified_loop)}
 
 
-def _map(func: Callable, iterable: Iterable, show_warnings: bool):
-    """Iterates over iterable, passing items through func and yielding the result. 
-    Catches ParseError and warnings, optionally printing them.
-    """
+def _cif_val_to_float(text):
+    """Remove uncertainty brackets from strings and return float."""
 
-    if not show_warnings:
-        warnings.simplefilter('ignore')
-
-    for item in iterable:
-
-        with warnings.catch_warnings(record=True) as warning_msgs:
-
-            parse_failed = False
-            try:
-                periodic_set = func(item)
-            except ParseError as err:
-                parse_failed = str(err)
-
-        if parse_failed:
-            warnings.warn(parse_failed)
-            continue
-
-        for warning in warning_msgs:
-            msg = f'{periodic_set.name} {warning.message}'
-            warnings.warn(msg, category=warning.category)
-
-        yield periodic_set
+    try:
+        # Note that the ending ) is sometimes missing. That is why the code has
+        # been modified to treat it as optional. Same logic applies to lists.
+        return float(re.sub(r'\(.+\)*', '', text))
+    except TypeError:
+        if isinstance(text, list) and len(text) == 1:
+            return float(re.sub(r'\(.+\)*', '', text[0]))
+    except ValueError as err:
+        if text.strip() == '.':
+            return 0
+        raise err
+    raise ValueError(f'{text} cannot be converted to float')

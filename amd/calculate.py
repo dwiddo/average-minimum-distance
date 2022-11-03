@@ -9,9 +9,9 @@ import collections
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
 
-from .utils import diameter
-from ._nns import nearest_neighbours, nearest_neighbours_minval
 from .periodicset import PeriodicSet
+from ._nns import nearest_neighbours, nearest_neighbours_minval
+from .utils import diameter
 
 PeriodicSet_or_Tuple = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
 
@@ -24,16 +24,17 @@ def AMD(
 
     Parameters
     ----------
-    periodic_set : :class:`.periodicset.PeriodicSet` or tuple of :class:`numpy.ndarray` s
-        A periodic set represented by a :class:`.periodicset.PeriodicSet` or
-        by a tuple (motif, cell) with coordinates in Cartesian form and a square unit cell.
+    periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or tuple of :class:`numpy.ndarray` s
+        A periodic set represented by a :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
+        or by a tuple of NumPy arrays (motif, cell) with coordinates in Cartesian form
+        and a square unit cell.
     k : int
-        Length of the AMD returned; the number of neighbours considered for each atom 
+        Length of the AMD returned; the number of neighbours considered for each atom
         in the unit cell to make the AMD.
 
     Returns
     -------
-    numpy.ndarray
+    :class:`numpy.ndarray`
         A :class:`numpy.ndarray` shape (k, ), the AMD of ``periodic_set`` up to k.
 
     Examples
@@ -75,13 +76,13 @@ def PDD(
 
     Parameters
     ----------
-    periodic_set : :class:`.periodicset.PeriodicSet`  tuple of :class:`numpy.ndarray` s
-        A periodic set represented by a :class:`.periodicset.PeriodicSet` or
-        by a tuple (motif, cell) with coordinates in Cartesian form and a square unit cell.
+    periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or tuple of :class:`numpy.ndarray` s
+        A periodic set represented by a :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
+        or by a tuple of NumPy arrays (motif, cell) with coordinates in Cartesian form
+        and a square unit cell.
     k : int
-        The returned PDD has k+1 columns, an additional first column for row weights.
-        k is the number of neighbours considered for each atom in the unit cell 
-        to make the PDD.
+        The number of neighbours considered for each atom in the unit cell.
+        The returned matrix has k + 1 columns, the first column for weights of rows.
     lexsort : bool, default True
         Lexicographically order the rows. Default True.
     collapse: bool, default True
@@ -100,7 +101,7 @@ def PDD(
 
     Returns
     -------
-    numpy.ndarray
+    :class:`numpy.ndarray`
         A :class:`numpy.ndarray` with k+1 columns, the PDD of ``periodic_set`` up to k.
         The first column contains the weights of rows. If ``return_row_groups`` is True, 
         returns a tuple (:class:`numpy.ndarray`, list).
@@ -133,8 +134,8 @@ def PDD(
     dists, _, _ = nearest_neighbours(motif, cell, asymmetric_unit, k)
     groups = [[i] for i in range(len(dists))]
 
-    if collapse and collapse_tol > 0:
-        overlapping = pdist(dists, metric='chebyshev') < collapse_tol
+    if collapse:
+        overlapping = pdist(dists, metric='chebyshev') <= collapse_tol
         if overlapping.any():
             groups = _collapse_into_groups(overlapping)
             weights = np.array([sum(weights[group]) for group in groups])
@@ -159,12 +160,12 @@ def PDD_to_AMD(pdd: np.ndarray) -> np.ndarray:
 
     Parameters
     ----------
-    pdd : numpy.ndarray
+    pdd : :class:`numpy.ndarray`
         The PDD of a periodic set.
 
     Returns
     -------
-    numpy.ndarray
+    :class:`numpy.ndarray`
         The AMD of the periodic set.
     """
 
@@ -172,21 +173,21 @@ def PDD_to_AMD(pdd: np.ndarray) -> np.ndarray:
 
 
 def AMD_finite(motif: np.ndarray) -> np.ndarray:
-    """The AMD of a finite m-point set up to k = m-1.
+    """The AMD of a finite m-point set up to k = m-  1.
 
     Parameters
     ----------
-    motif : numpy.ndarray
+    motif : :class:`numpy.ndarray`
         Coordinates of a set of points.
 
     Returns
     -------
-    numpy.ndarray
-        A vector length m-1 (where m is the number of points), the AMD of ``motif``.
+    :class:`numpy.ndarray`
+        A vector shape (motif.shape[0] - 1, ), the AMD of ``motif``.
 
     Examples
     --------
-    The AMD distance (L-infinity) between finite trapezium and kite point sets::
+    The (L-infinity) AMD distance between finite trapezium and kite point sets::
 
         trapezium = np.array([[0,0],[1,1],[3,1],[4,0]])
         kite      = np.array([[0,0],[1,1],[1,-1],[4,0]])
@@ -208,11 +209,11 @@ def PDD_finite(
         collapse_tol: float = 1e-4,
         return_row_groups: bool = False,
 ) -> np.ndarray:
-    """The PDD of a finite m-point set up to k = m-1.
+    """The PDD of a finite m-point set up to k = m - 1.
 
     Parameters
     ----------
-    motif : numpy.ndarray
+    motif : :class:`numpy.ndarray`
         Coordinates of a set of points.
     lexsort : bool, default True
         Whether or not to lexicographically order the rows. Default True.
@@ -230,7 +231,7 @@ def PDD_finite(
 
     Returns
     -------
-    numpy.ndarray
+    :class:`numpy.ndarray`
         A :class:`numpy.ndarray` with m columns (where m is the number of points), 
         the PDD of ``motif``. The first column contains the weights of rows.
 
@@ -255,7 +256,7 @@ def PDD_finite(
 
     if collapse:
         overlapping = pdist(dists, metric='chebyshev')
-        overlapping = overlapping < collapse_tol
+        overlapping = overlapping <= collapse_tol
         if overlapping.any():
             groups = _collapse_into_groups(overlapping)
             weights = np.array([sum(weights[group]) for group in groups])
@@ -278,21 +279,22 @@ def PDD_reconstructable(
         periodic_set: PeriodicSet_or_Tuple,
         lexsort: bool = True
 ) -> np.ndarray:
-    """The PDD of a periodic set with `k` (no of columns) large enough such that
+    """The PDD of a periodic set with `k` (number of columns) large enough such that
     the periodic set can be reconstructed from the PDD.
 
     Parameters
     ----------
-    periodic_set : :class:`.periodicset.PeriodicSet`  tuple of :class:`numpy.ndarray` s
-        A periodic set represented by a :class:`.periodicset.PeriodicSet` or
-        by a tuple (motif, cell) with coordinates in Cartesian form and a square unit cell.
+    periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or tuple of :class:`numpy.ndarray` s
+        A periodic set represented by a :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
+        or by a tuple of NumPy arrays (motif, cell) with coordinates in Cartesian form
+        and a square unit cell.
     lexsort : bool, default True
         Whether or not to lexicographically order the rows. Default True.
 
     Returns
     -------
-    numpy.ndarray
-        An ndarray, the PDD of ``periodic_set`` with enough columns to be reconstructable.
+    :class:`numpy.ndarray`
+        The PDD of ``periodic_set`` with enough columns to be reconstructable.
     """
 
     motif, cell, _, _ = _extract_motif_cell(periodic_set)
@@ -328,9 +330,9 @@ def PPC(periodic_set: PeriodicSet_or_Tuple) -> float:
 
     Parameters
     ----------
-    periodic_set : :class:`.periodicset.PeriodicSet` or tuple of
-        :class:`numpy.ndarray` s (motif, cell) representing the periodic set 
-        in Cartesian form.
+    periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or tuple of :class:`numpy.ndarray` s
+        A periodic set represented by a :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
+        or by a tuple of NumPy arrays (motif, cell) with coordinates in Cartesian form
 
     Returns
     -------
@@ -352,14 +354,18 @@ def PPC(periodic_set: PeriodicSet_or_Tuple) -> float:
 
 
 def AMD_estimate(periodic_set: PeriodicSet_or_Tuple, k: int) -> np.ndarray:
-    r"""Calculates an estimate of AMD based on the PPC, using the fact that
+    r"""Calculates an estimate of AMD based on the PPC.
+    
+    Parameters
+    ----------
+    periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or tuple of :class:`numpy.ndarray` s
+        A periodic set represented by a :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
+        or by a tuple of NumPy arrays (motif, cell) with coordinates in Cartesian form
 
-    .. math::
-
-        \lim_{k\rightarrow\infty}\frac{\text{AMD}_k}{\sqrt[n]{k}} = \sqrt[n]{\frac{\text{Vol}[U]}{m V_n}}
-
-    where :math:`U` is the unit cell, :math:`m` is the number of motif points and
-    :math:`V_n` is the volume of a unit sphere in :math:`n`-dimensional space.
+    Returns
+    -------
+    amd_est : :class:`numpy.ndarray`
+        An array shape (k, ), where ``amd_est[i]`` :math:`= \text{PPC} \sqrt[n]{k}` in n dimensions
     """
 
     motif, cell, _, _ = _extract_motif_cell(periodic_set)

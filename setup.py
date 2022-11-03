@@ -44,7 +44,6 @@ install_requires = [
     'ase>=3.22.0',
     'joblib>=1.1.0',
     'pandas>=1.2.5',
-    'progressbar2>=4.0.0',
 ]
 
 with open(r'amd/__init__.py') as f:

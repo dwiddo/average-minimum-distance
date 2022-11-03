@@ -5,7 +5,7 @@ More detailed documentation can be found in the sidebar.
    :hidden:
    :maxdepth: 2
 
-   Quick_reference
+   Get_Started
    Description_of_AMD_PDD
    Reading_cifs
    Reading_from_the_CSD

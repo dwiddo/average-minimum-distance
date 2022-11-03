@@ -23,12 +23,12 @@ def reconstruct(pdd, cell):
 
     Parameters
     ----------
-    pdd : ndarray
+    pdd : :class:`numpy.ndarray`
         The PDD of the periodic set to reconstruct. Needs `k` at least large enough so
         all values in the last column of pdd are greater than 2 * diameter(cell), and
         needs to be uncollapsed without weights. Use amd.PDD_reconstructable to get a
         PDD which is acceptable for this argument.
-    cell : ndarray
+    cell : :class:`numpy.ndarray`
         Unit cell of the periodic set to reconstruct.
 
     Returns

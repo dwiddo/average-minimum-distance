@@ -174,7 +174,7 @@ Use the following bib references to cite AMD or PDD.
 }
 ```
 
-*Resolving the data ambiguity for periodic crystals*. Advances in Neural Information Processing Systems (NeurIPS 2022), v.35, <https://arxiv.org/abs/2108.04798>.
+*Resolving the data ambiguity for periodic crystals*. Advances in Neural Information Processing Systems (NeurIPS 2022), v.35, to appear. <https://arxiv.org/abs/2108.04798>.
 
 ```bibtex
 @misc{widdowson2022resolving,

@@ -15,12 +15,10 @@ Collect these lists into one matrix with a row for each atom. Then order the row
 If any rows are not unique, keep only one and give each a weight proportional to how many copies there are. 
 The result is the kth PDD of the periodic set. In practice, the weights are kept in the first column of the matrix.
 
-A much more detailed description can be found in the papers on AMD and PDD:
+A much more detailed description can be found in our papers on AMD and PDD:
 
-- Average minimum distances of periodic point sets - foundational invariants for mapping periodic crystals. MATCH Communications in Mathematical and in Computer Chemistry, 87(3):529-559 (2022). `<https://doi.org/10.46793/match.87-3.529W>`_
-- Pointwise distance distributions of periodic point sets. arXiv preprint arXiv:2108.04798 (2021). `<https://arxiv.org/abs/2108.04798>`_
-
-
+- *Average minimum distances of periodic point sets - foundational invariants for mapping periodic crystals*. MATCH Communications in Mathematical and in Computer Chemistry, 87(3):529-559 (2022). `<https://doi.org/10.46793/match.87-3.529W>`_
+- *Resolving the data ambiguity for periodic crystals*. Advances in Neural Information Processing Systems (Proceedings of NeurIPS 2022), to appear. `<https://arxiv.org/abs/2108.04798>`_
 
 Comparing by AMD/PDD
 ********************
@@ -28,5 +26,5 @@ Comparing by AMD/PDD
 AMDs are just vectors which can be compared with any metric, as long as k (length of the AMD) is the same. 
 The default metric used in this package is L-infinity (aka Chebyshev), 
 since it does not so much accumulate differences in distances across many neighbours. 
-PDDs are matrices with weighted rows; the appropriate metric to compare them is the *Earth mover's distance* (aka Wasserstein metric), 
+PDDs are matrices with weighted rows; the appropriate metric to compare them is the `Earth mover's distance <https://en.wikipedia.org/wiki/Earth_mover%27s_distance>`_ (aka Wasserstein metric), 
 which itself needs a metric to compare two PDD rows (without their weights), where L-infinity is again our default.

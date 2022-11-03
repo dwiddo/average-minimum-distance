@@ -192,47 +192,50 @@ def _dist(xy, z):
     return s
 
 
-def generate_even_cloud(motif, cell):
-    m = len(motif)
-    lattice_generator = generate_even_lattice(cell)
+# def generate_even_cloud(motif, cell):
+#     m = len(motif)
+#     lattice_generator = generate_even_lattice(cell)
 
-    while True:
-        lattice = next(lattice_generator)
-        layer = np.empty((m * len(lattice), cell.shape[0]))
+#     while True:
+#         lattice = next(lattice_generator)
+#         layer = np.empty((m * len(lattice), cell.shape[0]))
 
-        for i, translation in enumerate(lattice):
-            layer[m * i : m * (i + 1)] = motif + translation
+#         for i, translation in enumerate(lattice):
+#             layer[m * i : m * (i + 1)] = motif + translation
 
-        yield layer
+#         yield layer
 
 
-def generate_even_lattice(cell):
-    n = cell.shape[0]
-    cell_lengths = np.linalg.norm(cell, axis=-1)
-    ratios = np.amax(cell_lengths) / cell_lengths
-    approx_ratios = np.copy(ratios)
-    xyz = np.zeros(n, dtype=int)
+# def generate_even_lattice(cell):
+#     inv_cell = np.linalg.inv(cell)
+#     n = cell.shape[0]
 
-    while True:
+#     cell_lengths = np.linalg.norm(cell, axis=-1)
+#     ratios = np.amax(cell_lengths) / cell_lengths
+#     approx_ratios = np.copy(ratios)
+#     xyz = np.zeros(n, dtype=int)
 
-        xyz_ = np.floor(approx_ratios).astype(int)
-        pve_int_lattice = []
-        for axis in range(n):
-            generators = [range(0, xyz_[d]) for d in range(axis)]
-            generators.append(range(xyz[axis], xyz_[axis]))
-            generators.extend(range(0, xyz[d]) for d in range(axis + 1, n))
-            pve_int_lattice.extend(product(*generators))
+#     while True:
 
-        pve_int_lattice = np.array(pve_int_lattice)
-        pos_int_lat_cloud = np.concatenate(_reflect_positive_lattice(pve_int_lattice))
-        yield pos_int_lat_cloud @ cell
-        xyz = xyz_
-        approx_ratios += ratios
+#         xyz_ = np.floor(approx_ratios).astype(int)
+#         pve_int_lattice = []
+#         for axis in range(n):
+#             generators = [range(0, xyz_[d]) for d in range(axis)]
+#             generators.append(range(xyz[axis], xyz_[axis]))
+#             generators.extend(range(0, xyz[d]) for d in range(axis + 1, n))
+#             pve_int_lattice.extend(product(*generators))
+
+#         pve_int_lattice = np.array(pve_int_lattice)
+#         pos_int_lat_cloud = np.concatenate(_reflect_positive_lattice(pve_int_lattice))
+#         yield pos_int_lat_cloud @ cell
+#         xyz = xyz_
+#         approx_ratios += ratios
 
 
 @numba.njit()
 def _reflect_positive_lattice(positive_int_lattice):
-    """Reflect a set of points in the +ve quadrant in all axes."""
+    """Reflect a set of points in the +ve quadrant in all axes.
+    Does not duplicate points lying on the axes themselves."""
     dims = positive_int_lattice.shape[-1]
     batches = [positive_int_lattice]
 
