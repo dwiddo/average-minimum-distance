@@ -40,20 +40,20 @@ def test_CifReader_pymatgen(cif_paths, reference_data):
                 pytest.fail(f'Structure {s.name} read with CifReader disagrees with reference.')
 
 
-def test_CifReader_gemmi(cif_paths, reference_data):
-    for name in cif_paths:
-        references = reference_data[name]
-        try:
-            read_in = list(amd.CifReader(cif_paths[name], reader='gemmi'))
-        except ImportError as _:
-            pytest.skip('Skipping gemmi reader test as gemmi is not installed.')
+# def test_CifReader_gemmi(cif_paths, reference_data):
+#     for name in cif_paths:
+#         references = reference_data[name]
+#         try:
+#             read_in = list(amd.CifReader(cif_paths[name], reader='gemmi'))
+#         except ImportError as _:
+#             pytest.skip('Skipping gemmi reader test as gemmi is not installed.')
 
-        if (not len(references) == len(read_in)) or len(read_in) == 0:
-            pytest.fail(f'There are {len(references)} references, but {len(read_in)} structures were read.')
+#         if (not len(references) == len(read_in)) or len(read_in) == 0:
+#             pytest.fail(f'There are {len(references)} references, but {len(read_in)} structures were read.')
 
-        for s, s_ in zip(read_in, references):
-            if not s == s_['PeriodicSet']:
-                pytest.fail(f'Structure {s.name} read with CifReader disagrees with reference.')
+#         for s, s_ in zip(read_in, references):
+#             if not s == s_['PeriodicSet']:
+#                 pytest.fail(f'Structure {s.name} read with CifReader disagrees with reference.')
 
 
 def test_CifReader_ccdc(cif_paths, reference_data):
