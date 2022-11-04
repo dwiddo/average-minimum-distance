@@ -21,14 +21,15 @@ def diameter(cell):
         d = np.amax(np.linalg.norm(np.array([cell[0] + cell[1], cell[0] - cell[1]]), axis=-1))
     elif dims == 3:
         diams = np.array([
-              cell[0] + cell[1] + cell[2],
-              cell[0] + cell[1] - cell[2],
-              cell[0] - cell[1] + cell[2],
+            cell[0] + cell[1] + cell[2],
+            cell[0] + cell[1] - cell[2],
+            cell[0] - cell[1] + cell[2],
             - cell[0] + cell[1] + cell[2]
         ])
-        d =  np.amax(np.linalg.norm(diams, axis=-1))
+        d = np.amax(np.linalg.norm(diams, axis=-1))
     else:
-        raise ValueError(f'diameter only implimented for dimensions <= 3.')
+        msg = f'diameter() not implemented for dims > 3 (passed cell shape {cell.shape}).'
+        raise NotImplementedError(msg)
     return d
 
 
@@ -115,9 +116,9 @@ def neighbours_from_distance_matrix(
 
     Returns
     -------
-    (nn_dm, inds) : Tuple[:class:`numpy.ndarray`, :class:`numpy.ndarray`] 
+    (nn_dm, inds) : Tuple[:class:`numpy.ndarray`, :class:`numpy.ndarray`]
         ``nn_dm[i][j]`` is the distance from item :math:`i` to its :math:`j+1` st
-        nearest neighbour, and ``inds[i][j]`` is the index of this neighbour 
+        nearest neighbour, and ``inds[i][j]`` is the index of this neighbour
         (:math:`j+1` since index 0 is the first nearest neighbour).
     """
 
@@ -151,17 +152,16 @@ def neighbours_from_distance_matrix(
 
 
 def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
-    """Dimensions 2 and 3 only. Random unit cell with uniformally chosen length and 
+    """Dimensions 2 and 3 only. Random unit cell with uniformally chosen length and
     angle parameters between bounds."""
+
+    ll, lu = length_bounds
+    al, au = angle_bounds
 
     if dims == 3:
         while True:
-            lengths = [np.random.uniform(low=length_bounds[0],
-                                         high=length_bounds[1])
-                       for _ in range(dims)]
-            angles = [np.random.uniform(low=angle_bounds[0],
-                                        high=length_bounds[1])
-                      for _ in range(dims)]
+            lengths = [np.random.uniform(low=ll, high=lu) for _ in range(dims)]
+            angles = [np.random.uniform(low=al, high=au) for _ in range(dims)]
 
             try:
                 cell = cellpar_to_cell(*lengths, *angles)
@@ -170,11 +170,8 @@ def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
                 continue
 
     elif dims == 2:
-        lengths = [np.random.uniform(low=length_bounds[0],
-                                     high=length_bounds[1])
-                       for _ in range(dims)]
-        alpha = np.random.uniform(low=angle_bounds[0],
-                                  high=length_bounds[1])
+        lengths = [np.random.uniform(low=ll, high=lu) for _ in range(dims)]
+        alpha = np.random.uniform(low=al, high=au)
         cell = cellpar_to_cell_2D(*lengths, alpha)
 
     else:
@@ -184,8 +181,8 @@ def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
 
 
 class _ETA:
-    """Pass total amount to do on construction,
-    then call .update() on every loop."""
+    """Pass the number to items to process, then call .update() on every loop.
+    """
 
     # epochtime_{n+1} = factor * epochtime + (1-factor) * epochtime_{n}
     _moving_av_factor = 0.3
@@ -194,34 +191,35 @@ class _ETA:
         self.to_do = to_do
         self.update_rate = update_rate
         self.counter = 0
+        self.this_epoch = 0
         self.start_time = time.perf_counter()
-        self.tic = self.start_time
         self.time_per_epoch = None
         self.done = False
+        self.tic = self.start_time
 
     def update(self):
+        """Call on each loop."""
 
         self.counter += 1
 
-        if self.counter == self.to_do:
-            sys.stdout.write(self.finished())
-            self.done = True
+        if self.counter >= self.to_do:
+            if not self.done:
+                self.finish()
             return
 
-        elif self.counter > self.to_do:
-            return
+        elif not self.counter % self.update_rate:
+            self.end_epoch()
 
-        if not self.counter % self.update_rate:
-            sys.stdout.write(self._end_epoch())
+    def finish(self):
+        """Called when done."""
+        total = time.perf_counter() - self.start_time
+        self.done = True
+        msg = f'Time ({self.counter} items): {round(total, 2)}s, ' \
+              f'{round(self.to_do/total, 2)} items/s\r\n'
+        sys.stdout.write(msg)
 
-    def finished(self):
-        total = time.time() - self.start_time
-        msg = f'Total time: {round(total, 2)}s, ' \
-              f'n passes: {self.counter} ' \
-              f'({round(self.to_do/total, 2)} items/s)\r\n'
-        return msg
-
-    def _end_epoch(self):
+    def end_epoch(self):
+        """Called at the end of every epoch, printing the ETA to stdout."""
         toc = time.perf_counter()
         epoch_time = toc - self.tic
         if self.time_per_epoch is None:
@@ -229,9 +227,8 @@ class _ETA:
         else:
             self.time_per_epoch = _ETA._moving_av_factor * epoch_time + \
                                   (1 - _ETA._moving_av_factor) * self.time_per_epoch
-            
         percent = round(100 * self.counter / self.to_do, 2)
         remaining = int(((self.to_do - self.counter) / self.update_rate) * self.time_per_epoch)
         eta = str(datetime.timedelta(seconds=remaining))
-        self.tic = toc
-        return f'{percent}%, ETA {eta}' + ' ' * 20 + '\r'
+        self.tic = time.perf_counter()
+        sys.stdout.write(f'{percent}%, ETA {eta}' + ' ' * 20 + '\r')

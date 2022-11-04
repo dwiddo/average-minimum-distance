@@ -6,12 +6,13 @@ from .compare import compare
 
 
 def main():
+    """Entry point for command line interface for :func:`amd.compare() <.compare.compare>."""
 
     parser = argparse.ArgumentParser(description='Compare crystals by PDD or AMD from the command line.')
 
     parser.add_argument('path_or_refcodes', type=str, nargs='+',
         help='(str) Path to a file or folder, or a collection of refcodes (csd-python-api only).')
-    parser.add_argument('--output', '-o', type=str, default='output', 
+    parser.add_argument('--output', '-o', type=str, default='output',
         help='(str) Path of the output file.')
     parser.add_argument('--format', '-f', type=str, default='csv', 
         help='(str) Format of the output file, default csv.')
@@ -19,18 +20,18 @@ def main():
     # args of amd.compare
     parser.add_argument('--by', '-b', type=str, default='AMD', choices=['AMD', 'PDD'],
         help='(str) Whether to use AMD or PDD to compare crystals.')
-    parser.add_argument('--k', '-k', type=int, default=100, 
+    parser.add_argument('--k', '-k', type=int, default=100,
         help='(int) Value of k (number of nearest neighbours) to use for AMD/PDD.')
-    parser.add_argument('--nearest', '-n', type=int, default=None, 
+    parser.add_argument('--nearest', '-n', type=int, default=None,
         help='(int) Find n nearest neighbours instead of a full distance matrix.')
 
     # reading args
-    parser.add_argument('--reader', '-r', type=str, default='ase', 
+    parser.add_argument('--reader', '-r', type=str, default='ase',
         choices=['ase', 'ccdc', 'pycodcif'],
         help='(str) backend package used for parsing files, default ase.')
     parser.add_argument('--remove_hydrogens', default=False, action='store_true',
         help='(flag) remove Hydrogen atoms from the crystals.')
-    parser.add_argument('--disorder', type=str, default='skip', 
+    parser.add_argument('--disorder', type=str, default='skip',
         choices=['skip', 'ordered_sites', 'all_sites'],
         help='(str) control how disordered structures are handled.')
     parser.add_argument('--heaviest_component', default=False, action='store_true',
@@ -68,14 +69,14 @@ def main():
     crystals_ = None
     if len(path_or_refcodes) > 2:
         raise ValueError('amd.compare: one or two collections of crystals are allowed for comparison.')
-    elif len(path_or_refcodes) == 2:
+    if len(path_or_refcodes) == 2:
         crystals_ = path_or_refcodes[1]
 
     df = compare(crystals, crystals_, **kwargs)
 
     if kwargs['verbose']:
         print(df)
-    
+
     if not outpath.endswith('.' + ext):
         outpath += '.' + ext
 
@@ -85,7 +86,7 @@ def main():
     except AttributeError:
         print(f'Cannot output format {ext}, using csv instead.')
         df.to_csv(outpath + '.csv')
-    
+
 
 if __name__ == '__main__':
     main()

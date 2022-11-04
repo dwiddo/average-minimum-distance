@@ -2,9 +2,9 @@
 defined by a motif and unit cell. This models a crystal with a point at the
 center of each atom.
 
-This is the type yielded by the readers :class:`amd.CifReader <.io.CifReader>` 
-and :class:`amd.CSDReader <.io.CSDReader>`. A :class:`PeriodicSet` can be passed 
-as the first argument to :func:`amd.AMD() <.calculate.AMD>` or 
+This is the type yielded by the readers :class:`amd.CifReader <.io.CifReader>`
+and :class:`amd.CSDReader <.io.CSDReader>`. A :class:`PeriodicSet` can be passed
+as the first argument to :func:`amd.AMD() <.calculate.AMD>` or
 :func:`amd.PDD() <.calculate.PDD>` to calculate its invariants.
 """
 
@@ -22,11 +22,11 @@ from .utils import (
 
 class PeriodicSet:
     """A periodic set is the mathematical representation of a crystal by putting a
-    single point in the center of every atom. It is defined by a basis (unit cell) 
+    single point in the center of every atom. It is defined by a basis (unit cell)
     and collection of points (motif) which repeats according to the basis.
 
     :class:`PeriodicSet` s are returned by the readers in the :mod:`.io` module.
-    They can be passed to :func:`amd.AMD() <.calculate.AMD>` or 
+    They can be passed to :func:`amd.AMD() <.calculate.AMD>` or
     :func:`amd.PDD() <.calculate.PDD>` to calculate the invariants.
 
     Parameters
@@ -35,7 +35,7 @@ class PeriodicSet:
         Cartesian (orthogonal) coordinates of the motif, shape (no points, dims).
     cell : :class:`numpy.ndarray`
         Cartesian (orthogonal) square array representing the unit cell, shape (dims, dims).
-        Use :func:`amd.cellpar_to_cell <.utils.cellpar_to_cell>` to convert 6 cell 
+        Use :func:`amd.cellpar_to_cell <.utils.cellpar_to_cell>` to convert 6 cell
         parameters to an orthogonal square matrix.
     name : str, optional
         Name of the periodic set.
@@ -55,7 +55,7 @@ class PeriodicSet:
             name: Optional[str] = None,
             asymmetric_unit: Optional[np.ndarray] = None,
             wyckoff_multiplicities: Optional[np.ndarray] = None,
-            types : Optional[np.ndarray] = None
+            types: Optional[np.ndarray] = None
     ):
 
         self.motif = motif
@@ -93,7 +93,7 @@ class PeriodicSet:
         s += ')'
 
         return s
- 
+
     # used for debugging, checks if the motif/cell agree point for point
     # (disregarding order), NOT up to isometry.
     def __eq__(self, other):
@@ -106,10 +106,10 @@ class PeriodicSet:
 
         # needs fixing, currently only for tests/debugging.
         # doesn't even check if motifs are alike because pbcs may make them look different
-        
+
         # m1 = np.mod(self.motif @ np.linalg.inv(self.cell), 1)
         # m2 = np.mod(other.motif @ np.linalg.inv(other.cell), 1)
-        
+
         # diffs = np.amax(np.abs(m2[:, None] - m1), axis=-1)
         # if not np.all((np.amin(diffs, axis=0) <= 1e-8) | (np.amin(diffs, axis=-1) <= 1e-8)):
         #     return False
@@ -138,7 +138,7 @@ class PeriodicSet:
         if dims == 3:
             cell = cellpar_to_cell(scale, scale, scale, 90, 90, 120)
         elif dims == 2:
-            cell = cellpar_to_cell_2D(scale, scale, 60) 
+            cell = cellpar_to_cell_2D(scale, scale, 60)
         else:
             msg = f'hexagonal lattice only implemented for dimensions 2 and 3 (passed {dims})'
             raise NotImplementedError(msg)
@@ -148,7 +148,7 @@ class PeriodicSet:
     @staticmethod
     def _random(n_points, length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
         """Dimensions 2 and 3 only. Return a :class:`PeriodicSet` with a chosen
-        number of randomly placed points, in random cell with edges between 
+        number of randomly placed points, in random cell with edges between
         length_bounds and angles between angle_bounds."""
         cell = random_cell(length_bounds=length_bounds, angle_bounds=angle_bounds, dims=dims)
         frac_motif = np.random.uniform(size=(n_points, dims))

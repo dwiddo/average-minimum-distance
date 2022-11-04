@@ -30,8 +30,8 @@ def compare(
     r"""Given one or two sets of periodic set(s), paths to cif(s) or refcode(s),
     compare them and return a DataFrame of the distance matrix. Default is to
     comapre by AMD with k = 100. Accepts most keyword arguments accepted by
-    :class:`CifReader <.io.CifReader>`, :class:`CSDReader <.io.CSDReader>` and 
-    functions from :mod:`.compare`, for a full list see the documentation 
+    :class:`CifReader <.io.CifReader>`, :class:`CSDReader <.io.CSDReader>` and
+    functions from :mod:`.compare`, for a full list see the documentation
     Quick Start page. Note that using refcodes requires ``csd-python-api``.
 
     Parameters
@@ -47,7 +47,7 @@ def compare(
     nearest : int, deafult None
         Find a number of nearest neighbours in the second set for each in the first, rather than a
         full distance matrix.
-    **kwargs : 
+    **kwargs :
         Optional arguments to be passed to io, calculate or compare functions.
 
     Returns
@@ -202,7 +202,7 @@ def EMD(
     Raises
     ------
     ValueError
-        Thrown if ``pdd`` and ``pdd_`` do not have the same number of 
+        Thrown if ``pdd`` and ``pdd_`` do not have the same number of
         columns (``k`` value).
     """
 
@@ -243,7 +243,7 @@ def AMD_cdist(
     -------
     dm : :class:`numpy.ndarray`
         A distance matrix shape ``(len(amds), len(amds_))``.
-        ``dm[ij]`` is the distance (given by ``metric``) 
+        ``dm[ij]`` is the distance (given by ``metric``)
         between ``amds[i]`` and ``amds[j]``.
     """
 
@@ -381,12 +381,12 @@ def PDD_cdist(
         n, m = len(pdds), len(pdds_)
         dm = np.empty((n, m))
         if verbose:
-            bar = _ETA(n * m)
+            eta = _ETA(n * m)
         for i in range(n):
             for j in range(m):
                 dm[i, j] = EMD(pdds[i], pdds_[j], metric=metric, **kwargs)
                 if verbose:
-                    bar.update()
+                    eta.update()
     return dm
 
 
@@ -411,7 +411,7 @@ def PDD_pdist(
         Accepts any metric accepted by :func:`scipy.spatial.distance.pdist`.
     n_jobs : int, default None
         Maximum number of concurrent jobs for parallel processing with ``joblib``.
-        Set to -1 to use the maximum possible. Note that for small inputs (< 100), 
+        Set to -1 to use the maximum possible. Note that for small inputs (< 100),
         using parallel processing may be slower than the default n_jobs=None.
     verbose : int, default 0
         Controls verbosity. If using parallel processing (n_jobs > 1), verbose is
@@ -438,18 +438,18 @@ def PDD_pdist(
             for i, j in combinations(range(len(pdds)), 2)
         )
         cdm = np.array(cdm)
-    
+
     else:
         m = len(pdds)
         cdm_len = (m * (m - 1)) // 2
         cdm = np.empty(cdm_len, dtype=np.double)
         inds = ((i, j) for i in range(0, m - 1) for j in range(i + 1, m))
         if verbose:
-            bar = _ETA(cdm_len)
+            eta = _ETA(cdm_len)
         for r, (i, j) in enumerate(inds):
             cdm[r] = EMD(pdds[i], pdds[j], metric=metric, **kwargs)
             if verbose:
-                bar.update()
+                eta.update()
     return cdm
 
 
@@ -465,16 +465,15 @@ def emd(
 
 def _unwrap_periodicset_list(psets_or_str, **reader_kwargs):
     """Valid input for compare (PeriodicSet, path, refcode, lists of such)
-    --> 
+    -->
     list of PeriodicSets"""
 
     if isinstance(psets_or_str, PeriodicSet):
         return [psets_or_str]
-    elif isinstance(psets_or_str, list):
-        return [s for item in psets_or_str 
+    if isinstance(psets_or_str, list):
+        return [s for item in psets_or_str
                 for s in _extract_periodicsets(item, **reader_kwargs)]
-    else:
-        return _extract_periodicsets(psets_or_str, **reader_kwargs)
+    return _extract_periodicsets(psets_or_str, **reader_kwargs)
 
 
 def _extract_periodicsets(item, **reader_kwargs):
@@ -482,10 +481,9 @@ def _extract_periodicsets(item, **reader_kwargs):
 
     if isinstance(item, PeriodicSet):
         return [item]
-    elif isinstance(item, str) and not os.path.isfile(item) and not os.path.isdir(item):
+    if isinstance(item, str) and not os.path.isfile(item) and not os.path.isdir(item):
         reader_kwargs.pop('reader', None)
         return list(CSDReader(item, **reader_kwargs))
-    else:
-        reader_kwargs.pop('families', None)
-        reader_kwargs.pop('refcodes', None)
-        return list(CifReader(item, **reader_kwargs))
+    reader_kwargs.pop('families', None)
+    reader_kwargs.pop('refcodes', None)
+    return list(CifReader(item, **reader_kwargs))

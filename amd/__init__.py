@@ -2,7 +2,7 @@
 average-minimum-distance: isometrically invariant crystal fingerprints
 ======================================================================
 
-Documentation is available in the docstrings and online at 
+Documentation is available in the docstrings and online at
 https://average-minimum-distance.readthedocs.io.
 
 List of modules

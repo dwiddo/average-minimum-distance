@@ -1,5 +1,5 @@
-"""Functions for calculating the average minimum distance (AMD) and 
-point-wise distance distribution (PDD) isometric invariants of 
+"""Functions for calculating the average minimum distance (AMD) and
+point-wise distance distribution (PDD) isometric invariants of
 periodic crystals and finite sets.
 """
 
@@ -17,7 +17,7 @@ PeriodicSet_or_Tuple = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
 
 
 def AMD(
-        periodic_set: PeriodicSet_or_Tuple, 
+        periodic_set: PeriodicSet_or_Tuple,
         k: int
 ) -> np.ndarray:
     """The AMD of a periodic set (crystal) up to k.
@@ -44,7 +44,7 @@ def AMD(
         amds = []
         for periodic_set in amd.CifReader('data.cif'):
             amds.append(amd.AMD(periodic_set, 100))
-  
+
     Make list of AMDs with k = 10 for crystals in these CSD refcode families::
 
         amds = []
@@ -93,17 +93,17 @@ def PDD(
         Default is 0.0001.
     return_row_groups: bool, default False
         Return data about which PDD rows correspond to which points.
-        If True, a tuple is returned ``(pdd, groups)`` where ``groups[i]`` 
-        contains the indices of the point(s) corresponding to ``pdd[i]``. 
+        If True, a tuple is returned ``(pdd, groups)`` where ``groups[i]``
+        contains the indices of the point(s) corresponding to ``pdd[i]``.
         Note that these indices are for the asymmetric unit of the set, whose
-        indices in ``periodic_set.motif`` are accessible through 
+        indices in ``periodic_set.motif`` are accessible through
         ``periodic_set.asymmetric_unit``.
 
     Returns
     -------
     :class:`numpy.ndarray`
         A :class:`numpy.ndarray` with k+1 columns, the PDD of ``periodic_set`` up to k.
-        The first column contains the weights of rows. If ``return_row_groups`` is True, 
+        The first column contains the weights of rows. If ``return_row_groups`` is True,
         returns a tuple (:class:`numpy.ndarray`, list).
 
     Examples
@@ -151,8 +151,7 @@ def PDD(
 
     if return_row_groups:
         return pdd, groups
-    else:
-        return pdd
+    return pdd
 
 
 def PDD_to_AMD(pdd: np.ndarray) -> np.ndarray:
@@ -218,7 +217,7 @@ def PDD_finite(
     lexsort : bool, default True
         Whether or not to lexicographically order the rows. Default True.
     collapse: bool, default True
-        Whether or not to collapse repeated rows (within the tolerance ``collapse_tol``). 
+        Whether or not to collapse repeated rows (within the tolerance ``collapse_tol``).
         Default True.
     collapse_tol: float, default 1e-4
         If two rows have all elements closer than ``collapse_tol``, they are merged and
@@ -226,13 +225,13 @@ def PDD_finite(
         Default is 0.0001.
     return_row_groups: bool, default False
         Whether to return data about which PDD rows correspond to which points.
-        If True, a tuple is returned ``(pdd, groups)`` where ``groups[i]`` 
+        If True, a tuple is returned ``(pdd, groups)`` where ``groups[i]``
         contains the indices of the point(s) corresponding to ``pdd[i]``.
 
     Returns
     -------
     :class:`numpy.ndarray`
-        A :class:`numpy.ndarray` with m columns (where m is the number of points), 
+        A :class:`numpy.ndarray` with m columns (where m is the number of points),
         the PDD of ``motif``. The first column contains the weights of rows.
 
     Examples
@@ -271,8 +270,7 @@ def PDD_finite(
 
     if return_row_groups:
         return pdd, groups
-    else:
-        return pdd
+    return pdd
 
 
 def PDD_reconstructable(
@@ -316,7 +314,7 @@ def PPC(periodic_set: PeriodicSet_or_Tuple) -> float:
     r"""The point packing coefficient (PPC) of ``periodic_set``.
 
     The PPC is a constant of any periodic set determining the
-    asymptotic behaviour of its AMD and PDD. As :math:`k \rightarrow \infty`, 
+    asymptotic behaviour of its AMD and PDD. As :math:`k \rightarrow \infty`,
     the ratio :math:`\text{AMD}_k / \sqrt[n]{k}` converges to the PPC,
     as does any row of its PDD.
 
@@ -355,7 +353,7 @@ def PPC(periodic_set: PeriodicSet_or_Tuple) -> float:
 
 def AMD_estimate(periodic_set: PeriodicSet_or_Tuple, k: int) -> np.ndarray:
     r"""Calculates an estimate of AMD based on the PPC.
-    
+
     Parameters
     ----------
     periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or tuple of :class:`numpy.ndarray` s
@@ -396,7 +394,7 @@ def _extract_motif_cell(pset: PeriodicSet_or_Tuple):
 
 
 def _collapse_into_groups(overlapping):
-    """The vector `overlapping` indicates for each pair of items in a set whether 
+    """The vector `overlapping` indicates for each pair of items in a set whether
     or not the items overlap, in the shape of a condensed distance matrix. Returns
     a list of groups of indices where all items in the same group overlap."""
 

@@ -71,7 +71,7 @@ def nearest_neighbours(
 
 def nearest_neighbours_minval(motif, cell, min_val):
     """The same as nearest_neighbours except a value is given instead of an
-    integer k and the result has at least enough columns so all values in 
+    integer k and the result has at least enough columns so all values in
     the last column are at least the given value."""
 
     cloud_generator = generate_concentric_cloud(motif, cell)
@@ -127,10 +127,10 @@ def generate_concentric_cloud(
     """
 
     m = len(motif)
-    int_lattice_generator = generate_integer_lattice(cell.shape[0])
 
-    while True:
-        lattice = next(int_lattice_generator) @ cell
+    for int_lattice in generate_integer_lattice(cell.shape[0]):
+
+        lattice = int_lattice @ cell
         layer = np.empty((m * len(lattice), cell.shape[0]))
 
         for i, translation in enumerate(lattice):
@@ -257,13 +257,12 @@ def _reflect_positive_lattice(positive_int_lattice):
             indices[i] += 1
             for j in range(i+1, n_reflections):
                 indices[j] = indices[j-1] + 1
-            
+
             batch = positive_int_lattice[(positive_int_lattice[:, indices] == 0).sum(axis=-1) == 0]
             batch[:, indices] *= -1
             batches.append(batch)
 
     return batches
-
 
 # # @numba.njit()
 # def cartesian_product(n, repeat):
@@ -273,11 +272,10 @@ def _reflect_positive_lattice(positive_int_lattice):
 #         arr[..., i] = a
 #     return arr.reshape(-1, repeat)
 
-
-def cartesian_product(*arrays):
-    la = len(arrays)
-    # dtype = np.result_type(*arrays)
-    arr = np.empty([len(a) for a in arrays] + [la])
-    for i, a in enumerate(np.ix_(*arrays)):
-        arr[...,i] = a
-    return arr.reshape(-1, la)
+# def cartesian_product(*arrays):
+#     la = len(arrays)
+#     # dtype = np.result_type(*arrays)
+#     arr = np.empty([len(a) for a in arrays] + [la])
+#     for i, a in enumerate(np.ix_(*arrays)):
+#         arr[..., i] = a
+#     return arr.reshape(-1, la)

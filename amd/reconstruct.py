@@ -81,7 +81,7 @@ def reconstruct(pdd, cell):
     for vecs in itertools.combinations(nn_set, dims):
         vecs = np.asarray(vecs)
         if np.abs(np.linalg.det(vecs)) > PREC:
-            bases.extend((basis for basis in itertools.permutations(vecs, dims)))
+            bases.extend(basis for basis in itertools.permutations(vecs, dims))
 
     q = _find_second_point(shared_dists, bases, cloud, PREC)
 
@@ -251,10 +251,9 @@ def _bilaterate(p1, p2, r1, r2, abs_val, prec):
 
     if np.abs(np.sqrt(x3 ** 2 + y3 ** 2) - abs_val) < prec:
         return q1
-    elif np.abs(np.sqrt(x4 ** 2 + y4 ** 2) - abs_val) < prec:
+    if np.abs(np.sqrt(x4 ** 2 + y4 ** 2) - abs_val) < prec:
         return q2
-    else:
-        return None
+    return None
 
 
 @numba.njit()
@@ -285,7 +284,6 @@ def _trilaterate(p1, p2, p3, r1, r2, r3, abs_val, prec):
         return p_12_a
     if np.abs(np.linalg.norm(p_12_b) - abs_val) < prec:
         return p_12_b
-    
     return None
 
 

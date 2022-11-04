@@ -32,7 +32,7 @@ def network_simplex(source_demands, sink_demands, network_costs):
     Returns
     -------
     (emd, plan) : Tuple[float, numpy.ndarray]
-        A tuple of the Earth mover's distance and the optimal matching. 
+        A tuple of the Earth mover's distance and the optimal matching.
 
     References
     ----------
@@ -78,7 +78,7 @@ def network_simplex(source_demands, sink_demands, network_costs):
             ind = i * n_sinks + j
             tails[ind] = i
             heads[ind] = j + n_sources
-    
+
     for i, demand in enumerate(demands):
         if demand > 0:
             tails[e + i] = -1
@@ -96,11 +96,11 @@ def network_simplex(source_demands, sink_demands, network_costs):
                              dtype=np.float64) * fp_multiplier
 
     faux_inf = 3 * np.max(np.array((
-                            np.sum(network_capac),
-                            np.sum(np.abs(network_costs)),
-                            np.amax(source_d_int),
-                            np.amax(sink_d_int)),
-                          dtype=np.int64))
+        np.sum(network_capac),
+        np.sum(np.abs(network_costs)),
+        np.amax(source_d_int),
+        np.amax(sink_d_int)),
+        dtype=np.int64))
 
     # allocate arrays
     costs = np.empty(e + n, dtype=np.int64)
@@ -161,7 +161,7 @@ def network_simplex(source_demands, sink_demands, network_costs):
                 if val == j:
                     p, q = q, p
                     break
-                elif val == i:
+                if val == i:
                     break
 
             remove_edge(s, t, size, prev_node, last_node, next_node, parent, edge)
@@ -184,20 +184,19 @@ def reduced_cost(i, costs, potentials, tails, heads, flows):
 
     if flows[i] == 0:
         return c
-    else:
-        return -c
+    return -c
 
 
 @numba.njit(cache=True)
 def find_entering_edges(B, e, f, tails, heads, costs, potentials, flows):
     """Yield entering edges until none can be found.
+    Entering edges are found by combining Dantzig's rule and Bland's
+    rule. The edges are cyclically grouped into blocks of size B. Within
+    each block, Dantzig's rule is applied to find an entering edge. The
+    blocks to search is determined following Bland's rule.
     """
-    # Entering edges are found by combining Dantzig's rule and Bland's
-    # rule. The edges are cyclically grouped into blocks of size B. Within
-    # each block, Dantzig's rule is applied to find an entering edge. The
-    # blocks to search is determined following Bland's rule.
 
-    M = (e + B - 1) // B    # number of blocks needed to cover all edges
+    M = (e + B - 1) // B # number of blocks needed to cover all edges
     m = 0
 
     while m < M:
@@ -323,8 +322,7 @@ def residual_capacity(i, p, capac, flows, tails):
     """
     if tails[i] == p:
         return capac[i] - flows[i]
-    else:
-        return flows[i]
+    return flows[i]
 
 
 @numba.njit(cache=True)
