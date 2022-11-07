@@ -10,19 +10,14 @@ build:
             - "pip install ."
             - "pip install pytest"
     nodes:
-        analysis:
+        tests:
             tests:
-                override:
+                override: 
+                    - command: 'pytest'
                     - py-scrutinizer-run
                     - 
                         command: pylint-run
                         use_website_config: true
-
-        coverage:
-            tests:
-                override: 
-                    - command: 'pytest'
-
 filter:
     excluded_paths:
         - '*/docs/*'
