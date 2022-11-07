@@ -1065,7 +1065,7 @@ std:doc
 	ase/gui/basics                           ase-gui basics and command line options : ase/gui/basics.html
 	ase/gui/calculate                        Calculate                               : ase/gui/calculate.html
 	ase/gui/edit                             Edit                                    : ase/gui/edit.html
-	ase/gui/gui                              ASE’s GUI                               : ase/gui/gui.html
+	ase/gui/gui                              ASEï¿½s GUI                               : ase/gui/gui.html
 	ase/gui/setup                            Setup                                   : ase/gui/setup.html
 	ase/gui/tools                            Tools                                   : ase/gui/tools.html
 	ase/gui/view                             View                                    : ase/gui/view.html
@@ -1180,7 +1180,7 @@ std:label
 	ase                                      Modules                                 : ase/ase.html#ase
 	ase-db                                   ase db                                  : ase/db/db.html#ase-db
 	ase-db-web                               Browse database with your web-browser   : ase/db/db.html#ase-db-web
-	ase-gui                                  ASE’s GUI                               : ase/gui/gui.html#ase-gui
+	ase-gui                                  ASEï¿½s GUI                               : ase/gui/gui.html#ase-gui
 	atommanip                                Manipulating atoms                      : gettingstarted/manipulating_atoms/manipulating_atoms.html#atommanip
 	atoms_special_attributes                 Special attributes                      : ase/atoms.html#atoms-special-attributes
 	attaching-section                        Attaching structures                    : ase/build/build.html#attaching-section
