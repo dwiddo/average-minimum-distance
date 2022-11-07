@@ -1,6 +1,7 @@
 import pytest
 import os
 import amd
+import warnings
 
 
 @pytest.fixture(scope='module')
@@ -11,26 +12,14 @@ def cif_paths(root_dir):
     ]
     return {name: os.path.join(root_dir, f'{name}.cif') for name in cif_names}
 
-def test_CifReader_ase(cif_paths, reference_data):
-    for name in cif_paths:
-        references = reference_data[name]
-        read_in = list(amd.CifReader(cif_paths[name]))
-
-        if (not len(references) == len(read_in)) or len(read_in) == 0:
-            pytest.fail(f'There are {len(references)} references, but {len(read_in)} structures were read.')
-
-        for s, s_ in zip(read_in, references):
-            if not s == s_['PeriodicSet']:
-                pytest.fail(f'Structure {s.name} read with CifReader disagrees with reference.')
-
-
-def test_CifReader_pymatgen(cif_paths, reference_data):
+@pytest.mark.parametrize('reader', ['ase', 'pymatgen', 'gemmi', 'ccdc'])
+def test_CifReader(reader, cif_paths, reference_data):
     for name in cif_paths:
         references = reference_data[name]
         try:
-            read_in = list(amd.CifReader(cif_paths[name], reader='pymatgen'))
+            read_in = list(amd.CifReader(cif_paths[name], reader=reader))
         except ImportError as _:
-            pytest.skip('Skipping pymatgen reader test as pymatgen is not installed.')
+            pytest.skip(f'Skipping test_CifReader for {reader} as it failed to import.')
 
         if (not len(references) == len(read_in)) or len(read_in) == 0:
             pytest.fail(f'There are {len(references)} references, but {len(read_in)} structures were read.')
@@ -39,37 +28,26 @@ def test_CifReader_pymatgen(cif_paths, reference_data):
             if not s == s_['PeriodicSet']:
                 pytest.fail(f'Structure {s.name} read with CifReader disagrees with reference.')
 
+def test_periodicset_from_ase_atoms(cif_paths, reference_data):
+    try:
+        from ase.io import iread
+    except ImportError as _:    
+        pytest.skip(f'Skipping test_periodicset_from_ase_atoms as ase failed to import.')
 
-def test_CifReader_gemmi(cif_paths, reference_data):
     for name in cif_paths:
         references = reference_data[name]
-        try:
-            read_in = list(amd.CifReader(cif_paths[name], reader='gemmi'))
-        except ImportError as _:
-            pytest.skip('Skipping gemmi reader test as gemmi is not installed.')
-
+        # ignore ase warning: "crystal system x is not interpreted for space
+        # group Spacegroup(1, setting=1). This may result in wrong setting!"
+        with warnings.catch_warnings() as _:
+            warnings.simplefilter('ignore') 
+            atoms = list(iread(cif_paths[name]))
+        read_in = [amd.periodicset_from_ase_atoms(a) for a in atoms]
         if (not len(references) == len(read_in)) or len(read_in) == 0:
             pytest.fail(f'There are {len(references)} references, but {len(read_in)} structures were read.')
 
         for s, s_ in zip(read_in, references):
             if not s == s_['PeriodicSet']:
-                pytest.fail(f'Structure {s.name} read with CifReader disagrees with reference.')
-
-
-def test_CifReader_ccdc(cif_paths, reference_data):
-    for name in cif_paths:
-        references = reference_data[name]
-        try:
-            read_in = list(amd.CifReader(cif_paths[name], reader='ccdc'))
-        except ImportError as _:
-            pytest.skip('Skipping ccdc reader test as ccdc is not installed.')
-
-        if (not len(references) == len(read_in)) or len(read_in) == 0:
-            pytest.fail(f'There are {len(references)} references, but {len(read_in)} structures were read.')
-
-        for s, s_ in zip(read_in, references):
-            if not s == s_['PeriodicSet']:
-                pytest.fail(f'Structure {s.name} read with CifReader disagrees with reference.')
+                pytest.fail(f'Structure {s.name} read with ase.io.iread disagrees with reference.')
 
 
 @pytest.fixture(scope='module')

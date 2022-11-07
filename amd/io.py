@@ -653,12 +653,14 @@ def periodicset_from_ase_atoms(
     if len(atoms) == 0:
         raise ParseError(f'ase Atoms object has no valid sites')
 
+    spg = None
     if 'spacegroup' in atoms.info:
         spg = atoms.info['spacegroup']
         rot, trans = spg.rotations, spg.translations
     # else assume no symmetries?
 
-    asym_unit = ase.spacegroup.get_basis(atoms, tol=_EQUIV_SITE_TOL) # default tol=1e-5
+    # default tol=1e-5
+    asym_unit = ase.spacegroup.get_basis(atoms, spacegroup=spg, tol=_EQUIV_SITE_TOL)
     frac_motif, asym_inds, wyc_muls, _ = _expand_asym_unit(asym_unit, rot, trans)
     motif = frac_motif @ cell
 

@@ -1,2 +1,4 @@
 numpy>=1.21
 pytest>=6.2.5
+pymatgen>=2022.0.17
+gemmi>=0.5.7
