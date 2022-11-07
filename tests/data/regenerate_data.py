@@ -39,5 +39,4 @@ def regenerate_CSD_families():
 
 
 if __name__ == '__main__':
-    # pass
     regenerate_CSD_families()

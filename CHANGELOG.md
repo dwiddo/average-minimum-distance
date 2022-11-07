@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 
 - Parameter `nearest` added to `amd.compare`, which finds a number of nearest neighbours in one set from the other. `amd.compare` can now also be used from the command line and the results saved to file easily.
 
-- `pymatgen` and `gemmi` added as options for the backend to `CifReader`. Significant changes have been made to the reader's internals, which may result in small differences in outputs from before the update (specifically, fractional coordinates close to 1/3 or 2/3, e.g. 0.6667, are now 'snapped' onto the more exact values, following advice in pymatgen's code saying that problems can arise when applying symmetries if not).
+- `pymatgen` and `gemmi` added as options for the backend to `CifReader`.
 
 - Several converter functions now exist in the `io` module to get `PeriodicSet` objects from `ase`, `pymatgen` or `ccdc`: , `periodicset_from_ase_cifblock`, `periodicset_from_ase_atoms`, `periodicset_from_pymatgen_cifblock`,  `periodicset_from_pymatgen_structure`, `periodicset_from_ccdc_entry`, `periodicset_from_ccdc_crystal`, and `periodicset_from_gemmi_block`. The functions involving `ccdc` no longer depend on `ase`.
 

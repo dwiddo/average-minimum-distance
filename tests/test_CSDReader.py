@@ -16,8 +16,6 @@ def test_CSDReader(reference_data, refcode_families, ccdc_enabled):
     read_in = list(amd.CSDReader(refcode_families, show_warnings=False, families=True))
     
     if (not len(references) == len(read_in)) or len(read_in) == 0:
-        print([s['PeriodicSet'].name for s in references])
-        print([s.name for s in read_in])
         pytest.fail(f'There are {len(references)} references, but {len(read_in)} structures were read.')
     
     for s, s_ in zip(read_in, references):

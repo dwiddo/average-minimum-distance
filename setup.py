@@ -41,10 +41,16 @@ install_requires = [
     'numpy>=1.21,<1.23',
     'numba>=0.55.2',
     'scipy>=1.6.1',
-    'ase>=3.22.0',
     'joblib>=1.1.0',
     'pandas>=1.2.5',
+    'ase>=3.22.0',
 ]
+
+extras_require = {
+    'ccdc': ['csd-python-api'],
+    'gemmi': ['gemmi'],
+    'pymatgen': ['pymatgen'],
+}
 
 with open(r'amd/__init__.py') as f:
     version = re.search("__version__ = '(.*)'", f.read()).group(1)
@@ -64,7 +70,7 @@ kw = {
     'classifiers': classifiers,
     'python_requires': '>=3.7',
     'install_requires': install_requires,
-    'extras_require': {'ccdc': ['csd-python-api']},
+    'extras_require': extras_require,
     'packages': find_packages(),
     'include_package_data': True,
     'entry_points': {
