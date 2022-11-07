@@ -7,17 +7,22 @@ build:
     dependencies:
         override:
             - "pip install -r requirements.txt"
+            - "pip install -r test_requirements.txt"
             - "pip install ."
-            - "pip install pytest"
     nodes:
-        tests:
+        analysis:
             tests:
-                override: 
-                    - command: 'pytest'
+                override:
                     - py-scrutinizer-run
                     - 
                         command: pylint-run
-                        use_website_config: true
+                        use_website_config: false
+
+        coverage:
+            tests:
+                override: 
+                    - command: 'pytest'
+
 filter:
     excluded_paths:
         - '*/docs/*'
