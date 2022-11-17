@@ -38,11 +38,10 @@ def network_simplex(source_demands, sink_demands, network_costs):
     ----------
     [1] Z. Kiraly, P. Kovacs.
         Efficient implementation of minimum-cost flow algorithms.
-        Acta Universitatis Sapientiae, Informatica 4(1):67--118. 2012.
+        Acta Universitatis Sapientiae, Informatica 4(1), 67--118 (2012).
     [2] R. Barr, F. Glover, D. Klingman.
         Enhancement of spanning tree labeling procedures for network
-        optimization.
-        INFOR 17(1):16--34. 1979.
+        optimization. INFOR 17(1), 16--34 (1979).
     """
 
     n_sources, n_sinks = source_demands.shape[0], sink_demands.shape[0]

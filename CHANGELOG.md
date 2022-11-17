@@ -12,9 +12,13 @@ All notable changes to this project will be documented in this file.
 
 - Several converter functions now exist in the `io` module to get `PeriodicSet` objects from `ase`, `pymatgen` or `ccdc`: , `periodicset_from_ase_cifblock`, `periodicset_from_ase_atoms`, `periodicset_from_pymatgen_cifblock`,  `periodicset_from_pymatgen_structure`, `periodicset_from_ccdc_entry`, `periodicset_from_ccdc_crystal`, and `periodicset_from_gemmi_block`. The functions involving `ccdc` no longer depend on `ase`.
 
+### Changed
+
+- Read option ``molecular_centres`` now yields `PeriodicSet` objects whose motif consists of the molecular centres, instead of adding an attribute ``.molecular_centres`` containing the centres. The original motif is no longer kept.
+
 ### Removed
 
-- Removed `.entry()` and `.family()` from `CSDReader`, now they should require creating a new `CSDReader`.
+- Removed `.entry()` and `.family()` from `CSDReader`, instead new `CSDReader` objects should be made each time.
 
 ## [1.3.2] - 01/09/2022
 

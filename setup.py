@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
-"""average-minimum-distance: isometrically invariant crystal fingerprints
+#!/usr/bin/env python
+"""average-minimum-distance: geometry-based crystal fingerprints
 
-Implements fingerprints (isometry invariants) of crystals based on geometry: 
+Descriptors ("isometry invariants") of crystals based on geometry: 
 average minimum distances (AMD) and point-wise distance distributions (PDD).
 """
 
@@ -21,12 +21,16 @@ classifiers = [
     'Intended Audience :: Science/Research',
     'License :: Other/Proprietary License',
     'Natural Language :: English',
+    'Operating System :: OS Independent',
     'Programming Language :: Python',
     'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3 :: Only',
     'Programming Language :: Python :: 3.7',
     'Programming Language :: Python :: 3.8',
     'Programming Language :: Python :: 3.9',
-    'Programming Language :: Python :: 3 :: Only',
+    'Programming Language :: Python :: 3.10',
+    'Topic :: Scientific/Engineering :: Chemistry',
+    'Topic :: Scientific/Engineering :: Mathematics',
 ]
 
 project_urls = {
@@ -38,7 +42,7 @@ project_urls = {
 description = " ".join(__doc__.split('\n')[2:])
 
 install_requires = [
-    'numpy>=1.21,<1.23',
+    'numpy>=1.21',
     'numba>=0.55.2',
     'scipy>=1.6.1',
     'joblib>=1.1.0',
@@ -50,6 +54,7 @@ extras_require = {
     'ccdc': ['csd-python-api'],
     'gemmi': ['gemmi'],
     'pymatgen': ['pymatgen'],
+    'dev': ['pytest'],
 }
 
 with open(r'amd/__init__.py') as f:

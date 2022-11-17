@@ -6,7 +6,7 @@
 [![Build Status](https://scrutinizer-ci.com/g/dwiddo/average-minimum-distance/badges/build.png?b=master)](https://scrutinizer-ci.com/g/dwiddo/average-minimum-distance/)
 [![CC-0 license](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-blue.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
-Implements descriptors of crystal structures based on geometry (*isometry invariants*): average minimum distances (AMD) and pointwise distance distributions (PDD).
+Descriptors of crystal structures based on geometry (*isometry invariants*).
 
 - **PyPI project:** <https://pypi.org/project/average-minimum-distance>
 - **Documentation:** <https://average-minimum-distance.readthedocs.io>
@@ -17,15 +17,15 @@ Implements descriptors of crystal structures based on geometry (*isometry invari
 
 ## What's amd?
 
-The typical representation of a crystal as a motif and unit cell is ambiguous, as there are many ways to define the same crystal. This package implements new *isometric invariants*: average minimum distances (AMD) and pointwise distance distributions (PDD), which take the same value for any two crystals related by an *isometry* (rotation, translation, or reflection). They do this in a continuous way, so similar crystals have a small distance between their invariants.
+The typical representation of a crystal as a motif and unit cell is ambiguous, as there are many choices of cell and motif that define the same crystal. This package implements crystal descriptors that are *isometry invariants*, meaning they are the same for any two crystals which are equivalent by an *isometry* (rotation, translation and reflection). They do this in a continuous way; if two crystals have similar geometry there is a small distance between their invariants.
 
-### Brief description of AMD and PDD
+### Description of AMD and PDD invariants
 
-The pointwise distance distribution (PDD) records the environment of each atom in a unit cell by listing the distances from each atom to neighbouring atoms in order, with some extra steps to ensure it is independent of choice of unit cell and motif. A PDD is a collection of lists, each with an attached weight. Two PDDs are compared by finding an optimal matching between the two sets of lists while respecting the weights ([Earth Mover's distance](https://doi.org/10.46793/match.87-3.529W)), and when the crystals are geometrically identical there is always a perfect matching resulting in a distance of zero.
+The *pointwise distance distribution* (PDD) of a crystal records the environment of each atom in the unit cell by listing distances to neighbouring atoms, with some extra steps to ensure it is independent of choice of unit cell and motif. A PDD is a weighted collection of lists of distances, and two PDDs are compared by finding an optimal matching between them ([Earth Mover's distance](https://en.wikipedia.org/wiki/Earth_mover%27s_distance)). When the crystals are geometrically identical there is always a perfect matching and The Earth Mover's distance is 0.
 
-The average minimum distance (AMD) averages the PDD over atoms in a unit cell to make a vector, which keeps the important properties of the PDD. Since AMDs are just vectors, comparing by AMD is much faster than PDD, but an AMD contains less information in theory.
+Taking a weighted average over the lists in a PDD gives the *average minimum distance* (AMD), a vector. In theory the averaging means the AMD contains less information, but they are significantly faster to compare.
 
-Both AMD and PDD have a parameter k, the number of nearest neighbours to consider for each atom, which is the length of the AMD vector or the number of columns in the PDD (plus an extra column for weights of rows).
+Both AMD and PDD require a parameter k, the number of nearest neighbours to consider for each atom. Then an AMD will be a vector length k, whereas a PDD matrix will have k+1 columns (the first column contains weights).
 
 ## Getting started
 
@@ -37,28 +37,28 @@ pip install average-minimum-distance
 
 Then import average-minimum-distance with ```import amd```.
 
-```amd.compare()``` compares sets of crystals by AMD or PDD in one line, e.g. by PDD with k = 100:
+```amd.compare()``` compares a set of crystals from a .cif by AMD or PDD, for example
 
 ```py
 import amd
 df = amd.compare('crystals.cif', by='PDD', k=100)
 ```
 
-A [pandas DataFrame](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html) is returned of the distance matrix with names of crystals in rows and columns. It can also take two paths and compare crystals in one file with the other, for example
+The distance matrix is returned as a [pandas DataFrame](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html). It can also take two paths and compare crystals in one file with the other:
 
 ```py
 df = amd.compare('crystals_1.cif', 'crystals_2.cif' by='AMD', k=100)
 ```
 
-Either first or second argument can be lists of cif paths (or file objects) which are combined in the final distance matrix.
+Either argument can a list of paths to .cif files, which are combined in the final distance matrix.
 
-```amd.compare()``` does three things: reads crystals, calculates their AMD/PDD, and compares them. These steps can be done separately for more flexibility (e.g, saving the  descriptors to a file), explained below. ```amd.compare()``` accepts most of the optional parameters from any of these steps, see the documentation for details.
+```amd.compare()``` does three things: reads crystals, calculates their AMD/PDD, and compares them. These steps can be done separately for more flexibility (e.g, saving the descriptors to a file), explained below. ```amd.compare()``` accepts most of the optional parameters from any of these steps, see the documentation for details.
 
 If `csd-python-api` is installed, the compare function can also accept one or more CSD refcodes or other file formats instead of cifs (pass ```reader='ccdc'```).
 
 ### Choosing a value of k
 
-The parameter k of the invariants is the number of neighbouring atoms considered for each atom in the unit cell. Two crystals with the same unit molecule will have a small AMD/PDD distance for small enough k. A larger k will mean the environments of atoms in one crystal must line up with those in the other up to a larger radius to have a small AMD/PDD distance.
+The parameter k is the number of neighbouring atoms considered for each atom in the unit cell. Two crystals with the same unit molecule will have a small AMD/PDD distance for small enough k. A larger k will mean the environments of atoms in one crystal must line up with those in the other up to a larger radius to have a small AMD/PDD distance.
 
 ### Reading crystals from a file, calculating the AMDs and PDDs
 
@@ -67,18 +67,18 @@ This code reads a .cif with ```amd.CifReader``` and computes the AMDs (k = 100):
 ```py
 import amd
 reader = amd.CifReader('path/to/file.cif')
-amds = [amd.AMD(crystal, 100) for crystal in reader]  # calc AMDs
+amds = [amd.AMD(crystal, 100) for crystal in reader]
 ```
 
-*Note: CifReader accepts optional arguments, e.g. for removing hydrogen and handling disorder. See the documentation for details.*
+*Note: CifReader accepts optional arguments, e.g. for removing Hydrogens and handling disorder. See the documentation for details.*
 
-To calculate PDDs, just replace ```amd.AMD``` with ```amd.PDD```.
+To calculate PDDs instead, just replace ```amd.AMD``` with ```amd.PDD```.
 
-If `csd-python-api` is installed, crystals can be read directly from your local copy of the CSD with ```amd.CSDReader```, which accepts a list of refcodes. CifReader can accept file formats other than cif by passing ```reader='ccdc'```.
+*csd-python-api only:* crystals can be read directly from your local copy of the CSD with ```amd.CSDReader```, which accepts a list of refcodes. CifReader can accept file formats other than .cif by passing ```reader='ccdc'```.
 
 ### Comparing by AMD or PDD
 
-```amd.AMD_pdist``` and ```amd.PDD_pdist``` take a list of invariants and compares them pairwise, returning a *condensed distance matrix* like SciPy's ```pdist``` function.
+```amd.AMD_pdist``` and ```amd.PDD_pdist``` take a list of AMDs/PDDs respectively and compares them pairwise, returning a *condensed distance matrix* like SciPy's ```pdist``` function.
 
 ```py
 # read and calculate AMDs and PDDs (k=100)
@@ -106,7 +106,7 @@ set2 = amd.CifReader('set2.cif')
 amds1 = [amd.AMD(crystal, 100) for crystal in set1]
 amds2 = [amd.AMD(crystal, 100) for crystal in set2]
 
-# dm[i][j] = distance(amds1[i], amds2[j])
+# dm[i][j] = AMD distance(amds1[i], amds2[j])
 dm = amd.AMD_cdist(amds)
 ```
 
@@ -130,7 +130,7 @@ plt.show()
 
 ## Example: Finding n nearest neighbours in one set from another
 
-This example finds the 10 nearest PDD-neighbours in set 2 for every crystal in set 1.
+This example finds the 10 nearest PDD-neighbours in set 2 for every crystal in set 1. As of 1.3.4, the `compare` function accepts a parameter `nearest` which implements this behaviour.
 
 ```py
 import numpy as np
@@ -153,6 +153,8 @@ for i in range(len(set1)):
     for j in range(n):
         print('neighbour', j+1, df.columns[nn_inds[i][j]], 'dist:', nn_dists[i][j])
 ```
+
+
 
 ## Cite us <a name="citeus"></a>
 

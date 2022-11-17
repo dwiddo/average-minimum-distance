@@ -1,0 +1,22 @@
+include *.md
+include *.txt
+include *.yaml
+include *.yml
+include LICENSE
+recursive-include docs *.bat
+recursive-include docs *.doctree
+recursive-include docs *.inv
+recursive-include docs *.pdf
+recursive-include docs *.pickle
+recursive-include docs *.py
+recursive-include docs *.rst
+recursive-include docs *.rtc
+recursive-include docs *.stylelog
+recursive-include docs *.txt
+recursive-include docs Makefile
+recursive-include examples *.cif
+recursive-include examples *.ipynb
+recursive-include tests *.cif
+recursive-include tests *.npz
+recursive-include tests *.pkl
+recursive-include tests *.py
