@@ -1,8 +1,9 @@
-"""An implementation of the Wasserstein metric between two compositional vectors.
-Aka Earth Mover's distance, an appropriate metric for comparing two PDDs.
+"""An implementation of the Wasserstein metric (Earth Mover's distance)
+between two weighted distributions. Aka Earth Mover's distance, the
+appropriate metric for comparing two PDDs.
 
-Copyright (C) 2020 Cameron Hargreaves. This code is adapted from the Element Movers
-Distance project https://github.com/lrcfmd/ElMD.
+Copyright (C) 2020 Cameron Hargreaves. This code is adapted from the 
+Element Movers Distance project https://github.com/lrcfmd/ElMD.
 """
 
 import numba
@@ -11,34 +12,36 @@ import numpy as np
 
 @numba.njit(cache=True)
 def network_simplex(source_demands, sink_demands, network_costs):
-    """Given two sets of weights and a cost matrix on two distributions,
-    calculate the Earth mover's distance (Wasserstien metric).
+    """Given two sets of weights and a cost matrix on two
+    distributions, calculate the Earth mover's distance 
+    (Wasserstien metric).
 
-    This is a port of the network simplex algorithm implented by Loïc Séguin-C
-    for the networkx package to allow acceleration via the numba package.
-    Copyright (C) 2010 Loïc Séguin-C. loicseguin@gmail.com
-    All rights reserved. BSD license.
+    This is a port of the network simplex algorithm implented by Loïc
+    Séguin-C for the networkx package to allow acceleration via the
+    numba package. Copyright (C) 2010 Loïc Séguin-C.
+    loicseguin@gmail.com. All rights reserved. BSD license.
 
     Parameters
     ----------
-    source_demands : numpy.ndarray
+    source_demands : :class:`numpy.ndarray`
         Weights of the first distribution.
-    sink_demands : numpy.ndarray
+    sink_demands : :class:`numpy.ndarray`
         Weights of the second distribution.
-    network_costs : numpy.ndarray
-        Cost matrix giving distances between elements of the two distributions.
-        Shape (len(source_demands), len(sink_demands)).
+    network_costs : :class:`numpy.ndarray`
+        Cost matrix of distances between elements of the two 
+        distributions. Shape (len(source_demands), len(sink_demands)).
 
     Returns
     -------
-    (emd, plan) : Tuple[float, numpy.ndarray]
+    (emd, plan) : Tuple[float, :class:`numpy.ndarray`]
         A tuple of the Earth mover's distance and the optimal matching.
 
     References
     ----------
     [1] Z. Kiraly, P. Kovacs.
         Efficient implementation of minimum-cost flow algorithms.
-        Acta Universitatis Sapientiae, Informatica 4(1), 67--118 (2012).
+        Acta Universitatis Sapientiae, Informatica 4(1), 67--118
+        (2012).
     [2] R. Barr, F. Glover, D. Klingman.
         Enhancement of spanning tree labeling procedures for network
         optimization. INFOR 17(1), 16--34 (1979).
@@ -180,7 +183,6 @@ def reduced_cost(i, costs, potentials, tails, heads, flows):
     """Return the reduced cost of an edge i.
     """
     c = costs[i] - potentials[tails[i]] + potentials[heads[i]]
-
     if flows[i] == 0:
         return c
     return -c
@@ -188,11 +190,11 @@ def reduced_cost(i, costs, potentials, tails, heads, flows):
 
 @numba.njit(cache=True)
 def find_entering_edges(B, e, f, tails, heads, costs, potentials, flows):
-    """Yield entering edges until none can be found.
-    Entering edges are found by combining Dantzig's rule and Bland's
-    rule. The edges are cyclically grouped into blocks of size B. Within
-    each block, Dantzig's rule is applied to find an entering edge. The
-    blocks to search is determined following Bland's rule.
+    """Yield entering edges until none can be found. Entering edges are
+    found by combining Dantzig's rule and Bland's rule. The edges are
+    cyclically grouped into blocks of size B. Within each block,
+    Dantzig's rule is applied to find an entering edge. The blocks to
+    search is determined following Bland's rule.
     """
 
     M = (e + B - 1) // B # number of blocks needed to cover all edges
@@ -244,7 +246,8 @@ def find_entering_edges(B, e, f, tails, heads, costs, potentials, flows):
 
 @numba.njit(cache=True)
 def find_apex(p, q, size, parent):
-    """Find the lowest common ancestor of nodes p and q in the spanning tree.
+    """Find the lowest common ancestor of nodes p and q in the spanning
+    tree.
     """
     size_p = size[p]
     size_q = size[q]
@@ -268,7 +271,8 @@ def find_apex(p, q, size, parent):
 
 @numba.njit(cache=True)
 def trace_path(p, w, edge, parent):
-    """Return the nodes and edges on the path from node p to its ancestor w.
+    """Return the nodes and edges on the path from node p to its
+    ancestor w.
     """
     cycle_nodes = [p]
     cycle_edges = []
@@ -283,8 +287,8 @@ def trace_path(p, w, edge, parent):
 
 @numba.njit(cache=True)
 def find_cycle(i, p, q, size, edge, parent):
-    """Return the nodes and edges on the cycle containing edge i == (p, q)
-    when the latter is added to the spanning tree.
+    """Return the nodes and edges on the cycle containing edge 
+    i == (p, q) when the latter is added to the spanning tree.
     The cycle is oriented in the direction from p to q.
     """
 
@@ -326,8 +330,8 @@ def residual_capacity(i, p, capac, flows, tails):
 
 @numba.njit(cache=True)
 def find_leaving_edge(cycle_nodes, cycle_edges, capac, flows, tails, heads):
-    """Return the leaving edge in a cycle represented by cycle_nodes and
-    cycle_edges.
+    """Return the leaving edge in a cycle represented by cycle_nodes
+    and cycle_edges.
     """
     j, s = cycle_edges[0], cycle_nodes[0]
     res_caps_min = residual_capacity(j, s, capac, flows, tails)
@@ -344,7 +348,8 @@ def find_leaving_edge(cycle_nodes, cycle_edges, capac, flows, tails, heads):
 
 @numba.njit(cache=True)
 def augment_flow(cycle_nodes, cycle_edges, f, tails, flows):
-    """Augment f units of flow along a cycle representing Wn with cycle_edges.
+    """Augment f units of flow along a cycle representing Wn with
+    cycle_edges.
     """
     for i, p in zip(cycle_edges, cycle_nodes):
         if tails[i] == p:
@@ -355,7 +360,8 @@ def augment_flow(cycle_nodes, cycle_edges, f, tails, flows):
 
 @numba.njit(cache=True)
 def remove_edge(s, t, size, prev, last, next_node, parent, edge):
-    """Remove an edge (s, t) where parent[t] == s from the spanning tree.
+    """Remove an edge (s, t) where parent[t] == s from the spanning
+    tree.
     """
     size_t = size[t]
     prev_t = prev[t]
@@ -370,8 +376,7 @@ def remove_edge(s, t, size, prev, last, next_node, parent, edge):
     next_node[last_t] = t
     prev[t] = last_t
 
-    # Update the subtree sizes and last descendants of the (old) ancestors
-    # of t.
+    # Update the subtree sizes & last descendants of the (old) ancestors of t.
     while s != -2:
         size[s] -= size_t
         if last[s] == last_t:
@@ -454,8 +459,8 @@ def add_edge(i, p, q, next_node, prev, last, size, parent, edge):
 
 @numba.njit(cache=True)
 def update_potentials(i, p, q, heads, potentials, costs, last_node, next_node):
-    """Update the potentials of the nodes in the subtree rooted at a node
-    q connected to its parent p by an edge i.
+    """Update the potentials of the nodes in the subtree rooted at a
+    node q connected to its parent p by an edge i.
     """
     if q == heads[i]:
         d = potentials[p] - costs[i] - potentials[q]

@@ -8,5 +8,5 @@ __pycache__/
 .pytest_cache/
 .scrutinizer.yml
 *.so
-*.toml
 *~
+setup.cfg

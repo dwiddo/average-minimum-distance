@@ -18,7 +18,7 @@ A pandas DataFrame is returned, a table of the distance matrix with names in row
 and columns. The function can also take a second path to a cif, and compare all
 crystals in one with all in the other. To compare by AMD, use ``by='AMD'``.
 
-If ``csd-python-api`` is installed, the compare function can also accept lists of
+If csd-python-api is installed, the compare function can also accept lists of
 CSD refcodes, or paths to other file formats.
 
 Read, calculate descriptors and compare separately 
@@ -47,7 +47,7 @@ used when :func:`amd.compare() <amd.compare.compare>` is given two paths.
 Write crystals or their descriptors to file
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-``pickle`` is an easy way to store crystals or their descriptors. 
+The pickle module is an easy way to store crystals or their descriptors. 
 ::
 
     import pickle
@@ -58,7 +58,7 @@ Write crystals or their descriptors to file
     with open('PDDs.pkl', 'rb') as f:
         pdds = pickle.load(f)   # read
 
-Example with ``h5py``, which lazily writes the descriptors (only one crystal/PDD is in memory at a time). Preferable 
+Another example with h5py, which lazily writes the descriptors (only one crystal/PDD is in memory at a time). Preferable 
 for large collections, though can only be used to store descriptors, not the objects given by the readers.
 ::
 
@@ -83,32 +83,32 @@ functions which compare the invariants. All are listed below.
 Reader options
 ^^^^^^^^^^^^^^
 
-Parameters of :class:`amd.CifReader <amd.io.CifReader>` and/or :class:`amd.CSDReader <amd.io.CSDReader>`.
+Parameters of :class:`amd.CifReader <amd.amdio.CifReader>` or :class:`amd.CSDReader <amd.amdio.CSDReader>`.
 
-* :code:`reader` (default ``ase``) controls the backend package used to parse the file. To use csd-python-api change to ``ccdc``. The ccdc reader should be able to read any format accepted by :class:`ccdc.EntryReader <ccdc.io.EntryReader>`, though only .cifs have been tested.
+* :code:`reader` (default ``ase``) controls the backend package used to parse the file. To use csd-python-api change to ``ccdc``. The ccdc reader should be able to read any format accepted by :class:`ccdc.io.EntryReader`, though only cifs have been tested.
 * :code:`remove_hydrogens` (default ``False``) removes Hydrogen atoms from the structure.
 * :code:`disorder` (default ``skip``) controls how disordered structures are handled. The default skips any crystal with disorder, since disorder conflicts with the periodic set model. Alternatively, :code:`ordered_sites` removes sites with disorder and :code:`all_sites` includes all sites regardless.
-* :code:`heaviest_component` (default ``False``, ``csd-python-api`` only) removes all but the heaviest molecule in the asymmetric unit, intended for removing solvents.
-* :code:`molecular_centres` (default ``False``, ``csd-python-api`` only) uses the centres of molecules for comparisons instead of atoms (as in `our paper comparing across landscapes <https://pubs.acs.org/doi/10.1021/jacs.2c02653>`_).
+* :code:`heaviest_component` (default ``False``, csd-python-api only) removes all but the heaviest molecule in the asymmetric unit, intended for removing solvents.
+* :code:`molecular_centres` (default ``False``, csd-python-api only) uses the centres of molecules for comparisons instead of atoms (as in `our paper comparing across landscapes <https://pubs.acs.org/doi/10.1021/jacs.2c02653>`_).
 * :code:`show_warnings` (default ``True``) chooses whether to print warnings during reading, e.g. from disordered structures or crystals with missing data.
-* :code:`families` (default ``False``, ``csd-python-api`` only) chooses whether to read refcodes or refcode families.
+* :code:`families` (default ``False``, csd-python-api only) chooses whether to read refcodes or refcode families from the CSD.
 
 PDD options
 ^^^^^^^^^^^
 
-Parameters of :func:`amd.PDD <amd.calculate.PDD>`. :func:`amd.AMD <amd.calculate.AMD>` does not accept any optional parameters.
+Parameters of :func:`amd.PDD() <amd.calculate.PDD>`. :func:`amd.AMD() <amd.calculate.AMD>` does not accept any optional parameters.
 
 * :code:`collapse` (default ``True``) chooses whether to collpase rows of PDDs which are similar enough (elementwise).
-* :code:`collapse_tol` (default ``1e-4``) is the tolerance for collapsing PDD rows into one. The merged row is the average of those collapsed. 
+* :code:`collapse_tol` (default 0.0001) is the tolerance for collapsing PDD rows into one. The merged row is the average of those collapsed. 
 
 Comparison options
 ^^^^^^^^^^^^^^^^^^
 
-The first parameter ``metric`` below is available to :func:`amd.PDD_pdist <amd.compare.PDD_pdist>`, :func:`amd.PDD_cdist <amd.compare.PDD_cdist>`,
-:func:`amd.AMD_pdist <amd.compare.AMD_pdist>` and :func:`amd.AMD_cdist <amd.compare.AMD_cdist>`. The rest are only for the
+The first parameter ``metric`` below is available to :func:`amd.PDD_pdist() <amd.compare.PDD_pdist>`, :func:`amd.PDD_cdist() <amd.compare.PDD_cdist>`,
+:func:`amd.AMD_pdist() <amd.compare.AMD_pdist>` and :func:`amd.AMD_cdist() <amd.compare.AMD_cdist>`. The rest are only for the
 PDD related functions.
 
 * :code:`metric` (default ``chebyshev``) chooses the metric used to compare AMDs or PDD rows. See SciPy's cdist/pdist for a list of accepted metrics.
 * :code:`n_jobs` (new in 1.2.3, default ``None``) is the number of cores to use for multiprocessing (passed to :class:`joblib.Parallel`). Pass -1 to use the maximum.
-* :code:`verbose` (changed in 1.2.3, default 0) controls the verbosity level, increasing with larger numbers. This is passed to :class:`joblib.Parallel`, see their documentation for details.
-* :code:`low_memory` (default ``False``, by='AMD' only) uses an alternative slower algorithm that keeps memory use low for much larger inputs. Only ``metric='chebyshev'`` is accepted with ``low_memory``.
+* :code:`verbose` (changed in 1.2.3, default 0) controls the verbosity level, increasing with larger numbers. This is passed to :class:`joblib.Parallel`, see its documentation for details.
+* :code:`low_memory` (default ``False``, requires ``by='AMD'`` and ``metric='chebyshev'``) uses a slower algorithm with a smaller memory footprint, for larger inputs.

@@ -13,13 +13,13 @@ Module                 Description
 ===================    ==============================================================
 :mod:`.calculate`      Calculate descriptors (invariants) of periodic sets (crystals)
 :mod:`.compare`        Compare invariants of crystals
-:mod:`.io`             Read crystals from a file or the CSD
+:mod:`.amdio`          Read crystals from a file or the CSD
 :mod:`.periodicset`    Implements the PeriodicSet object
 :mod:`.utils`          Utility functions
 ===================    ==============================================================
 """
 
-__version__ = '1.3.5a1'
+__version__ = '1.3.5a2'
 __author__ = 'Daniel Widdowson'
 __maintainer__ = 'Daniel Widdowson'
 __email__ = 'D.E.Widdowson@liverpool.ac.uk'
@@ -29,6 +29,6 @@ __copyright__ = "Copyright 2022, Daniel Widdowson"
 
 from .calculate import *
 from .compare import *
-from .io import *
+from .amdio import *
 from .periodicset import *
 from .utils import *

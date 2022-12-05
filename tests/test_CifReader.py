@@ -19,20 +19,28 @@ def test_CifReader(reader, cif_paths, reference_data):
         try:
             read_in = list(amd.CifReader(cif_paths[name], reader=reader))
         except ImportError as _:
-            pytest.skip(f'Skipping test_CifReader for {reader} as it failed to import.')
+            pytest.skip(
+                f'Skipping test_CifReader for {reader} as it failed to import.'
+            )
 
         if (not len(references) == len(read_in)) or len(read_in) == 0:
-            pytest.fail(f'There are {len(references)} references, but {len(read_in)} structures were read.')
+            pytest.fail(
+                f'There are {len(references)} references, but {len(read_in)} structures were read.'
+            )
 
         for s, s_ in zip(read_in, references):
             if not s == s_['PeriodicSet']:
-                pytest.fail(f'Structure {s.name} read with CifReader disagrees with reference.')
+                pytest.fail(
+                    f'Structure {s.name} read with CifReader disagrees with reference.'
+                )
 
 def test_periodicset_from_ase_atoms(cif_paths, reference_data):
     try:
         from ase.io import iread
     except ImportError as _:    
-        pytest.skip(f'Skipping test_periodicset_from_ase_atoms as ase failed to import.')
+        pytest.skip(
+            f'Skipping test_periodicset_from_ase_atoms as ase failed to import.'
+        )
 
     for name in cif_paths:
         references = reference_data[name]
@@ -43,11 +51,15 @@ def test_periodicset_from_ase_atoms(cif_paths, reference_data):
             atoms = list(iread(cif_paths[name]))
         read_in = [amd.periodicset_from_ase_atoms(a) for a in atoms]
         if (not len(references) == len(read_in)) or len(read_in) == 0:
-            pytest.fail(f'There are {len(references)} references, but {len(read_in)} structures were read.')
+            pytest.fail(
+                f'There are {len(references)} references, but {len(read_in)} structures were read.'
+            )
 
         for s, s_ in zip(read_in, references):
             if not s == s_['PeriodicSet']:
-                pytest.fail(f'Structure {s.name} read with ase.io.iread disagrees with reference.')
+                pytest.fail(
+                    f'Structure {s.name} read with ase.io.iread disagrees with reference.'
+                )
 
 
 @pytest.fixture(scope='module')
@@ -57,7 +69,9 @@ def asym_unit_test_cif_path(root_dir):
 def test_CifReader_equiv_structs(asym_unit_test_cif_path):
     pdds = [amd.PDD(struct, 100) for struct in amd.CifReader(asym_unit_test_cif_path, show_warnings=False)]
     if amd.emd(pdds[0], pdds[1]) > 0:
-        pytest.fail(f'Asymmetric structure was read differently than identical expanded version.')
+        pytest.fail(
+            f'Asymmetric structure was read differently than identical expanded version.'
+        )
 
 
 @pytest.fixture(scope='module')
@@ -77,7 +91,9 @@ def T2_alpha_cif_path(root_dir):
 def test_heaviest_component(T2_alpha_cif_path, ccdc_enabled):
 
     if not ccdc_enabled:
-        pytest.skip('Skipping test_CSDReader as csd-python-api is not installed.')
+        pytest.skip(
+            'Skipping test_CSDReader as csd-python-api is not installed.'
+        )
 
     s = amd.CifReader(
         T2_alpha_cif_path, 

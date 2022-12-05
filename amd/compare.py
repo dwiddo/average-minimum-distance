@@ -11,12 +11,13 @@ import numpy as np
 import pandas as pd
 from scipy.spatial.distance import cdist, pdist, squareform
 from joblib import Parallel, delayed
+import tqdm
 
-from .io import CifReader, CSDReader
+from .amdio import CifReader, CSDReader
 from .calculate import AMD, PDD
 from ._emd import network_simplex
 from .periodicset import PeriodicSet
-from .utils import neighbours_from_distance_matrix, _ETA
+from .utils import neighbours_from_distance_matrix
 
 
 def compare(
@@ -27,39 +28,45 @@ def compare(
         nearest=None,
         **kwargs
 ) -> pd.DataFrame:
-    r"""Given one or two sets of periodic set(s), paths to cif(s) or refcode(s),
-    compare them and return a DataFrame of the distance matrix. Default is to
-    comapre by AMD with k = 100. Accepts most keyword arguments accepted by
-    :class:`CifReader <.io.CifReader>`, :class:`CSDReader <.io.CSDReader>` and
-    functions from :mod:`.compare`, for a full list see the documentation
-    Quick Start page. Note that using refcodes requires ``csd-python-api``.
+    r"""Given one or two sets of periodic set(s), paths to cif(s) or
+    refcode(s), compare them and return a DataFrame of the distance
+    matrix. Default is to comapre by AMD with k = 100. Accepts most
+    keyword arguments accepted by :class:`CifReader <.amdio.CifReader>`,
+    :class:`CSDReader <.amdio.CSDReader>` and functions from
+    :mod:`.compare`, for a full list see the documentation Quick Start
+    page. Note that using refcodes requires ``csd-python-api``.
 
     Parameters
     ----------
     crystals : list of :class:`PeriodicSet <.periodicset.PeriodicSet>` or str
-        One or a collection of paths, refcodes, file objects or :class:`.periodicset.PeriodicSet` s.
+        One or a collection of paths, refcodes, file objects or
+        :class:`PeriodicSets <.periodicset.PeriodicSet>`.
     crystals\_ : list of :class:`PeriodicSet <.periodicset.PeriodicSet>` or str, optional
-        One or a collection of paths, refcodes, file objects or :class:`.periodicset.PeriodicSet` s.
+        One or a collection of paths, refcodes, file objects or
+        :class:`PeriodicSets <.periodicset.PeriodicSet>`.
     by : str, default 'AMD'
-        Invariant to compare by, either 'AMD' or 'PDD'.
+        Use AMD or PDD to compare crystals.
     k : int, default 100
-        k value to use for the invariants (length of AMD, or number of columns in PDD).
+        Number of neighbour atoms to use for AMD/PDD.
     nearest : int, deafult None
-        Find a number of nearest neighbours in the second set for each in the first, rather than a
-        full distance matrix.
+        Find a number of nearest neighbours instead of a full distance
+        matrix between crystals.
     **kwargs :
-        Optional arguments to be passed to io, calculate or compare functions.
+        Optional arguments to be passed to io, calculate or compare
+        functions.
 
     Returns
     -------
     df : :class:`pandas.DataFrame`
-        DataFrame of the distance matrix for the given crystals compared by the chosen invariant.
+        DataFrame of the distance matrix for the given crystals compared
+        by the chosen invariant.
 
     Raises
     ------
     ValueError
-        If by is not 'AMD' or 'PDD', if either set given have no valid crystals
-        to compare, or if crystals or crystals\_ are an invalid type.
+        If by is not 'AMD' or 'PDD', if either set given have no valid
+        crystals to compare, or if crystals or crystals\_ are an invalid
+        type.
 
     Examples
     --------
@@ -67,7 +74,8 @@ def compare(
 
         df = amd.compare('data.cif')
 
-    Compare everything in one cif with all crystals in all cifs in a directory (PDD, k=50)::
+    Compare everything in one cif with all crystals in all cifs in a
+    directory (PDD, k=50)::
 
         df = amd.compare('data.cif', 'dir/to/cifs', by='PDD', k=50)
 
@@ -84,8 +92,10 @@ def compare(
 
     by = by.upper()
     if by not in ('AMD', 'PDD'):
-        raise ValueError(f"parameter 'by' accepts 'AMD' or 'PDD', was passed {by}")
+        msg = f"parameter 'by' accepts 'AMD' or 'PDD', was passed {by}"
+        raise ValueError(msg)
 
+    # redo this way of doing things?
     reader_kwargs = {
         'reader': 'ase',
         'families': False,
@@ -176,8 +186,8 @@ def EMD(
         metric: Optional[str] = 'chebyshev',
         return_transport: Optional[bool] = False,
         **kwargs):
-    r"""Earth mover's distance (EMD) between two PDDs, also known as
-    the Wasserstein metric.
+    r"""Earth mover's distance (EMD) between two PDDs, aka the
+    Wasserstein metric.
 
     Parameters
     ----------
@@ -187,23 +197,24 @@ def EMD(
         PDD of a crystal.
     metric : str or callable, default 'chebyshev'
         EMD between PDDs requires defining a distance between PDD rows.
-        By default, Chebyshev (L-infinity) distance is chosen like with AMDs.
-        Accepts any metric accepted by :func:`scipy.spatial.distance.cdist`.
+        By default, Chebyshev (L-infinity) distance is chosen like with
+        AMDs. Accepts any metric accepted by
+        :func:`scipy.spatial.distance.cdist`.
     return_transport: bool, default False
-        Return a tuple ``(emd, transport_plan)`` where transport_plan describes
-        the optimal flow.
+        Instead return a tuple ``(emd, transport_plan)`` where
+        transport_plan describes the optimal flow.
 
     Returns
     -------
     emd : float
-        Earth mover's distance between two PDDs. If ``return_transport`` is True,
-        return a tuple (emd, transport_plan).
+        Earth mover's distance between two PDDs. If ``return_transport``
+        is True, return a tuple (emd, transport_plan).
 
     Raises
     ------
     ValueError
         Thrown if ``pdd`` and ``pdd_`` do not have the same number of
-        columns (``k`` value).
+        columns.
     """
 
     dm = cdist(pdd[:, 1:], pdd_[:, 1:], metric=metric, **kwargs)
@@ -222,9 +233,10 @@ def AMD_cdist(
         low_memory: bool = False,
         **kwargs
 ) -> np.ndarray:
-    r"""Compare two sets of AMDs with each other, returning a distance matrix.
-    This function is essentially :func:`scipy.spatial.distance.cdist` with the
-    default metric ``chebyshev``.
+    r"""Compare two sets of AMDs with each other, returning a distance
+    matrix. This function is essentially
+    :func:`scipy.spatial.distance.cdist` with the default metric
+    ``chebyshev`` and a low memory option.
 
     Parameters
     ----------
@@ -236,15 +248,14 @@ def AMD_cdist(
         Usually AMDs are compared with the Chebyshev (L-infinitys) distance.
         Accepts any metric accepted by :func:`scipy.spatial.distance.cdist`.
     low_memory : bool, default False
-        Use a slower but more memory efficient method for
-        large collections of AMDs (Chebyshev metric only).
+        Use a slower but more memory efficient method for large collections of
+        AMDs (metric 'chebyshev' only).
 
     Returns
     -------
     dm : :class:`numpy.ndarray`
-        A distance matrix shape ``(len(amds), len(amds_))``.
-        ``dm[ij]`` is the distance (given by ``metric``)
-        between ``amds[i]`` and ``amds[j]``.
+        A distance matrix shape ``(len(amds), len(amds_))``. ``dm[ij]`` is the
+        distance (given by ``metric``) between ``amds[i]`` and ``amds[j]``.
     """
 
     amds, amds_ = np.asarray(amds), np.asarray(amds_)
@@ -256,7 +267,8 @@ def AMD_cdist(
 
     if low_memory:
         if metric != 'chebyshev':
-            warnings.warn("Using only allowed metric 'chebyshev' for low_memory", UserWarning)
+            msg = "Using only allowed metric 'chebyshev' for low_memory"
+            warnings.warn(msg, UserWarning)
 
         dm = np.empty((len(amds), len(amds_)))
         for i, amd_vec in enumerate(amds):
@@ -273,28 +285,30 @@ def AMD_pdist(
         low_memory: bool = False,
         **kwargs
 ) -> np.ndarray:
-    """Compare a set of AMDs pairwise, returning a condensed distance matrix.
-    This function is essentially :func:`scipy.spatial.distance.pdist` with the
-    default metric ``chebyshev``.
+    """Compare a set of AMDs pairwise, returning a condensed distance
+    matrix. This function is essentially
+    :func:`scipy.spatial.distance.pdist` with the default metric
+    ``chebyshev`` and a low memory parameter.
 
     Parameters
     ----------
     amds : array_like
         An list/array of AMDs.
     metric : str or callable, default 'chebyshev'
-        Usually AMDs are compared with the Chebyshev (L-infinity) distance.
-        Accepts any metric accepted by :func:`scipy.spatial.distance.pdist`.
+        Usually AMDs are compared with the Chebyshev (L-infinity)
+        distance. Accepts any metric accepted by
+        :func:`scipy.spatial.distance.pdist`.
     low_memory : bool, default False
-        Optionally use a slightly slower but more memory efficient method for
-        large collections of AMDs (Chebyshev metric only).
+        Use a slower but more memory efficient method for large
+        collections of AMDs (metric 'chebyshev' only).
 
     Returns
     -------
-    :class:`numpy.ndarray`
+    cdm : :class:`numpy.ndarray`
         Returns a condensed distance matrix. Collapses a square distance
-        matrix into a vector, just keeping the upper half. See the function
-        :func:`squareform <scipy.spatial.distance.squareform>` from SciPy to
-        convert to a symmetric square distance matrix.
+        matrix into a vector, just keeping the upper half. See the
+        function :func:`squareform <scipy.spatial.distance.squareform>`
+        from SciPy to convert to a symmetric square distance matrix.
     """
 
     amds = np.asarray(amds)
@@ -305,7 +319,8 @@ def AMD_pdist(
     if low_memory:
         m = len(amds)
         if metric != 'chebyshev':
-            warnings.warn("Using only allowed metric 'chebyshev' for low_memory", UserWarning)
+            msg = "Using only allowed metric 'chebyshev' for low_memory"
+            warnings.warn(msg, UserWarning)
         cdm = np.empty((m * (m - 1)) // 2, dtype=np.double)
         ind = 0
         for i in range(m):
@@ -327,9 +342,10 @@ def PDD_cdist(
         verbose=0,
         **kwargs
 ) -> np.ndarray:
-    r"""Compare two sets of PDDs with each other, returning a distance matrix.
-    Supports parallel processing via joblib. If using parallelisation, make sure to
-    include a if __name__ == '__main__' guard around this function.
+    r"""Compare two sets of PDDs with each other, returning a distance
+    matrix. Supports parallel processing via joblib. If using
+    parallelisation, make sure to include a if __name__ == '__main__'
+    guard around this function.
 
     Parameters
     ----------
@@ -338,25 +354,28 @@ def PDD_cdist(
     pdds\_ : List[:class:`numpy.ndarray`]
         A list of PDDs.
     metric : str or callable, default 'chebyshev'
-        Usually PDD rows are compared with the Chebyshev/l-infinity distance.
-        Accepts any metric accepted by :func:`scipy.spatial.distance.cdist`.
+        Usually PDD rows are compared with the Chebyshev/l-infinity
+        distance. Accepts any metric accepted by
+        :func:`scipy.spatial.distance.cdist`.
     n_jobs : int, default None
-        Maximum number of concurrent jobs for parallel processing with ``joblib``.
-        Set to -1 to use the maximum. Note that for small inputs (< 100),
-        using parallel processing may be slower than the default n_jobs=None.
+        Maximum number of concurrent jobs for parallel processing with
+        ``joblib``. Set to -1 to use the maximum. Using parallel
+        processing may be slower for small inputs.
     verbose : int, default 0
-        Controls verbosity. If using parallel processing (n_jobs > 1), verbose is
-        passed to :class:`joblib.Parallel`, where larger values = more verbosity.
+        Verbosity level. If using parallel processing (n_jobs > 1),
+        verbose is passed to :class:`joblib.Parallel` and larger values
+        = more verbose.
     backend : str, default 'multiprocessing'
-        Specifies the parallelization backend implementation. For a list of
-        supported backends, see the backend argument of :class:`joblib.Parallel`.
+        The parallelization backend implementation. For a list of
+        supported backends, see the backend argument of
+        :class:`joblib.Parallel`.
 
     Returns
     -------
-    :class:`numpy.ndarray`
-        Returns a distance matrix shape ``(len(pdds), len(pdds_))``.
-        The :math:`ij` th entry is the distance between ``pdds[i]``
-        and ``pdds_[j]`` given by Earth mover's distance.
+    dm : :class:`numpy.ndarray`
+        Returns a distance matrix shape ``(len(pdds), len(pdds_))``. The
+        :math:`ij` th entry is the distance between ``pdds[i]`` and
+        ``pdds_[j]`` given by Earth mover's distance.
     """
 
     if isinstance(pdds, np.ndarray):
@@ -369,7 +388,7 @@ def PDD_cdist(
 
     kwargs.pop('return_transport', None)
 
-    if n_jobs is not None and n_jobs > 1:
+    if n_jobs is not None and n_jobs not in (0, 1):
         # TODO: put results into preallocated empty array in place
         dm = Parallel(backend=backend, n_jobs=n_jobs, verbose=verbose)(
             delayed(partial(EMD, metric=metric, **kwargs))(pdds[i], pdds_[j])
@@ -381,12 +400,15 @@ def PDD_cdist(
         n, m = len(pdds), len(pdds_)
         dm = np.empty((n, m))
         if verbose:
-            eta = _ETA(n * m)
+            pbar = tqdm.tqdm(total=n*m)
         for i in range(n):
             for j in range(m):
                 dm[i, j] = EMD(pdds[i], pdds_[j], metric=metric, **kwargs)
                 if verbose:
-                    eta.update()
+                    pbar.update(1)
+        if verbose:
+            pbar.close()
+
     return dm
 
 
@@ -398,35 +420,39 @@ def PDD_pdist(
         backend='multiprocessing',
         **kwargs
 ) -> np.ndarray:
-    """Compare a set of PDDs pairwise, returning a condensed distance matrix.
-    Supports parallelisation via joblib. If using parallelisation, make sure to
-    include a if __name__ == '__main__' guard around this function.
+    """Compare a set of PDDs pairwise, returning a condensed distance
+    matrix. Supports parallelisation via joblib. If using
+    parallelisation, make sure to include a if __name__ == '__main__'
+    guard around this function.
 
     Parameters
     ----------
     pdds : List[:class:`numpy.ndarray`]
         A list of PDDs.
     metric : str or callable, default 'chebyshev'
-        Usually PDD rows are compared with the Chebyshev/l-infinity distance.
-        Accepts any metric accepted by :func:`scipy.spatial.distance.pdist`.
+        Usually PDD rows are compared with the Chebyshev/l-infinity
+        distance. Accepts any metric accepted by
+        :func:`scipy.spatial.distance.cdist`.
     n_jobs : int, default None
-        Maximum number of concurrent jobs for parallel processing with ``joblib``.
-        Set to -1 to use the maximum possible. Note that for small inputs (< 100),
-        using parallel processing may be slower than the default n_jobs=None.
+        Maximum number of concurrent jobs for parallel processing with
+        ``joblib``. Set to -1 to use the maximum. Using parallel
+        processing may be slower for small inputs.
     verbose : int, default 0
-        Controls verbosity. If using parallel processing (n_jobs > 1), verbose is
-        passed to :class:`joblib.Parallel`, where larger values = more verbosity.
+        Verbosity level. If using parallel processing (n_jobs > 1),
+        verbose is passed to :class:`joblib.Parallel` and larger values
+        = more verbose.
     backend : str, default 'multiprocessing'
-        Specifies the parallelization backend implementation. For a list of
-        supported backends, see the backend argument of :class:`joblib.Parallel`.
+        The parallelization backend implementation. For a list of
+        supported backends, see the backend argument of
+        :class:`joblib.Parallel`.
 
     Returns
     -------
-    :class:`numpy.ndarray`
+    cdm : :class:`numpy.ndarray`
         Returns a condensed distance matrix. Collapses a square distance
-        matrix into a vector, just keeping the upper half. See the function
-        :func:`squareform <scipy.spatial.distance.squareform>` from SciPy to
-        convert to a symmetric square distance matrix.
+        matrix into a vector, just keeping the upper half. See the
+        function :func:`squareform <scipy.spatial.distance.squareform>`
+        from SciPy to convert to a symmetric square distance matrix.
     """
 
     kwargs.pop('return_transport', None)
@@ -445,28 +471,25 @@ def PDD_pdist(
         cdm = np.empty(cdm_len, dtype=np.double)
         inds = ((i, j) for i in range(0, m - 1) for j in range(i + 1, m))
         if verbose:
-            eta = _ETA(cdm_len)
+            eta = tqdm.tqdm(cdm_len)
         for r, (i, j) in enumerate(inds):
             cdm[r] = EMD(pdds[i], pdds[j], metric=metric, **kwargs)
             if verbose:
-                eta.update()
+                eta.update(1)
+        if verbose:
+            eta.close()
     return cdm
 
 
-def emd(
-        pdd: np.ndarray,
-        pdd_: np.ndarray,
-        metric: Optional[str] = 'chebyshev',
-        return_transport: Optional[bool] = False,
-        **kwargs):
-    """Alias for :func:`EMD`."""
-    return EMD(pdd, pdd_, metric=metric, return_transport=return_transport, **kwargs)
+def emd(pdd: np.ndarray, pdd_: np.ndarray, **kwargs):
+    """Alias for :func:`EMD() <.compare.EMD>`."""
+    return EMD(pdd, pdd_, **kwargs)
 
 
 def _unwrap_periodicset_list(psets_or_str, **reader_kwargs):
-    """Valid input for compare (PeriodicSet, path, refcode, lists of such)
-    -->
-    list of PeriodicSets"""
+    """Valid input for compare (``PeriodicSet``, path, refcode, lists of
+    such) --> list of PeriodicSets.
+    """
 
     if isinstance(psets_or_str, PeriodicSet):
         return [psets_or_str]
@@ -477,7 +500,9 @@ def _unwrap_periodicset_list(psets_or_str, **reader_kwargs):
 
 
 def _extract_periodicsets(item, **reader_kwargs):
-    """str (path/refocde), file or PeriodicSet --> list of PeriodicSets."""
+    """str (path/refocde), file or ``PeriodicSet`` --> list of
+    ``PeriodicSets``.
+    """
 
     if isinstance(item, PeriodicSet):
         return [item]

@@ -1,5 +1,6 @@
-"""Functions for resconstructing a periodic set up to isometry from its PDD.
-This is possible 'in a general position', see our papers for more."""
+"""Functions for resconstructing a periodic set up to isometry from its
+PDD. This is possible 'in a general position', see our papers for more.
+"""
 
 import itertools
 
@@ -13,27 +14,29 @@ from .utils import diameter
 
 
 def reconstruct(pdd, cell):
-    """Reconstruct a motif from a PDD and unit cell.
-    This function will only work if pdd has enough columns, such that the last column
-    has all values larger than 2 times the diameter of the unit cell. It also expects
-    an uncollapsed PDD with no weights column. Do not use amd.PDD to compute the PDD
-    for this function, instead use amd.PDD_reconstructable which returns a version of
-    the PDD which is passable to this function.
-    Currently quite slow and has variable run times.
+    """Reconstruct a motif from a PDD and unit cell. This function will
+    only work if pdd has enough columns, such that the last column has
+    all values larger than 2 times the diameter of the unit cell. It
+    also expects an uncollapsed PDD with no weights column. Do not use
+    amd.PDD to compute the PDD for this function, instead use
+    amd.PDD_reconstructable which returns a version of the PDD which is
+    passable to this function. Currently quite slow and run time varys a
+    lot depending on input.
 
     Parameters
     ----------
     pdd : :class:`numpy.ndarray`
-        The PDD of the periodic set to reconstruct. Needs `k` at least large enough so
-        all values in the last column of pdd are greater than 2 * diameter(cell), and
-        needs to be uncollapsed without weights. Use amd.PDD_reconstructable to get a
-        PDD which is acceptable for this argument.
+        The PDD of the periodic set to reconstruct. Needs `k` at least
+        large enough so all values in the last column of pdd are greater
+        than :code:`2 * diameter(cell)`, and needs to be uncollapsed
+        without weights. Use amd.PDD_reconstructable to get a PDD which
+        is acceptable for this argument.
     cell : :class:`numpy.ndarray`
         Unit cell of the periodic set to reconstruct.
 
     Returns
     -------
-    ndarray
+    :class:`numpy.ndarray`
         The reconstructed motif of the periodic set.
     """
 
@@ -44,10 +47,11 @@ def reconstruct(pdd, cell):
 
     dims = cell.shape[0]
     if dims not in (2, 3):
-        raise ValueError('Reconstructing from PDD only implemented for 2 and 3 dimensions')
+        msg = 'Reconstructing from PDD only implemented for 2 and 3 dimensions'
+        raise ValueError(msg)
 
     diam = diameter(cell)
-    motif = [np.zeros((dims, ))]    # set first point as origin wlog, return if 1 motif point
+    motif = [np.zeros((dims, ))] # set first point as origin wlog, return if 1 motif point
 
     if pdd.shape[0] == 1:
         motif = np.array(motif)
@@ -157,7 +161,8 @@ def _find_further_point(shared_dists1, shared_dists2, bases, cloud, q, prec):
 
 
 def _neighbour_set(cell, prec):
-    """(superset of) the neighbour set of origin for a lattice"""
+    """(superset of) the neighbour set of origin for a lattice.
+    """
 
     k_ = 5
     coeffs = np.array(list(itertools.product((-1, 0, 1), repeat=cell.shape[0])))

@@ -3,6 +3,7 @@ include *.txt
 include *.yaml
 include *.yml
 include LICENSE
+recursive-include amd *
 recursive-include docs *.bat
 recursive-include docs *.doctree
 recursive-include docs *.inv

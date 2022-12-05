@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 """average-minimum-distance: geometry-based crystal fingerprints
 
-Descriptors ("isometry invariants") of crystals based on geometry: 
-average minimum distances (AMD) and point-wise distance distributions (PDD).
+Descriptors (isometry invariants) of crystals based on geometry: 
+average minimum distances (AMD) and point-wise distance distributions
+(PDD).
 """
 
 import re
@@ -39,8 +40,6 @@ project_urls = {
     'Changelog': 'https://github.com/dwiddo/average-minimum-distance/blob/master/CHANGELOG.md',
 }
 
-description = " ".join(__doc__.split('\n')[2:])
-
 install_requires = [
     'numpy>=1.21',
     'numba>=0.55.2',
@@ -63,7 +62,7 @@ with open(r'amd/__init__.py') as f:
 kw = {
     'name': 'average-minimum-distance',
     'version': version,
-    'description': description,
+    'description': 'Descriptors of crystals based on geometry (isometry invariants).',
     'long_description': open('README.md').read(),
     'long_description_content_type': 'text/markdown',
     'author': 'Daniel Widdowson',
@@ -80,10 +79,11 @@ kw = {
     'include_package_data': True,
     'entry_points': {
         'console_scripts': [
-            'amd.compare = amd.cli:main',
+            'amd-compare = amd.cli:main',
         ]
     }
 }
+
 
 if __name__ == '__main__':
     setup(**kw)

@@ -1,9 +1,7 @@
-Below is the readme for amd, explaining what it is and how to use it.
-More detailed documentation can be found in the sidebar.
-
 .. toctree::
    :hidden:
    :maxdepth: 2
+   :caption: Using amd
 
    Get_Started
    Description_of_AMD_PDD
@@ -20,7 +18,7 @@ More detailed documentation can be found in the sidebar.
 
    amd.calculate
    amd.compare
-   amd.io
+   amd.amdio
    amd.periodicset
    amd.utils
 

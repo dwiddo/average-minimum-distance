@@ -1,10 +1,10 @@
 """Tools for reading crystals from files, or from the CSD with
 ``csd-python-api``. The readers return
-:class:`amd.PeriodicSet <.periodicset.PeriodicSet>` objects representing the
-crystal which can be passed to :func:`amd.AMD() <.calculate.AMD>` and
-:func:`amd.PDD() <.calculate.PDD>` to get their invariants.
+:class:`amd.PeriodicSet <.periodicset.PeriodicSet>` objects representing
+the crystal which can be passed to :func:`amd.AMD() <.calculate.AMD>`
+and :func:`amd.PDD() <.calculate.PDD>` to get their invariants.
 """
- 
+
 import os
 import re
 import functools
@@ -13,10 +13,13 @@ from typing import Tuple
 
 import numpy as np
 import numba
-import ase.io.cif   # convert_value, parse_cif
-import ase.data
-import ase.spacegroup
+from ase.data import atomic_numbers as ase_atomic_numbers
+from ase.spacegroup import get_basis as ase_get_basis
 from ase.spacegroup.spacegroup import parse_sitesym as ase_parse_sitesym
+from ase.io.cif import (
+    convert_value as ase_convert_value, 
+    parse_cif as ase_parse_cif
+)
 
 from .utils import cellpar_to_cell
 from .periodicset import PeriodicSet
@@ -28,7 +31,6 @@ def _custom_warning(message, category, filename, lineno, *args, **kwargs):
 warnings.formatwarning = _custom_warning
 
 _EQUIV_SITE_TOL = 1e-3
-_DISORDER_OPTIONS = {'skip', 'ordered_sites', 'all_sites'}
 
 CIF_TAGS = {
     'cellpar': [
@@ -78,6 +80,8 @@ CIF_TAGS = {
 
 class _Reader:
 
+    _DISORDER_OPTIONS = {'skip', 'ordered_sites', 'all_sites'}
+
     def __init__(
             self,
             remove_hydrogens=False,
@@ -87,9 +91,9 @@ class _Reader:
             show_warnings=True
     ):
 
-        if disorder not in _DISORDER_OPTIONS:
+        if disorder not in _Reader._DISORDER_OPTIONS:
             msg = 'disorder parameter must be one of ' \
-                  f'{_DISORDER_OPTIONS} (passed {disorder})'
+                  f'{_Reader._DISORDER_OPTIONS} (passed {disorder})'
             raise ValueError(msg)
 
         self.remove_hydrogens = remove_hydrogens
@@ -97,17 +101,19 @@ class _Reader:
         self.heaviest_component = heaviest_component
         self.molecular_centres = molecular_centres
         self.show_warnings = show_warnings
-        self._backend_generator = None
+        self._backend_iterator = None
         self._converter = None
 
     def __iter__(self):
-        if self._backend_generator is None or self._converter is None:
+        if self._backend_iterator is None or self._converter is None:
             raise RuntimeError(f'{self.__class__.__name__} not initialized.')
         return self
 
     def __next__(self):
-        """Iterates over self._backend_generator, passing items through self._converter.
-        Catches ParseError + warnings raised in self._converter, optionally printing them.
+        """Iterates over self._backend_iterator, passing items through
+        self._converter. Catches :class:`ParseError <.amdio.ParseError>`
+        and warnings raised in self._converter, optionally printing
+        them.
         """
 
         if not self.show_warnings:
@@ -115,7 +121,7 @@ class _Reader:
 
         while True:
 
-            item = next(self._backend_generator) # will raise StopIteration when done
+            item = next(self._backend_iterator)
 
             with warnings.catch_warnings(record=True) as warning_msgs:
                 msg = None
@@ -136,8 +142,8 @@ class _Reader:
 
     def read(self):
         """Reads the crystal(s), returns one
-        :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` if there is only
-        one, otherwise returns a list. (Note the return type is not
+        :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` if there is
+        only one, otherwise returns a list. (Note the return type is not
         consistent!)"""
         l = list(self)
         if len(l) == 1:
@@ -153,36 +159,38 @@ class CifReader(_Reader):
     Parameters
     ----------
     path : str
-        Path to a .cif file or directory. (Other files are accepted when using
-        ``reader='ccdc'``, if csd-python-api is installed.)
+        Path to a .cif file or directory. (Other files are accepted when
+        using ``reader='ccdc'``, if csd-python-api is installed.)
     reader : str, optional
         The backend package used for parsing. Default is :code:`ase`,
-        to use csd-python-api change to :code:`ccdc`. The ccdc reader should
-        be able to read any format accepted by :class:`ccdc.io.EntryReader`,
-        though only cifs have been tested.
+        to use csd-python-api change to :code:`ccdc`. The ccdc reader
+        should be able to read any format accepted by
+        :class:`ccdc.io.EntryReader`, though only cifs have been tested.
     remove_hydrogens : bool, optional
         Remove Hydrogens from the crystal.
     disorder : str, optional
-        Controls how disordered structures are handled. Default is ``skip``
-        which skips any crystal with disorder, since disorder conflicts with
-        the periodic set model. To read disordered structures anyway, choose
-        either :code:`ordered_sites` to remove atoms with disorder or
-        :code:`all_sites` include all atoms regardless of disorder.
+        Controls how disordered structures are handled. Default is
+        ``skip`` which skips any crystal with disorder, since disorder
+        conflicts with the periodic set model. To read disordered
+        structures anyway, choose either :code:`ordered_sites` to remove
+        atoms with disorder or :code:`all_sites` include all atoms
+        regardless of disorder.
     heaviest_component : bool, optional
-        csd-python-api only. Removes all but the heaviest molecule in the
-        asymmeric unit, intended for removing solvents.
+        csd-python-api only. Removes all but the heaviest molecule in
+        the asymmeric unit, intended for removing solvents.
     molecular_centres : bool, default False
-        csd-python-api only. Extract the centres of molecules in the unit cell
-        and store in the attribute molecular_centres.
+        csd-python-api only. Extract the centres of molecules in the
+        unit cell and store in the attribute molecular_centres.
     show_warnings : bool, optional
         Controls whether warnings that arise during reading are printed.
 
     Yields
     ------
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
-        Represents the crystal as a periodic set, consisting of a finite set
-        of points (motif) and lattice (unit cell). Contains other data, e.g.
-        the crystal's name and information about the asymmetric unit.
+        Represents the crystal as a periodic set, consisting of a finite
+        set of points (motif) and lattice (unit cell). Contains other
+        data, e.g. the crystal's name and information about the
+        asymmetric unit.
 
     Examples
     --------
@@ -228,19 +236,19 @@ class CifReader(_Reader):
         if reader != 'ccdc':
 
             if heaviest_component:
-                msg = 'Parameter heaviest_component ' \
-                      'only implemented for reader="ccdc".'
+                msg = 'Parameter heaviest_component only implemented for ' \
+                      'reader="ccdc".'
                 raise NotImplementedError(msg)
 
             if molecular_centres:
-                msg = 'Parameter molecular_centres ' \
-                      'only implemented for reader="ccdc".'
+                msg = 'Parameter molecular_centres only implemented for ' \
+                      'reader="ccdc".'
                 raise NotImplementedError(msg)
 
         if reader in ('ase', 'pycodcif'):
 
             extensions = {'cif'}
-            file_parser = functools.partial(ase.io.cif.parse_cif, reader=reader)
+            file_parser = functools.partial(ase_parse_cif, reader=reader)
             self._converter = functools.partial(
                 periodicset_from_ase_cifblock,
                 remove_hydrogens=self.remove_hydrogens,
@@ -259,7 +267,7 @@ class CifReader(_Reader):
 
         elif reader == 'gemmi':
 
-            import gemmi.cif
+            import gemmi
 
             extensions = {'cif'}
             file_parser = gemmi.cif.read_file
@@ -274,8 +282,8 @@ class CifReader(_Reader):
             try:
                 import ccdc.io
             except (ImportError, RuntimeError) as e:
-                msg = 'Failed to import csd-python-api, please' \
-                      'check it is installed and licensed.'
+                msg = 'Failed to import csd-python-api, please check it is' \
+                      'installed and licensed.'
                 raise ImportError(msg) from e
 
             extensions = ccdc.io.EntryReader.known_suffixes
@@ -292,12 +300,14 @@ class CifReader(_Reader):
             raise ValueError(f'Unknown reader {reader}.')
 
         if os.path.isfile(path):
-            self._backend_generator = iter(file_parser(path))
+            it = file_parser(path)
         elif os.path.isdir(path):
-            self._backend_generator = iter(CifReader._generate_from_dir(path, file_parser, extensions))
+            it = CifReader._generate_from_dir(path, file_parser, extensions)
         else:
             raise FileNotFoundError(f'No such file or directory: {path}')
 
+        self._backend_iterator = iter(it)
+        
     @staticmethod
     def _generate_from_dir(path, file_parser, extensions):
         for file in os.listdir(path):
@@ -319,8 +329,8 @@ class CSDReader(_Reader):
     Parameters
     ----------
     refcodes : str or List[str], optional
-        Single or list of CSD refcodes to read. If None or 'CSD', iterates
-        over the whole CSD.
+        Single or list of CSD refcodes to read. If None or 'CSD',
+        iterates over the whole CSD.
     families : bool, optional
         Read all entries whose refcode starts with the given strings, or
         'families' (e.g. giving 'DEBXIT' reads all entries starting with
@@ -328,14 +338,15 @@ class CSDReader(_Reader):
     remove_hydrogens : bool, optional
         Remove hydrogens from the crystal.
     disorder : str, optional
-        Controls how disordered structures are handled. Default is ``skip``
-        which skips any crystal with disorder, since disorder conflicts with
-        the periodic set model. To read disordered structures anyway, choose
-        either :code:`ordered_sites` to remove atoms with disorder or
-        :code:`all_sites` include all atoms regardless of disorder.
+        Controls how disordered structures are handled. Default is
+        ``skip`` which skips any crystal with disorder, since disorder
+        conflicts with the periodic set model. To read disordered
+        structures anyway, choose either :code:`ordered_sites` to remove
+        atoms with disorder or :code:`all_sites` include all atoms
+        regardless of disorder.
     heaviest_component : bool, optional
-        Removes all but the heaviest molecule in the asymmeric unit, intended
-        for removing solvents.
+        Removes all but the heaviest molecule in the asymmeric unit,
+        intended for removing solvents.
     molecular_centres : bool, default False
         Extract the centres of molecules in the unit cell and store in
         attribute molecular_centres.
@@ -345,10 +356,10 @@ class CSDReader(_Reader):
     Yields
     ------
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
-        Represents the crystal as a periodic set, consisting of a finite set
-        of points (motif) and lattice (unit cell). Contains other useful data,
-        e.g. the crystal's name and information about the asymmetric unit for
-        calculation.
+        Represents the crystal as a periodic set, consisting of a finite
+        set of points (motif) and lattice (unit cell). Contains other
+        useful data, e.g. the crystal's name and information about the
+        asymmetric unit for calculation.
 
     Examples
     --------
@@ -396,8 +407,8 @@ class CSDReader(_Reader):
         try:
             import ccdc.io
         except (ImportError, RuntimeError) as _:
-            msg = 'Failed to import csd-python-api, please' \
-                  'check it is installed and licensed.'
+            msg = 'Failed to import csd-python-api, please check it is ' \
+                  'installed and licensed.'
             raise ImportError(msg)
 
         if isinstance(refcodes, str) and refcodes.lower() == 'csd':
@@ -414,7 +425,6 @@ class CSDReader(_Reader):
         if families:
             refcodes = _refcodes_from_families(refcodes)
 
-        # self._entry_reader = ccdc.io.EntryReader('CSD')
         entry_reader = ccdc.io.EntryReader('CSD')
         self._converter = functools.partial(
             periodicset_from_ccdc_entry,
@@ -423,11 +433,13 @@ class CSDReader(_Reader):
             molecular_centres=self.molecular_centres,
             heaviest_component=self.heaviest_component
         )
-        self._backend_generator = iter(self._ccdc_generator(refcodes, entry_reader))
+        it = self._ccdc_generator(refcodes, entry_reader)
+        self._backend_iterator = iter(it)
 
     @staticmethod
     def _ccdc_generator(refcodes, entry_reader):
-        """Generates ccdc Entries from CSD refcodes."""
+        """Generates ccdc Entries from CSD refcodes.
+        """
 
         if refcodes is None:
             for entry in entry_reader:
@@ -442,7 +454,8 @@ class CSDReader(_Reader):
 
 
 class ParseError(ValueError):
-    """Raised when an item cannot be parsed into a periodic set."""
+    """Raised when an item cannot be parsed into a periodic set.
+    """
     pass
 
 
@@ -451,39 +464,42 @@ def periodicset_from_ase_cifblock(
         remove_hydrogens=False,
         disorder='skip'
 ) -> PeriodicSet:
-    """:class:`ase.io.cif.CIFBlock` --> :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
-    CIFBlock is the type returned by :class:`ase.io.cif.parse_cif`.
+    """:class:`ase.io.cif.CIFBlock` --> 
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
+    :class:`ase.io.cif.CIFBlock` is the type returned by
+    :class:`ase.io.cif.parse_cif`.
 
     Parameters
     ----------
     block : :class:`ase.io.cif.CIFBlock`
-        An ase CIFBlock object representing a crystal.
+        An ase :class:`ase.io.cif.CIFBlock` object representing a
+        crystal.
     remove_hydrogens : bool, optional
         Remove Hydrogens from the crystal.
     disorder : str, optional
-        Controls how disordered structures are handled. Default is ``skip``
-        which raises a ParseError if the input has any disorder, since
-        disorder conflicts with the periodic set model. To read disordered
-        structures anyway, choose either :code:`ordered_sites` to remove sites
-        with disorder or :code:`all_sites` include all sites regardless.
+        Controls how disordered structures are handled. Default is
+        ``skip`` which skips any crystal with disorder, since disorder
+        conflicts with the periodic set model. To read disordered
+        structures anyway, choose either :code:`ordered_sites` to remove
+        atoms with disorder or :code:`all_sites` include all atoms
+        regardless of disorder.
 
     Returns
     -------
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
-        Represents the crystal as a periodic set, consisting of a finite set
-        of points (motif) and lattice (unit cell). Contains other useful data,
-        e.g. the crystal's name and information about the asymmetric unit for
-        calculation.
+        Represents the crystal as a periodic set, consisting of a finite
+        set of points (motif) and lattice (unit cell). Contains other
+        useful data, e.g. the crystal's name and information about the
+        asymmetric unit for calculation.
 
     Raises
     ------
     ParseError
-        Raised if the structure fails to be parsed for any of the following:
-        1. Required data is missing (e.g. cell parameters),
-        2. disorder == 'skip' and any of:
-            (a) any atom has occupancy < 1,
-            (b) any atom's label ends with '?',
-        3. The motif is empty after removing H or disordered sites.
+        Raised if the structure fails to be parsed for any of the
+        following: 1. Required data is missing (e.g. cell parameters),
+        2. The motif is empty after removing H or disordered sites,
+        3. :code:``disorder == 'skip'`` and disorder is found on any
+        atom.
     """
 
     # unit cell
@@ -495,13 +511,11 @@ def periodicset_from_ase_cifblock(
     # asymmetric unit coords. ase removes uncertainty brackets.
     cartesian = False # flag needed for later
     asym_unit = [block.get(name) for name in CIF_TAGS['atom_site_fract']]
-
     if None in asym_unit: # missing scaled coords, try cartesian
         asym_unit = [block.get(name) for name in CIF_TAGS['atom_site_cartn']]
         if None in asym_unit:
             raise ParseError(f'{block.name} has no coordinates')
         cartesian = True
-
     asym_unit = list(zip(*asym_unit)) # transpose [xs,ys,zs] -> [p1,p2,...]
 
     # atomic types
@@ -519,10 +533,10 @@ def periodicset_from_ase_cifblock(
                 sym = re.search(r'([A-Z][a-z]?)', label).group(0)
                 if sym == 'D':
                     sym = 'H'
-                num = ase.data.atomic_numbers[sym]
+                num = ase_atomic_numbers[sym]
             asym_types.append(num)
 
-    # find if sites have disorder or not (if necassary)
+    # find if sites have disorder if necassary
     has_disorder = []
     if disorder != 'all_sites':
         occupancies = block.get('_atom_site_occupancy')
@@ -534,16 +548,15 @@ def periodicset_from_ase_cifblock(
         for lab, occ in zip(labels, occupancies):
             has_disorder.append(_atom_has_disorder(lab, occ))
 
-    # remove sites with ?, . or other string
+    # remove sites with ?, . or other invalid string
     invalid_coords = []
     for i, xyz in enumerate(asym_unit):
         if not all(isinstance(coord, (int, float)) for coord in xyz):
             invalid_coords.append(i)
-
     if invalid_coords:
         warnings.warn('atoms without sites or missing data will be removed')
         asym_unit = [xyz for i, xyz in enumerate(asym_unit) if i not in invalid_coords]
-        asym_types = [xyz for i, xyz in enumerate(asym_types) if i not in invalid_coords]
+        asym_types = [t for i, t in enumerate(asym_types) if i not in invalid_coords]
         if disorder != 'all_sites':
             has_disorder = [d for i, d in enumerate(has_disorder) if i not in invalid_coords]
 
@@ -558,19 +571,20 @@ def periodicset_from_ase_cifblock(
                 continue
             if dis:
                 if disorder == 'skip':
-                    msg = f"{block.name} has disorder, pass disorder='ordered_sites' " \
-                            "or 'all_sites' to remove/ignore disorder"
+                    msg = f"{block.name} has disorder, pass " \
+                           "disorder='ordered_sites'or 'all_sites' to " \
+                           "remove/ignore disorder"
                     raise ParseError(msg)
                 elif disorder == 'ordered_sites':
                     remove_sites.append(i)
 
     asym_unit = [xyz for i, xyz in enumerate(asym_unit) if i not in remove_sites]
     asym_types = [t for i, t in enumerate(asym_types) if i not in remove_sites]
+    if len(asym_unit) == 0:
+        raise ParseError(f'{block.name} has no valid sites')
     asym_unit = np.array(asym_unit)
 
-    if asym_unit.shape[0] == 0:
-        raise ParseError(f'{block.name} has no valid sites')
-
+    # if Cartesian coords were given, convert to scaled
     if cartesian:
         asym_unit = asym_unit @ np.linalg.inv(cell)
     asym_unit = np.mod(asym_unit, 1)
@@ -580,7 +594,8 @@ def periodicset_from_ase_cifblock(
     if disorder != 'all_sites':
         keep_sites = _unique_sites(asym_unit)
         if not np.all(keep_sites):
-            warnings.warn('may have overlapping sites, duplicates will be removed')
+            msg = 'may have overlapping sites, duplicates will be removed'
+            warnings.warn(msg)
             asym_unit = asym_unit[keep_sites]
             asym_types = [t for t, keep in zip(asym_types, keep_sites) if keep]
 
@@ -590,14 +605,14 @@ def periodicset_from_ase_cifblock(
         try:
             spg = block.get_spacegroup(True)
             rot, trans = spg.rotations, spg.translations
-        except: # if none found, assume no symmetries
+        except: # no spacegroup, assume P1
             rot, trans = ase_parse_sitesym(['x,y,z'])
     else:
         if isinstance(sitesym, str):
             sitesym = [sitesym]
         rot, trans = ase_parse_sitesym(sitesym)
 
-    # apply symmetries to asymmetric unit for full motif
+    # apply symmetries to asymmetric unit
     frac_motif, asym_inds, wyc_muls, inverses = _expand_asym_unit(asym_unit, rot, trans)
     types = np.array([asym_types[i] for i in inverses])
     motif = frac_motif @ cell
@@ -616,23 +631,24 @@ def periodicset_from_ase_atoms(
         atoms,
         remove_hydrogens=False
 ) -> PeriodicSet:
-    """:class:`ase.atoms.Atoms` --> :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
-    Does not have the option to remove disorder.
+    """:class:`ase.atoms.Atoms` -->
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`. Does not have
+    the option to remove disorder.
 
     Parameters
     ----------
     atoms : :class:`ase.atoms.Atoms`
-        An ase Atoms object representing a crystal.
+        An ase :class:`ase.atoms.Atoms` object representing a crystal.
     remove_hydrogens : bool, optional
         Remove Hydrogens from the crystal.
 
     Returns
     -------
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
-        Represents the crystal as a periodic set, consisting of a finite set
-        of points (motif) and lattice (unit cell). Contains other useful data,
-        e.g. the crystal's name and information about the asymmetric unit for
-        calculation.
+        Represents the crystal as a periodic set, consisting of a finite
+        set of points (motif) and lattice (unit cell). Contains other
+        useful data, e.g. the crystal's name and information about the
+        asymmetric unit for calculation.
 
     Raises
     ------
@@ -660,7 +676,7 @@ def periodicset_from_ase_atoms(
     # else assume no symmetries?
 
     # default tol=1e-5
-    asym_unit = ase.spacegroup.get_basis(atoms, spacegroup=spg, tol=_EQUIV_SITE_TOL)
+    asym_unit = ase_get_basis(atoms, spacegroup=spg, tol=_EQUIV_SITE_TOL)
     frac_motif, asym_inds, wyc_muls, _ = _expand_asym_unit(asym_unit, rot, trans)
     motif = frac_motif @ cell
 
@@ -678,7 +694,8 @@ def periodicset_from_pymatgen_cifblock(
         remove_hydrogens=False,
         disorder='skip'
 ) -> PeriodicSet:
-    """:class:`pymatgen.io.cif.CifBlock` --> :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
+    """:class:`pymatgen.io.cif.CifBlock` -->
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
 
     Parameters
     ----------
@@ -687,29 +704,29 @@ def periodicset_from_pymatgen_cifblock(
     remove_hydrogens : bool, optional
         Remove Hydrogens from the crystal.
     disorder : str, optional
-        Controls how disordered structures are handled. Default is ``skip``
-        which raises a ParseError if the input has any disorder, since
-        disorder conflicts with the periodic set model. To read disordered
-        structures anyway, choose either :code:`ordered_sites` to remove sites
-        with disorder or :code:`all_sites` include all sites regardless.
+        Controls how disordered structures are handled. Default is
+        ``skip`` which skips any crystal with disorder, since disorder
+        conflicts with the periodic set model. To read disordered
+        structures anyway, choose either :code:`ordered_sites` to remove
+        atoms with disorder or :code:`all_sites` include all atoms
+        regardless of disorder.
 
     Returns
     -------
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
-        Represents the crystal as a periodic set, consisting of a finite set
-        of points (motif) and lattice (unit cell). Contains other useful data,
-        e.g. the crystal's name and information about the asymmetric unit for
-        calculation.
+        Represents the crystal as a periodic set, consisting of a finite
+        set of points (motif) and lattice (unit cell). Contains other
+        useful data, e.g. the crystal's name and information about the
+        asymmetric unit for calculation.
 
     Raises
     ------
     ParseError
-        Raised if the structure can/should not be parsed for the following reasons:
-        1. no sites found or motif is empty after removing H or disordered sites,
-        2. a site has missing coordinates,
-        3. disorder == 'skip' and any of:
-            (a) any atom has occupancy < 1,
-            (b) any atom's label ends with '?'.
+        Raised if the structure can/should not be parsed for the
+        following reasons: 1. No sites found or motif is empty after
+        removing Hydrogens & disorder, 2. A site has missing
+        coordinates, 3. :code:``disorder == 'skip'`` and disorder is
+        found on any atom.
     """
 
     odict = block.data
@@ -718,7 +735,7 @@ def periodicset_from_pymatgen_cifblock(
     cellpar = [odict.get(tag) for tag in CIF_TAGS['cellpar']]
     if None in cellpar:
         raise ParseError(f'{block.header} has missing cell data')
-    cellpar = [ase.io.cif.convert_value(v) for v in cellpar]
+    cellpar = [ase_convert_value(v) for v in cellpar]
     cell = cellpar_to_cell(*cellpar)
 
     # asymmetric unit coords
@@ -733,7 +750,8 @@ def periodicset_from_pymatgen_cifblock(
 
     asym_unit = list(zip(*asym_unit)) # transpose [xs,ys,zs] -> [p1,p2,...]
     # pymatgen does not remove uncertainty brackets
-    asym_unit = [[ase.io.cif.convert_value(coord) for coord in xyz] for xyz in asym_unit]
+    asym_unit = [[ase_convert_value(coord) for coord in xyz] 
+                 for xyz in asym_unit]
 
     # atomic types
     for tag in CIF_TAGS['atom_symbol']:
@@ -749,7 +767,7 @@ def periodicset_from_pymatgen_cifblock(
                     if sym == 'D':
                         sym = 'H'
                     # could use pymatgen here
-                    num = ase.data.atomic_numbers[sym]
+                    num = ase_atomic_numbers[sym]
                 asym_types.append(num)
             break
     else:
@@ -791,8 +809,9 @@ def periodicset_from_pymatgen_cifblock(
                 continue
             if dis:
                 if disorder == 'skip':
-                    msg = f"{block.header} has disorder, pass disorder='ordered_sites' " \
-                            "or 'all_sites' to remove/ignore disorder"
+                    msg = f"{block.header} has disorder, pass " \
+                            "disorder='ordered_sites' or 'all_sites' to " \
+                            "remove/ignore disorder"
                     raise ParseError(msg)
                 elif disorder == 'ordered_sites':
                     remove_sites.append(i)
@@ -813,7 +832,8 @@ def periodicset_from_pymatgen_cifblock(
     if disorder != 'all_sites':      
         keep_sites = _unique_sites(asym_unit)
         if not np.all(keep_sites):
-            warnings.warn('may have overlapping sites; duplicates will be removed')
+            msg = 'may have overlapping sites; duplicates will be removed'
+            warnings.warn(msg)
         asym_unit = asym_unit[keep_sites]
         asym_types = [sym for sym, keep in zip(asym_types, keep_sites) if keep]
 
@@ -837,9 +857,10 @@ def periodicset_from_pymatgen_structure(
         remove_hydrogens=False,
         disorder='skip'
 ) -> PeriodicSet:
-    """:class:`pymatgen.core.structure.Structure` --> :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
-    Does not set the name of the periodic set, as there seems to be no such attribute in
-    the pymatgen Structure object.
+    """:class:`pymatgen.core.structure.Structure` -->
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
+    Does not set the name of the periodic set, as there seems to be no
+    name attribute in the pymatgen Structure object.
 
     Parameters
     ----------
@@ -848,24 +869,26 @@ def periodicset_from_pymatgen_structure(
     remove_hydrogens : bool, optional
         Remove Hydrogens from the crystal.
     disorder : str, optional
-        Controls how disordered structures are handled. Default is ``skip``
-        which raises a ParseError if the input has any disorder, since
-        disorder conflicts with the periodic set model. To read disordered
-        structures anyway, choose either :code:`ordered_sites` to remove sites
-        with disorder or :code:`all_sites` include all sites regardless.
+        Controls how disordered structures are handled. Default is
+        ``skip`` which skips any crystal with disorder, since disorder
+        conflicts with the periodic set model. To read disordered
+        structures anyway, choose either :code:`ordered_sites` to remove
+        atoms with disorder or :code:`all_sites` include all atoms
+        regardless of disorder.
 
     Returns
     -------
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
-        Represents the crystal as a periodic set, consisting of a finite set
-        of points (motif) and lattice (unit cell). Contains other useful data,
-        e.g. the crystal's name and information about the asymmetric unit for
-        calculation.
+        Represents the crystal as a periodic set, consisting of a finite
+        set of points (motif) and lattice (unit cell). Contains other
+        useful data, e.g. the crystal's name and information about the
+        asymmetric unit for calculation.
     
     Raises
     ------
-    ParseError :
-        Raised if the disorder == 'skip' and not structure.is_ordered
+    ParseError
+        Raised if the :code:`disorder == 'skip'` and 
+        :code:`not structure.is_ordered`
     """
 
     from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
@@ -875,8 +898,9 @@ def periodicset_from_pymatgen_structure(
 
     if disorder == 'skip':
         if not structure.is_ordered:
-            msg = f"pymatgen Structure has disorder, pass disorder='ordered_sites' " \
-                   "or 'all_sites' to remove/ignore disorder"
+            msg = f"pymatgen Structure has disorder, pass " \
+                   "disorder='ordered_sites' or 'all_sites' to " \
+                   "remove/ignore disorder"
             raise ParseError(msg)
     elif disorder == 'ordered_sites':
         remove_inds = []
@@ -888,9 +912,8 @@ def periodicset_from_pymatgen_structure(
     motif = structure.cart_coords
     cell = structure.lattice.matrix
     sym_structure = SpacegroupAnalyzer(structure).get_symmetrized_structure()
-    equiv_inds = sym_structure.equivalent_indices
-    asym_unit = np.array([l[0] for l in equiv_inds])
-    wyc_muls = np.array([len(l) for l in equiv_inds])
+    asym_unit = np.array([l[0] for l in sym_structure.equivalent_indices])
+    wyc_muls = np.array([len(l) for l in sym_structure.equivalent_indices])
     types = np.array(sym_structure.atomic_numbers)
 
     return PeriodicSet(
@@ -909,7 +932,8 @@ def periodicset_from_ccdc_entry(
         heaviest_component=False,
         molecular_centres=False
 ) -> PeriodicSet:
-    """:class:`ccdc.entry.Entry` --> :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
+    """:class:`ccdc.entry.Entry` -->
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
     Entry is the type returned by :class:`ccdc.io.EntryReader`.
 
     Parameters
@@ -919,14 +943,15 @@ def periodicset_from_ccdc_entry(
     remove_hydrogens : bool, optional
         Remove Hydrogens from the crystal.
     disorder : str, optional
-        Controls how disordered structures are handled. Default is ``skip``
-        which raises a ParseError if the input has any disorder, since
-        disorder conflicts with the periodic set model. To read disordered
-        structures anyway, choose either :code:`ordered_sites` to remove sites
-        with disorder or :code:`all_sites` include all sites regardless.
+        Controls how disordered structures are handled. Default is
+        ``skip`` which skips any crystal with disorder, since disorder
+        conflicts with the periodic set model. To read disordered
+        structures anyway, choose either :code:`ordered_sites` to remove
+        atoms with disorder or :code:`all_sites` include all atoms
+        regardless of disorder.
     heaviest_component : bool, optional
-        Removes all but the heaviest molecule in the asymmeric unit, intended
-        for removing solvents.
+        Removes all but the heaviest molecule in the asymmeric unit,
+        intended for removing solvents.
     molecular_centres : bool, default False
         Extract the centres of molecules in the unit cell and store in
         the attribute molecular_centres of the returned PeriodicSet.
@@ -934,23 +959,21 @@ def periodicset_from_ccdc_entry(
     Returns
     -------
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
-        Represents the crystal as a periodic set, consisting of a finite set
-        of points (motif) and lattice (unit cell). Contains other useful data,
-        e.g. the crystal's name and information about the asymmetric unit for
-        calculation.
+        Represents the crystal as a periodic set, consisting of a finite
+        set of points (motif) and lattice (unit cell). Contains other
+        useful data, e.g. the crystal's name and information about the
+        asymmetric unit for calculation.
 
     Raises
     ------
     ParseError
         Raised if the structure fails parsing for any of the following:
-        1. entry.has_3d_structure is False,
-        2. disorder == 'skip' and any of:
-            (a) entry.has_disorder or crystal.has_disorder is True,
-            (b) any atom has occupancy < 1,
-            (c) any atom's label ends with '?',
+        1. entry.has_3d_structure is False, 2.
+        :code:``disorder == 'skip'`` and disorder is found on any atom,
         3. entry.crystal.molecule.all_atoms_have_sites is False,
-        4. a.fractional_coordinates is None for any a in entry.crystal.disordered_molecule,
-        5. The motif is empty after removing H, disordered sites or solvents.
+        4. a.fractional_coordinates is None for any a in
+        entry.crystal.disordered_molecule, 5. The motif is empty after
+        removing Hydrogens and disordered sites.
     """
 
     # Entry specific flags
@@ -958,8 +981,9 @@ def periodicset_from_ccdc_entry(
         raise ParseError(f'{entry.identifier} has no 3D structure')
 
     if disorder == 'skip' and entry.has_disorder:
-        msg = f"{entry.identifier} has disorder, pass disorder='ordered_sites' " \
-                "or 'all_sites' to remove/ignore disorder"
+        msg = f"{entry.identifier} has disorder, pass " \
+                "disorder='ordered_sites' or 'all_sites' to remove/ignore" \
+                "disorder"
         raise ParseError(msg)
 
     return periodicset_from_ccdc_crystal(
@@ -978,7 +1002,8 @@ def periodicset_from_ccdc_crystal(
         heaviest_component=False,
         molecular_centres=False
 ) -> PeriodicSet:
-    """:class:`ccdc.crystal.Crystal` --> :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
+    """:class:`ccdc.crystal.Crystal` -->
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
     Crystal is the type returned by :class:`ccdc.io.CrystalReader`.
 
     Parameters
@@ -988,11 +1013,12 @@ def periodicset_from_ccdc_crystal(
     remove_hydrogens : bool, optional
         Remove Hydrogens from the crystal.
     disorder : str, optional
-        Controls how disordered structures are handled. Default is ``skip``
-        which raises a ParseError if the input has any disorder, since
-        disorder conflicts with the periodic set model. To read disordered
-        structures anyway, choose either :code:`ordered_sites` to remove sites
-        with disorder or :code:`all_sites` include all sites regardless.
+        Controls how disordered structures are handled. Default is
+        ``skip`` which skips any crystal with disorder, since disorder
+        conflicts with the periodic set model. To read disordered
+        structures anyway, choose either :code:`ordered_sites` to remove
+        atoms with disorder or :code:`all_sites` include all atoms
+        regardless of disorder.
     heaviest_component : bool, optional
         Removes all but the heaviest molecule in the asymmeric unit,
         intended for removing solvents.
@@ -1003,22 +1029,20 @@ def periodicset_from_ccdc_crystal(
     Returns
     -------
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
-        Represents the crystal as a periodic set, consisting of a finite set
-        of points (motif) and lattice (unit cell). Contains other useful data,
-        e.g. the crystal's name and information about the asymmetric unit for
-        calculation.
+        Represents the crystal as a periodic set, consisting of a finite
+        set of points (motif) and lattice (unit cell). Contains other
+        useful data, e.g. the crystal's name and information about the
+        asymmetric unit for calculation.
 
     Raises
     ------
     ParseError
         Raised if the structure fails parsing for any of the following:
-        1. disorder == 'skip' and any of:
-            (a) crystal.has_disorder is True,
-            (b) any atom has occupancy < 1,
-            (c) any atom's label ends with '?',
-        2. crystal.molecule.all_atoms_have_sites is False,
-        3. a.fractional_coordinates is None for any a in crystal.disordered_molecule,
-        4. The motif is empty after removing H, disordered sites or solvents.
+        1. :code:``disorder == 'skip'`` and disorder is found on any
+        atom, 2. crystal.molecule.all_atoms_have_sites is False,
+        3. a.fractional_coordinates is None for any a in
+        crystal.disordered_molecule, 4. The motif is empty after
+        removing H, disordered sites or solvents.
     """
 
     molecule = crystal.disordered_molecule
@@ -1027,8 +1051,9 @@ def periodicset_from_ccdc_crystal(
     if disorder == 'skip':
         if crystal.has_disorder or \
          any(_atom_has_disorder(a.label, a.occupancy) for a in molecule.atoms):
-            msg = f"{crystal.identifier} has disorder, pass disorder='ordered_sites' " \
-                   "or 'all_sites' to remove/ignore disorder"
+            msg = f"{crystal.identifier} has disorder, pass " \
+                   "disorder='ordered_sites' or 'all_sites' to remove/ignore" \
+                   "disorder"
             raise ParseError(msg)
 
     elif disorder == 'ordered_sites':
@@ -1036,7 +1061,9 @@ def periodicset_from_ccdc_crystal(
                               if _atom_has_disorder(a.label, a.occupancy))
 
     if remove_hydrogens:
-        molecule.remove_atoms(a for a in molecule.atoms if a.atomic_symbol in 'HD')
+        molecule.remove_atoms(
+            a for a in molecule.atoms if a.atomic_symbol in 'HD'
+        )
 
     if heaviest_component and len(molecule.components) > 1:
         molecule = _heaviest_component(molecule)
@@ -1045,7 +1072,9 @@ def periodicset_from_ccdc_crystal(
     is_missing = (a.fractional_coordinates is None for a in molecule.atoms)
     if any(is_missing):
         warnings.warn('atoms without sites or missing data will be removed')
-        molecule.remove_atoms(a for a, missing in zip(molecule.atoms, is_missing) if missing)
+        molecule.remove_atoms(
+            a for a, missing in zip(molecule.atoms, is_missing) if missing
+        )
 
     if not molecule.all_atoms_have_sites:
         raise ParseError(f'{crystal.identifier} has atoms without sites')
@@ -1072,7 +1101,8 @@ def periodicset_from_ccdc_crystal(
     if disorder != 'all_sites':
         keep_sites = _unique_sites(asym_unit)
         if not np.all(keep_sites):
-            warnings.warn('may have overlapping sites; duplicates will be removed')
+            msg = 'may have overlapping sites; duplicates will be removed'
+            warnings.warn(msg)
         asym_unit = asym_unit[keep_sites]
         asym_types = [sym for sym, keep in zip(asym_types, keep_sites) if keep]
 
@@ -1104,7 +1134,8 @@ def periodicset_from_gemmi_block(
         remove_hydrogens=False,
         disorder='skip'
 ) -> PeriodicSet:
-    """:class:`gemmi.cif.Block` --> :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
+    """:class:`gemmi.cif.Block` -->
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
     Block is the type returned by :class:`gemmi.cif.read_file`.
 
     Parameters
@@ -1114,32 +1145,32 @@ def periodicset_from_gemmi_block(
     remove_hydrogens : bool, optional
         Remove Hydrogens from the crystal.
     disorder : str, optional
-        Controls how disordered structures are handled. Default is ``skip``
-        which raises a ParseError if the input has any disorder, since
-        disorder conflicts with the periodic set model. To read disordered
-        structures anyway, choose either :code:`ordered_sites` to remove sites
-        with disorder or :code:`all_sites` include all sites regardless.
+        Controls how disordered structures are handled. Default is
+        ``skip`` which skips any crystal with disorder, since disorder
+        conflicts with the periodic set model. To read disordered
+        structures anyway, choose either :code:`ordered_sites` to remove
+        atoms with disorder or :code:`all_sites` include all atoms
+        regardless of disorder.
 
     Returns
     -------
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
-        Represents the crystal as a periodic set, consisting of a finite set
-        of points (motif) and lattice (unit cell). Contains other useful data,
-        e.g. the crystal's name and information about the asymmetric unit for
-        calculation.
+        Represents the crystal as a periodic set, consisting of a finite
+        set of points (motif) and lattice (unit cell). Contains other
+        useful data, e.g. the crystal's name and information about the
+        asymmetric unit for calculation.
 
     Raises
     ------
     ParseError
-        Raised if the structure fails to be parsed for any of the following:
-        1. Required data is missing (e.g. cell parameters),
-        2. disorder == 'skip' and any of:
-            (a) any atom has occupancy < 1,
-            (b) any atom's label ends with '?',
-        3. The motif is empty after removing H or disordered sites.
+        Raised if the structure fails to be parsed for any of the
+        following: 1. Required data is missing (e.g. cell parameters),
+        2. :code:``disorder == 'skip'`` and disorder is found on any
+        atom, 3. The motif is empty after removing H or disordered
+        sites.
     """
 
-    cellpar = [ase.io.cif.convert_value(block.find_value(tag))
+    cellpar = [ase_convert_value(block.find_value(tag))
                for tag in CIF_TAGS['cellpar']]
     if None in cellpar:
         raise ParseError(f'{block.name} has missing cell information')
@@ -1155,14 +1186,14 @@ def periodicset_from_gemmi_block(
 
     loop_dict = _gemmi_loop_to_dict(xyz_loop)
     xyz_str = [loop_dict[t] for t in CIF_TAGS['atom_site_fract']]
-    asym_unit = [[ase.io.cif.convert_value(c) for c in coords] for coords in xyz_str]
+    asym_unit = [[ase_convert_value(c) for c in coords] for coords in xyz_str]
 
     asym_unit = np.mod(np.array(asym_unit).T, 1)
     # asym_unit = _snap_small_prec_coords(asym_unit)
 
     if '_atom_site_type_symbol' in loop_dict:
         asym_syms = loop_dict['_atom_site_type_symbol']
-        asym_types = [ase.data.atomic_numbers[s] for s in asym_syms]
+        asym_types = [ase_atomic_numbers[s] for s in asym_syms]
     else:
         warnings.warn('missing atomic types')
         asym_types = [0 for _ in range(len(asym_unit))]
@@ -1177,15 +1208,16 @@ def periodicset_from_gemmi_block(
 
     # if occupancies exist, check them for disorder
     if '_atom_site_occupancy' in loop_dict:
-        occupancies = [ase.io.cif.convert_value(occ)
+        occupancies = [ase_convert_value(occ)
                        for occ in loop_dict['_atom_site_occupancy']]
     else:
         occupancies = [None for _ in range(xyz_loop.length())]
 
     if disorder == 'skip':
         if any(_atom_has_disorder(lab, occ) for lab, occ in zip(labels, occupancies)):
-            msg = f"{block.name} has disorder, pass disorder='ordered_sites' " \
-                "or 'all_sites' to remove/ignore disorder"
+            msg = f"{block.name} has disorder, pass " \
+                   "disorder='ordered_sites' or 'all_sites' to " \
+                   "remove/ignore disorder"
             raise ParseError(msg)
     elif disorder == 'ordered_sites':
         for i, (lab, occ) in enumerate(zip(labels, occupancies)):
@@ -1193,7 +1225,9 @@ def periodicset_from_gemmi_block(
                 remove_sites.append(i)
 
     if remove_hydrogens:
-        remove_sites.extend((i for i, num in enumerate(asym_types) if num == 1))
+        remove_sites.extend(
+            i for i, num in enumerate(asym_types) if num == 1
+        )
 
     asym_unit = np.delete(asym_unit, remove_sites, axis=0)
     asym_types = [s for i, s in enumerate(asym_types) if i not in remove_sites]
@@ -1201,7 +1235,8 @@ def periodicset_from_gemmi_block(
     if disorder != 'all_sites':
         keep_sites = _unique_sites(asym_unit)
         if not np.all(keep_sites):
-            warnings.warn('may have overlapping sites; duplicates will be removed')
+            msg = 'may have overlapping sites; duplicates will be removed'
+            warnings.warn(msg)
         asym_unit = asym_unit[keep_sites]
         asym_types = [sym for sym, keep in zip(asym_types, keep_sites) if keep]
 
@@ -1243,7 +1278,8 @@ def _expand_asym_unit(
     """
     Asymmetric unit frac coords, list of rotations, list of translations
     -->
-    full fractional motif, asymmetric unit indices, multiplicities, inverses.
+    full fractional motif, asymmetric unit indices, multiplicities,
+    inverses.
     """
 
     all_sites = []
@@ -1272,7 +1308,8 @@ def _expand_asym_unit(
             # check if site_ overlaps with existing sites
             diffs1 = np.abs(site_ - all_sites)
             diffs2 = np.abs(diffs1 - 1)
-            mask = np.all((diffs1 <= _EQUIV_SITE_TOL) | (diffs2 <= _EQUIV_SITE_TOL), axis=-1)
+            mask = np.all((diffs1 <= _EQUIV_SITE_TOL) | 
+                          (diffs2 <= _EQUIV_SITE_TOL), axis=-1)
 
             if np.any(mask):
                 where_equal = np.argwhere(mask).flatten()
@@ -1280,7 +1317,9 @@ def _expand_asym_unit(
                     if inverses[ind] == inv: # invariant
                         pass
                     else: # equivalent to a different site
-                        warnings.warn(f'has equivalent sites at positions {inverses[ind]}, {inv}')
+                        msg = f'has equivalent sites at positions' \
+                              f'{inverses[ind]}, {inv}'
+                        warnings.warn(msg)
             else:
                 all_sites.append(site_)
                 inverses.append(inv)
@@ -1299,9 +1338,12 @@ def _expand_asym_unit(
 
 @numba.njit()
 def _unique_sites(asym_unit):
-    """Uniquify (within _EQUIV_SITE_TOL) a list of fractional coordinates,
-    considering all points modulo 1. Returns an array of bools such that
-    asym_unit[_unique_sites(asym_unit)] is a uniquified list."""
+    """Uniquify (within _EQUIV_SITE_TOL) a list of fractional
+    coordinates, considering all points modulo 1. Returns an array of
+    bools such that asym_unit[_unique_sites(asym_unit)] is a uniquified
+    list.
+    """
+
     site_diffs1 = np.abs(np.expand_dims(asym_unit, 1) - asym_unit)
     site_diffs2 = np.abs(site_diffs1 - 1)
     sites_neq_mask = np.logical_and((site_diffs1 > _EQUIV_SITE_TOL),
@@ -1313,7 +1355,8 @@ def _unique_sites(asym_unit):
 def _parse_sitesym_pymatgen(data):
     """In order to generate symmetry equivalent positions, the symmetry
     operations are parsed. If the symops are not present, the space
-    group symbol is parsed, and symops are generated."""
+    group symbol is parsed, and symops are generated.
+    """
 
     from pymatgen.symmetry.groups import SpaceGroup
     from pymatgen.core.operations import SymmOp
@@ -1374,7 +1417,7 @@ def _parse_sitesym_pymatgen(data):
                 continue
 
             try:
-                i = int(ase.io.cif.convert_value(num))
+                i = int(ase_convert_value(num))
                 symops = SpaceGroup.from_int_number(i).symmetry_ops
                 break
             except ValueError:
@@ -1391,7 +1434,8 @@ def _parse_sitesym_pymatgen(data):
 
 def _frac_molecular_centres_ccdc(crystal):
     """Returns any geometric centres of molecules in the unit cell.
-    Expects a ccdc Crystal object and returns fractional coordiantes."""
+    Expects a ccdc Crystal object and returns fractional coordiantes.
+    """
 
     frac_centres = []
     for comp in crystal.packing(inclusion='CentroidIncluded').components:
@@ -1404,21 +1448,27 @@ def _frac_molecular_centres_ccdc(crystal):
 
 
 def _atom_has_disorder(label, occupancy):
-    """Return True if label ends with ? or occupancy is a number < 1."""
+    """Return True if label ends with ? or occupancy is a number < 1.
+    """
     return label.endswith('?') or (np.isscalar(occupancy) and occupancy < 1)
 
 
 # def _snap_small_prec_coords(frac_coords):
-#     """Find where frac_coords is within 1e-4 of 1/3 or 2/3, change to 1/3 and 2/3.
-#     Recommended by pymatgen's CIF parser. May use later."""
+#     """Find where frac_coords is within 1e-4 of 1/3 or 2/3, change to
+#     1/3 and 2/3. Recommended by pymatgen's CIF parser. May use later.
+#     """
+#
 #     frac_coords[np.abs(1 - 3 * frac_coords) < 1e-4] = 1 / 3.
 #     frac_coords[np.abs(1 - 3 * frac_coords / 2) < 1e-4] = 2 / 3.
 #     return frac_coords
 
 
 def _heaviest_component(molecule):
-    """Heaviest component (removes all but the heaviest component of the asym unit).
-    Intended for removing solvents. Probably doesn't play well with disorder"""
+    """Heaviest component (removes all but the heaviest component of the
+    asym unit). Intended for removing solvents. Probably doesn't play
+    well with disorder.
+    """
+
     component_weights = []
     for component in molecule.components:
         weight = 0
@@ -1435,14 +1485,16 @@ def _heaviest_component(molecule):
 
 
 def _refcodes_from_families(refcode_families):
-    """List of strings --> all CSD refcodes starting with any of the strings.
-    Intended to be passed a list of families and return all refcodes in them."""
+    """List of strings --> all CSD refcodes starting with any of the
+    strings. Intended to be passed a list of families and return all
+    refcodes in them.
+    """
 
     try:
         import ccdc.search
     except (ImportError, RuntimeError) as _:
-        msg = 'Failed to import csd-python-api, please'\
-              'check it is installed and licensed.'
+        msg = 'Failed to import csd-python-api, please check it is ' \
+              'installed and licensed.'
         raise ImportError(msg)
 
     all_refcodes = []
@@ -1463,7 +1515,9 @@ def _refcodes_from_families(refcode_families):
 
 
 def _gemmi_loop_to_dict(gemmi_loop):
-    """gemmi Loop object --> dict, tags: values"""
+    """gemmi Loop object --> dict, tags: values
+    """
+
     tablified_loop = [[] for _ in range(len(gemmi_loop.tags))]
     n_cols = gemmi_loop.width()
     for i, item in enumerate(gemmi_loop.values):
