@@ -8,8 +8,8 @@ The *pointwise distance distribution* (PDD) of a crystal is given by :func:`amd.
 It accepts a crystal and an integer k, returning the :math:`\text{PDD}_k` as a 2D
 NumPy array with k + 1 columns, the weights of each row being in the first column.
 
-If you have a .cif file, use :class:`amd.CifReader <amd.amdio.CifReader>` to read the crystals 
-(see :doc:`Reading_cifs`). If csd-python-api is installed, :class:`amd.CSDReader <amd.amdio.CSDReader>`
+If you have a .cif file, use :class:`amd.CifReader <amd.io.CifReader>` to read the crystals 
+(see :doc:`Reading_cifs`). If csd-python-api is installed, :class:`amd.CSDReader <amd.io.CSDReader>`
 accepts CSD refcodes (see :doc:`Reading_from_the_CSD`).
 
 ::

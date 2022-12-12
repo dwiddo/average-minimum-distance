@@ -7,8 +7,8 @@ Calculation
 The *average minimum distance* (AMD) of a crystal is given by :func:`amd.AMD() <amd.calculate.AMD>`. 
 It accepts a crystal and an integer k, returning :math:`\text{AMD}_k` as a 1D NumPy array. 
 
-If you have a .cif file, use :class:`amd.CifReader <amd.amdio.CifReader>` to read the crystals 
-(see :doc:`Reading_cifs`). If csd-python-api is installed, :class:`amd.CSDReader <amd.amdio.CSDReader>`
+If you have a .cif file, use :class:`amd.CifReader <amd.io.CifReader>` to read the crystals 
+(see :doc:`Reading_cifs`). If csd-python-api is installed, :class:`amd.CSDReader <amd.io.CSDReader>`
 accepts CSD refcodes (see :doc:`Reading_from_the_CSD`).
 
 ::

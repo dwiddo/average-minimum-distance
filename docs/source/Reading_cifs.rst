@@ -1,7 +1,7 @@
 Reading cifs
 ============
 
-If you have a .cif file, use :class:`amd.CifReader <amd.amdio.CifReader>` to extract the crystals::
+If you have a .cif file, use :class:`amd.CifReader <amd.io.CifReader>` to extract the crystals::
 
     # create list of crystals in a .cif
     crystals = list(amd.CifReader('file.cif'))
@@ -14,17 +14,17 @@ If you have a .cif file, use :class:`amd.CifReader <amd.amdio.CifReader>` to ext
     for p_set in amd.CifReader('file.cif'):
         amds.append(amd.AMD(p_set, 100))
 
-The :class:`CifReader <amd.amdio.CifReader>` returns :class:`PeriodicSet <amd.periodicset.PeriodicSet>` objects representing the crystals, 
+The :class:`CifReader <amd.io.CifReader>` returns :class:`PeriodicSet <amd.periodicset.PeriodicSet>` objects representing the crystals, 
 which can be passed to :func:`amd.AMD() <amd.calculate.AMD>` or :func:`amd.PDD() <amd.calculate.PDD>` to calculate their invariants. 
 The :class:`PeriodicSet <amd.periodicset.PeriodicSet>` has attributes ``.name``, ``.motif``, ``.cell``, ``.types`` (atomic numbers), 
 as well as ``.asymmetric_unit`` and ``.wyckoff_multiplicities`` for use in calculations.
 
-csd-python-api only: :class:`CifReader <amd.amdio.CifReader>` can accept other file formats when passed ``reader='ccdc'``.
+csd-python-api only: :class:`CifReader <amd.io.CifReader>` can accept other file formats when passed ``reader='ccdc'``.
 
 Reading options
 ---------------
 
-The :class:`CifReader <amd.amdio.CifReader>` accepts the following parameters (many shared by :class:`amd.CSDReader <amd.amdio.CSDReader>`)::
+The :class:`CifReader <amd.io.CifReader>` accepts the following parameters (many shared by :class:`amd.CSDReader <amd.io.CSDReader>`)::
 
     amd.CifReader(
         'file.cif',                  # path to file/folder
@@ -43,4 +43,4 @@ The :class:`CifReader <amd.amdio.CifReader>` accepts the following parameters (m
 * :code:`molecular_centres` (default ``False``, csd-python-api only) uses centres of molecules instead of atoms as the motif of the periodic set.
 * :code:`show_warnings` (default ``True``) chooses whether to print warnings during reading, e.g. from disordered structures or crystals with missing data.
 
-See the references :class:`amd.amdio.CifReader` or :class:`amd.periodicset.PeriodicSet` for more.
+See the references :class:`amd.io.CifReader` or :class:`amd.periodicset.PeriodicSet` for more.

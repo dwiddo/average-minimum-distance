@@ -9,4 +9,3 @@ __pycache__/
 .scrutinizer.yml
 *.so
 *~
-setup.cfg

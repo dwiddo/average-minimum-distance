@@ -83,7 +83,7 @@ functions which compare the invariants. All are listed below.
 Reader options
 ^^^^^^^^^^^^^^
 
-Parameters of :class:`amd.CifReader <amd.amdio.CifReader>` or :class:`amd.CSDReader <amd.amdio.CSDReader>`.
+Parameters of :class:`amd.CifReader <amd.io.CifReader>` or :class:`amd.CSDReader <amd.io.CSDReader>`.
 
 * :code:`reader` (default ``ase``) controls the backend package used to parse the file. To use csd-python-api change to ``ccdc``. The ccdc reader should be able to read any format accepted by :class:`ccdc.io.EntryReader`, though only cifs have been tested.
 * :code:`remove_hydrogens` (default ``False``) removes Hydrogen atoms from the structure.

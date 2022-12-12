@@ -13,7 +13,7 @@ from scipy.spatial.distance import cdist, pdist, squareform
 from joblib import Parallel, delayed
 import tqdm
 
-from .amdio import CifReader, CSDReader
+from .io import CifReader, CSDReader
 from .calculate import AMD, PDD
 from ._emd import network_simplex
 from .periodicset import PeriodicSet
@@ -31,8 +31,8 @@ def compare(
     r"""Given one or two sets of periodic set(s), paths to cif(s) or
     refcode(s), compare them and return a DataFrame of the distance
     matrix. Default is to comapre by AMD with k = 100. Accepts most
-    keyword arguments accepted by :class:`CifReader <.amdio.CifReader>`,
-    :class:`CSDReader <.amdio.CSDReader>` and functions from
+    keyword arguments accepted by :class:`CifReader <.io.CifReader>`,
+    :class:`CSDReader <.io.CSDReader>` and functions from
     :mod:`.compare`, for a full list see the documentation Quick Start
     page. Note that using refcodes requires ``csd-python-api``.
 

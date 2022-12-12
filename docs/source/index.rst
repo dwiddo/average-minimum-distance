@@ -18,7 +18,7 @@
 
    amd.calculate
    amd.compare
-   amd.amdio
+   amd.io
    amd.periodicset
    amd.utils
 

@@ -3,7 +3,7 @@ Reading from the CSD
 
 If csd-python-api is installed, ``amd`` can use it to read crystals directly from the CSD. 
 
-:class:`amd.CSDReader <amd.amdio.CSDReader>` accepts a list of CSD refcode(s) and yields the crystals. 
+:class:`amd.CSDReader <amd.io.CSDReader>` accepts a list of CSD refcode(s) and yields the crystals. 
 If ``None`` or ``'CSD'`` are passed instead of refcodes, it reads the whole CSD::
 
     # Put crystals with these refcodes in a list
@@ -18,7 +18,7 @@ If ``None`` or ``'CSD'`` are passed instead of refcodes, it reads the whole CSD:
     for periodic_set in amd.CSDReader():
         ...
 
-The :class:`CifReader <amd.amdio.CifReader>` returns :class:`PeriodicSet <amd.periodicset.PeriodicSet>` objects representing the crystals, 
+The :class:`CifReader <amd.io.CifReader>` returns :class:`PeriodicSet <amd.periodicset.PeriodicSet>` objects representing the crystals, 
 which can be passed to :func:`amd.AMD() <amd.calculate.AMD>` or :func:`amd.PDD() <amd.calculate.PDD>` to calculate their invariants. 
 The :class:`PeriodicSet <amd.periodicset.PeriodicSet>` has attributes ``.name``, ``.motif``, ``.cell``, ``.types`` (atomic numbers), 
 as well as ``.asymmetric_unit`` and ``.wyckoff_multiplicities`` for use in calculations.
@@ -26,7 +26,7 @@ as well as ``.asymmetric_unit`` and ``.wyckoff_multiplicities`` for use in calcu
 Reading options
 ---------------
 
-The :code:`CSDReader <amd.amdio.CSDReader>` accepts the following parameters (many shared by :class:`CifReader <amd.amdio.CifReader>`)::
+The :code:`CSDReader <amd.io.CSDReader>` accepts the following parameters (many shared by :class:`CifReader <amd.io.CifReader>`)::
 
     amd.CSDReader(
         refcodes=None,              # list of refcodes (or families) or 'CSD' 
@@ -45,4 +45,4 @@ The :code:`CSDReader <amd.amdio.CSDReader>` accepts the following parameters (ma
 * :code:`molecular_centres` (default ``False``) uses centres of molecules instead of atoms as the motif of the periodic set.
 * :code:`show_warnings` (default ``True``) chooses whether to print warnings during reading, e.g. from disordered structures or crystals with missing data.
 
-See the references :class:`amd.amdio.CSDReader` or :class:`amd.periodicset.PeriodicSet` for more.
+See the references :class:`amd.io.CSDReader` or :class:`amd.periodicset.PeriodicSet` for more.

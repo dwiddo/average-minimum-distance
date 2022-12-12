@@ -111,7 +111,7 @@ class _Reader:
 
     def __next__(self):
         """Iterates over self._backend_iterator, passing items through
-        self._converter. Catches :class:`ParseError <.amdio.ParseError>`
+        self._converter. Catches :class:`ParseError <.io.ParseError>`
         and warnings raised in self._converter, optionally printing
         them.
         """

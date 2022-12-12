@@ -2,13 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.5] - 27/11/2022
+## [1.3.5] - 05/12/2022
 
 ### Added
 
 - Removed `_ETA` class and added dependency `tqdm` for progress bars.
 
-- Cleaned up documentation, conformed to PEP8, added pyproject.toml file. `io` module renamed to `amdio` to avoid conflict with the builtin `io` package.
+- Cleaned up documentation, conformed to PEP8, added pyproject.toml file.
 
 ## [1.3.4] - 07/11/2022
 

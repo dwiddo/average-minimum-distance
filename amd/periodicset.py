@@ -3,8 +3,8 @@ set, defined by a motif and unit cell. This models a crystal with a
 point at the center of each atom.
 
 This is the type yielded by the readers 
-:class:`amd.CifReader <.amdio.CifReader>` and 
-:class:`amd.CSDReader <.amdio.CSDReader>`. A :class:`PeriodicSet` can be
+:class:`amd.CifReader <.io.CifReader>` and 
+:class:`amd.CSDReader <.io.CSDReader>`. A :class:`PeriodicSet` can be
 passed as the first argument to :func:`amd.AMD() <.calculate.AMD>` or
 :func:`amd.PDD() <.calculate.PDD>` to calculate its invariants.
 """
@@ -28,7 +28,7 @@ class PeriodicSet:
     according to the basis.
 
     :class:`PeriodicSet` s are returned by the readers in the
-    :mod:`.amdio` module. They can be passed to
+    :mod:`.io` module. They can be passed to
     :func:`amd.AMD() <.calculate.AMD>` or 
     :func:`amd.PDD() <.calculate.PDD>` to calculate the invariants.
 
