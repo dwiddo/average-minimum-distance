@@ -9,8 +9,8 @@ requires-python = ">=3.7"
 license = {file = "LICENSE"}
 dynamic = ["version", "readme", "dependencies"]
 keywords = [
-    "isometry", "invariant", "descriptor", "crystal", "amd", "pdd", "similarity",
-    "average", "minimum", "pointwise", "distance", "cif"
+    "isometry", "invariant", "descriptor", "crystal", "amd", "pdd",
+    "similarity", "average", "minimum", "pointwise", "distance", "cif"
 ]
 authors = [{name = "Daniel Widdowson", email = "D.E.Widdowson@liverpool.ac.uk"}]
 maintainers = [{name = "Daniel Widdowson", email = "D.E.Widdowson@liverpool.ac.uk"}]

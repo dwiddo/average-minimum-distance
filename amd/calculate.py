@@ -13,18 +13,19 @@ from .periodicset import PeriodicSet
 from ._nns import nearest_neighbours, nearest_neighbours_minval
 from .utils import diameter
 
-PeriodicSet_or_Tuple = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
+
+PERIODIC_SET = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
 
 
 def AMD(
-        periodic_set: PeriodicSet_or_Tuple,
+        periodic_set: PERIODIC_SET,
         k: int
 ) -> np.ndarray:
     """The AMD of a periodic set (crystal) up to k.
 
     Parameters
     ----------
-    periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or tuple of :class:`numpy.ndarray` s
+    periodic_set :
         A periodic set represented by a 
         :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or by a
         tuple of :class:`numpy.ndarray` s (motif, cell) with coordinates
@@ -67,7 +68,7 @@ def AMD(
 
 
 def PDD(
-        periodic_set: PeriodicSet_or_Tuple,
+        periodic_set: PERIODIC_SET,
         k: int,
         lexsort: bool = True,
         collapse: bool = True,
@@ -78,7 +79,7 @@ def PDD(
 
     Parameters
     ----------
-    periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or tuple of :class:`numpy.ndarray` s
+    periodic_set :
         A periodic set represented by a
         :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or by a
         tuple of :class:`numpy.ndarray` s (motif, cell) with coordinates
@@ -288,7 +289,7 @@ def PDD_finite(
 
 
 def PDD_reconstructable(
-        periodic_set: PeriodicSet_or_Tuple,
+        periodic_set: PERIODIC_SET,
         lexsort: bool = True
 ) -> np.ndarray:
     """The PDD of a periodic set with `k` (number of columns) large
@@ -296,7 +297,7 @@ def PDD_reconstructable(
 
     Parameters
     ----------
-    periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or tuple of :class:`numpy.ndarray` s
+    periodic_set :
         A periodic set represented by a
         :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or by a
         tuple of :class:`numpy.ndarray` s (motif, cell) with coordinates
@@ -327,7 +328,7 @@ def PDD_reconstructable(
     return pdd
 
 
-def PPC(periodic_set: PeriodicSet_or_Tuple) -> float:
+def PPC(periodic_set: PERIODIC_SET) -> float:
     r"""The point packing coefficient (PPC) of ``periodic_set``.
 
     The PPC is a constant of any periodic set determining the
@@ -348,7 +349,7 @@ def PPC(periodic_set: PeriodicSet_or_Tuple) -> float:
 
     Parameters
     ----------
-    periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or tuple of :class:`numpy.ndarray` s
+    periodic_set :
         A periodic set represented by a
         :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or by a
         tuple of :class:`numpy.ndarray` s (motif, cell) with coordinates
@@ -363,7 +364,7 @@ def PPC(periodic_set: PeriodicSet_or_Tuple) -> float:
     motif, cell, _, _ = _extract_motif_cell(periodic_set)
     m, n = motif.shape
     det = np.linalg.det(cell)
-    t = (n - n % 2) / 2
+    t = int((n - n % 2) / 2)
 
     if n % 2 == 0:
         v = (np.pi ** t) / np.math.factorial(t)
@@ -373,12 +374,12 @@ def PPC(periodic_set: PeriodicSet_or_Tuple) -> float:
     return (det / (m * v)) ** (1. / n)
 
 
-def AMD_estimate(periodic_set: PeriodicSet_or_Tuple, k: int) -> np.ndarray:
+def AMD_estimate(periodic_set: PERIODIC_SET, k: int) -> np.ndarray:
     r"""Calculates an estimate of AMD based on the PPC.
 
     Parameters
     ----------
-    periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or tuple of :class:`numpy.ndarray` s
+    periodic_set :
         A periodic set represented by a
         :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or by a
         tuple of :class:`numpy.ndarray` s (motif, cell) with coordinates
@@ -396,7 +397,7 @@ def AMD_estimate(periodic_set: PeriodicSet_or_Tuple, k: int) -> np.ndarray:
     return PPC((motif, cell)) * np.power(np.arange(1, k + 1), 1. / n)
 
 
-def _extract_motif_cell(pset: PeriodicSet_or_Tuple):
+def _extract_motif_cell(pset: PERIODIC_SET):
     """``pset`` is either a
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or a tuple of
     :class:`numpy.ndarray` s (motif, cell). If possible, extracts the

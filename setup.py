@@ -13,8 +13,8 @@ from setuptools import setup, find_packages
 license = 'Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License'
 
 keywords = (
-    'isometry, invariant, descriptor, crystal, amd, pdd, '
-    'similarity, average, minimum, pointwise, distance, cif'
+    'isometry, invariant, descriptor, crystal, amd, pdd, similarity, '
+    'average, minimum, pointwise, distance, cif'
 )
 
 classifiers = [
@@ -40,6 +40,7 @@ project_urls = {
     'Changelog': 'https://github.com/dwiddo/average-minimum-distance/blob/master/CHANGELOG.md',
 }
 
+# read requirements.txt
 install_requires = [
     'numpy>=1.21',
     'numba>=0.55.2',
@@ -47,6 +48,7 @@ install_requires = [
     'joblib>=1.1.0',
     'pandas>=1.2.5',
     'ase>=3.22.0',
+    'tqdm>=4.1.0',
 ]
 
 extras_require = {

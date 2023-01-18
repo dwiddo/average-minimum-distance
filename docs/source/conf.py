@@ -20,7 +20,7 @@ import mock
 # -- Project information -----------------------------------------------------
 
 project = 'average-minimum-distance'
-copyright = '2022, Daniel Widdowson'
+copyright = '2023, Daniel Widdowson'
 author = 'Daniel Widdowson'
 
 with open(r'../../amd/__init__.py') as f:

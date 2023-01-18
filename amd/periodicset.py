@@ -22,10 +22,10 @@ from .utils import (
 
 
 class PeriodicSet:
-    """A periodic set is the mathematical representation of a crystal by
-    putting a single point in the center of every atom. It is defined by
-    a basis (unit cell) and collection of points (motif) which repeats
-    according to the basis.
+    """A periodic set representats a crystal by putting a point in the
+    center of each atom. Mathematically it's defined by a basis (unit 
+    cell) and collection of points (motif) which repeats according to
+    the basis. Periodic sets are defined for any dimension.
 
     :class:`PeriodicSet` s are returned by the readers in the
     :mod:`.io` module. They can be passed to
@@ -71,12 +71,16 @@ class PeriodicSet:
         self.asymmetric_unit = asymmetric_unit
         self.wyckoff_multiplicities = wyckoff_multiplicities
         self.types = types
-        self.ndim = self.cell.shape[0]
+
+    @property
+    def ndim(self):
+        return self.cell.shape[0]
 
     def __str__(self):
-        return repr(self)
-
-    def __repr__(self):
+        """Returns a string representation of the format
+        PeriodicSet(name, motif (m, d), t asym sites, 
+        abcαβγ=cellpar).
+        """
 
         if self.asymmetric_unit is None:
             n_asym_sites = len(self.motif)
@@ -84,21 +88,27 @@ class PeriodicSet:
             n_asym_sites = len(self.asymmetric_unit)
 
         cellpar_str = None
+        if self.ndim == 1:
+            cellpar_str = f'{self.cell[0][0]}'
         if self.ndim == 2:
             cellpar = np.round(cell_to_cellpar_2D(self.cell), 2)
             cellpar_str = ','.join(str(round(p, 2)) for p in cellpar)
-            cellpar_str = f'abα={cellpar_str}'
+            cellpar_str = f', abα={cellpar_str}'
         elif self.ndim == 3:
             cellpar = np.round(cell_to_cellpar(self.cell), 2)
             cellpar_str = ','.join(str(round(p, 2)) for p in cellpar)
-            cellpar_str = f'abcαβγ={cellpar_str}'
+            cellpar_str = f', abcαβγ={cellpar_str}'
+        else:
+            cellpar_str = f''
 
-        s = f'PeriodicSet(name={self.name}, ' \
-            f'motif {self.motif.shape}, ' \
-            f'{n_asym_sites} asym sites, ' \
+        s = f'PeriodicSet({self.name}, ' \
+            f'motif {self.motif.shape} ({n_asym_sites} asym sites)' \
             f'{cellpar_str})'
 
         return s
+
+    # def __repr__(self):
+    #     pass
 
     # used for debugging, checks if the motif/cell agree point for point.
     def __eq__(self, other):

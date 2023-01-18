@@ -9,43 +9,89 @@ from scipy.spatial.distance import squareform
 
 
 def diameter(cell):
-    """Diameter of a unit cell (as a square matrix in
-    Cartesian/Orthogonal form) in 3 or fewer dimensions.
+    """Diameter of a unit cell (given as a square matrix in orthogonal 
+    coordinates) in 3 or fewer dimensions. The diameter is the maxiumum
+    distance between any two points in the unit cell.
+
+    Parameters
+    ----------
+    cell : :class:`numpy.ndarray`
+        Unit cell represented as a square matrix (in orthogonal
+        coordinates).
+    Returns
+    -------
+    diameter : float
+        Diameter of the unit cell.
     """
 
     dims = cell.shape[0]
     if dims == 1:
         return cell[0][0]
     if dims == 2:
-        diagonals = np.array([cell[0] + cell[1], cell[0] - cell[1]])
-        d = np.amax(np.linalg.norm(diagonals, axis=-1))
+        diagonals = np.array([
+            cell[0] + cell[1], 
+            cell[0] - cell[1]
+        ])
     elif dims == 3:
-        diams = np.array([
+        diagonals = np.array([
             cell[0] + cell[1] + cell[2],
             cell[0] + cell[1] - cell[2],
             cell[0] - cell[1] + cell[2],
             - cell[0] + cell[1] + cell[2]
         ])
-        d = np.amax(np.linalg.norm(diams, axis=-1))
     else:
-        msg = 'diameter() not implemented for dims > 3 (passed cell shape ' \
-              f'{cell.shape}).'
+        msg = 'diameter() not implemented for dimensions > 3 (passed cell ' \
+              f'shape {cell.shape}).'
         raise NotImplementedError(msg)
-    return d
+    
+    return np.amax(np.linalg.norm(diagonals, axis=-1))
 
 
 @numba.njit()
 def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     """Simplified version of function from :mod:`ase.geometry` of the
-    same name. 3D unit cell parameters a,b,c,α,β,γ --> cell as 3x3
-    :class:`numpy.ndarray`.
+    same name. Converts canonical 3D unit cell parameters a,b,c,α,β,γ
+    into a 3x3 :class:`numpy.ndarray` representing the unit cell (in
+    orthogonal coordinates).
+
+    Parameters
+    ----------
+    a : float
+        Unit cell side length a.
+    b : float
+        Unit cell side length b.
+    c : float
+        Unit cell side length c.
+    alpha : float
+        Unit cell angle alpha (degrees).
+    beta : float
+        Unit cell angle beta (degrees).
+    gamma : float
+        Unit cell angle gamma (degrees).
+
+    Returns
+    -------
+    cell : :class:`numpy.ndarray`
+        Unit cell represented as a 3x3 matrix (in orthogonal
+        coordinates).
     """
 
     eps = 2 * np.spacing(90)  # ~1.4e-14
 
-    cos_alpha = 0 if abs(abs(alpha) - 90) < eps else np.cos(alpha * np.pi / 180)
-    cos_beta = 0 if abs(abs(beta) - 90) < eps else np.cos(beta * np.pi / 180)
-    cos_gamma = 0 if abs(abs(gamma) - 90) < eps else np.cos(gamma * np.pi / 180)
+    if abs(abs(alpha) - 90) < eps:
+        cos_alpha = 0
+    else:
+        cos_alpha = np.cos(alpha * np.pi / 180)
+
+    if abs(abs(beta) - 90) < eps:
+        cos_beta = 0
+    else:
+        cos_beta = np.cos(beta * np.pi / 180)
+
+    if abs(abs(gamma) - 90) < eps:
+        cos_gamma = 0
+    else:
+        cos_gamma = np.cos(gamma * np.pi / 180)
 
     if abs(gamma - 90) < eps:
         sin_gamma = 1
@@ -72,8 +118,24 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
 
 @numba.njit()
 def cellpar_to_cell_2D(a, b, alpha):
-    """2D unit cell parameters a,b,α --> cell as 2x2
-    :class:`numpy.ndarray`.
+    """Converts 2D unit cell parameters a,b,α into a 2x2
+    :class:`numpy.ndarray` representing the unit cell in orthogonal
+    coordinates.
+
+    Parameters
+    ----------
+    a : float
+        Unit cell side length a.
+    b : float
+        Unit cell side length b.
+    alpha : float
+        Unit cell angle alpha (degrees).
+
+    Returns
+    -------
+    cell : :class:`numpy.ndarray`
+        Unit cell represented as a 2x2 matrix (in orthogonal
+        coordinates).
     """
 
     cell = np.zeros((2, 2))
@@ -86,26 +148,55 @@ def cellpar_to_cell_2D(a, b, alpha):
 
 
 def cell_to_cellpar(cell):
-    """Unit cell as a 3x3 :class:`numpy.ndarray` --> list of 6 lengths +
-    angles.
+    """Converts a 3x3 :class:`numpy.ndarray` representing a unit cell in
+    orthogonal coordinates (as returned by 
+    :func:`cellpar_to_cell() <.utils.cellpar_to_cell>`) into the list
+    a,b,c,α,β,γ of 3 lengths and 3 angles representing the unit cell.
+    
+    Parameters
+    ----------
+    cell : :class:`numpy.ndarray`
+        Unit cell as a 3x3 matrix in orthogonal coordinates.
+
+    Returns
+    -------
+    cellpar : :class:`numpy.ndarray`
+        Vector with 6 elements, containing the 6 unit cell parameters in
+        the canonical order a,b,c,α,β,γ.
     """
 
     lengths = np.linalg.norm(cell, axis=-1)
     angles = []
     for i, j in [(1, 2), (0, 2), (0, 1)]:
-        ang_rad = np.arccos(np.dot(cell[i], cell[j]) / (lengths[i] * lengths[j]))
+        ang_rad = np.arccos(
+            np.dot(cell[i], cell[j]) / (lengths[i] * lengths[j])
+        )
         angles.append(np.rad2deg(ang_rad))
     return np.concatenate((lengths, np.array(angles)))
 
 
 def cell_to_cellpar_2D(cell):
-    """Unit cell as a 2x2 :class:`numpy.ndarray` --> list of 2 lengths
-    and an angle.
+    """Converts a 2x2 :class:`numpy.ndarray` representing a unit cell in
+    orthogonal coordinates (as returned by 
+    :func:`cellpar_to_cell_2D() <.utils.cellpar_to_cell_2D>`) into a
+    list a,b,α of 2 lengths and 1 angle representing the unit cell.
+    
+    Parameters
+    ----------
+    cell : :class:`numpy.ndarray`
+        Unit cell as a 2x2 matrix in orthogonal coordinates.
+
+    Returns
+    -------
+    cellpar : :class:`numpy.ndarray`
+        Vector with 3 elements, containing 3 unit cell parameters.
     """
 
     cellpar = np.zeros((3, ))
     lengths = np.linalg.norm(cell, axis=-1)
-    ang_rad = np.arccos(np.dot(cell[0], cell[1]) / (lengths[0] * lengths[1]))
+    ang_rad = np.arccos(
+        np.dot(cell[0], cell[1]) / (lengths[0] * lengths[1])
+    )
     cellpar[0] = lengths[0]
     cellpar[1] = lengths[1]
     cellpar[2] = np.rad2deg(ang_rad)
@@ -128,7 +219,7 @@ def neighbours_from_distance_matrix(
 
     Returns
     -------
-    (nn_dm, inds) : Tuple[:class:`numpy.ndarray`, :class:`numpy.ndarray`]
+    (nn_dm, inds) :
         ``nn_dm[i][j]`` is the distance from item :math:`i` to its
         :math:`j+1` st nearest neighbour, and ``inds[i][j]`` is the
         index of this neighbour (:math:`j+1` since index 0 is the first
@@ -137,12 +228,9 @@ def neighbours_from_distance_matrix(
 
     inds = None
 
-    # 2D distance matrix
-    if len(dm.shape) == 2:
+    if len(dm.shape) == 2: # 2D distance matrix
         inds = np.array([np.argpartition(row, n)[:n] for row in dm])
-
-    # 1D condensed distance vector
-    elif len(dm.shape) == 1:
+    elif len(dm.shape) == 1: # 1D condensed distance vector
         dm = squareform(dm)
         inds = []
         for i, row in enumerate(dm):
@@ -150,7 +238,6 @@ def neighbours_from_distance_matrix(
             inds_row = inds_row[inds_row != i][:n]
             inds.append(inds_row)
         inds = np.array(inds)
-
     else:
         msg = "Input must be a NumPy ndarray, either a 2D distance matrix " \
               "or a condensed distance matrix (returned by SciPy's pdist)."
@@ -190,7 +277,7 @@ def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
 
     else:
         msg = 'random_cell only implimented for dimensions 2 and 3 (passed ' \
-              'f{dims})'
+              f'{dims})'
         raise NotImplementedError(msg)
 
     return cell

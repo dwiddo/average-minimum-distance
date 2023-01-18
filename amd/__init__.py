@@ -24,7 +24,7 @@ __author__ = 'Daniel Widdowson'
 __maintainer__ = 'Daniel Widdowson'
 __email__ = 'D.E.Widdowson@liverpool.ac.uk'
 __license__ = "CC-BY-NC-SA-4.0"
-__copyright__ = "Copyright 2022, Daniel Widdowson"
+__copyright__ = "Copyright 2023, Daniel Widdowson"
 
 
 from .calculate import *

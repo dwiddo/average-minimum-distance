@@ -16,37 +16,46 @@ def main():
     )
 
     parser.add_argument('path_or_refcodes', type=str, nargs='+',
-        help='(str) One or two paths to files or folders, or a collection of CSD refcodes if csd-python-api is installed.')
+        help='(str) One or two paths to files or folders, or a collection ' \
+             'of CSD refcodes if csd-python-api is installed.')
     parser.add_argument('--output', '-o', type=str, default='output',
         help='(str) Path of the output file.')
     parser.add_argument('--format', '-f', type=str, default='csv', 
         help='(str) Format of the output file, default csv.')
 
     # args of amd.compare
-    parser.add_argument('--by', '-b', type=str, default='AMD', choices=['AMD', 'PDD'],
+    parser.add_argument(
+        '--by', '-b', type=str, default='AMD', choices=['AMD', 'PDD'],
         help='(str) Use AMD or PDD to compare crystals.')
     parser.add_argument('--k', '-k', type=int, default=100,
         help='(int) Number of neighbour atoms to use for AMD/PDD.')
     parser.add_argument('--nearest', '-n', type=int, default=None,
-        help='(int) Find n nearest neighbours instead of a full distance matrix between crystals.')
+        help='(int) Find n nearest neighbours instead of a full distance ' \
+             'matrix between crystals.')
 
     # reading args
     parser.add_argument('--reader', '-r', type=str, default='ase',
         choices=['ase', 'pycodcif', 'ccdc', 'pymatgen', 'gemmi'],
         help='(str) backend package used for parsing files, default ase.')
-    parser.add_argument('--remove_hydrogens', default=False, action='store_true',
-        help='(flag) remove Hydrogen atoms.')
+    parser.add_argument('--remove_hydrogens', default=False,
+        action='store_true', help='(flag) remove Hydrogen atoms.')
     parser.add_argument('--disorder', type=str, default='skip',
         choices=['skip', 'ordered_sites', 'all_sites'],
         help='(str) control how disordered structures are handled.')
-    parser.add_argument('--heaviest_component', default=False, action='store_true',
-        help='(flag) (csd-python-api only) keep only the heaviest part of the asymmetric unit, intended for removing solvents.')
-    parser.add_argument('--molecular_centres', default=False, action='store_true',
-        help='(flag) (csd-python-api only) uses the centres of molecules for comparisons instead of atoms.')
-    parser.add_argument('--supress_warnings', default=False, action='store_true',
+    parser.add_argument(
+        '--heaviest_component', default=False, action='store_true',
+        help='(flag) (csd-python-api only) keep only the heaviest part of ' \
+             'the asymmetric unit, intended for removing solvents.')
+    parser.add_argument(
+        '--molecular_centres', default=False, action='store_true',
+        help='(flag) (csd-python-api only) uses the centres of molecules ' \
+             'for comparisons instead of atoms.')
+    parser.add_argument(
+        '--supress_warnings', default=False, action='store_true',
         help='(flag) do not show warnings encountered during reading.')
     parser.add_argument('--families', default=False, action='store_true',
-        help='(flag) (csd-python-api only) interpret path_or_refcodes as refcode families.')
+        help='(flag) (csd-python-api only) interpret path_or_refcodes as ' \
+             'refcode families.')
 
     # PDD args
     parser.add_argument('--collapse_tol', type=float, default=1e-4,

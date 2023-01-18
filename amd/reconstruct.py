@@ -51,7 +51,8 @@ def reconstruct(pdd, cell):
         raise ValueError(msg)
 
     diam = diameter(cell)
-    motif = [np.zeros((dims, ))] # set first point as origin wlog, return if 1 motif point
+    # set first point as origin wlog, return if 1 motif point
+    motif = [np.zeros((dims, ))]
 
     if pdd.shape[0] == 1:
         motif = np.array(motif)
@@ -67,7 +68,7 @@ def reconstruct(pdd, cell):
         l = next(cloud_generator)
     cloud = np.concatenate(cloud)
 
-    # neighbour set: (a superset of) the lattice points close enough to the Voronoi domain
+    # neighbour set: (superset of) the lattice points close enough to the Voronoi domain
     nn_set = _neighbour_set(cell, PREC)
     lattice_dists = np.linalg.norm(cloud, axis=-1)
     lattice_dists = lattice_dists[lattice_dists <= diam]
