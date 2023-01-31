@@ -43,7 +43,7 @@ def diameter(cell):
         msg = 'diameter() not implemented for dimensions > 3 (passed cell ' \
               f'shape {cell.shape}).'
         raise NotImplementedError(msg)
-    
+
     return np.amax(np.linalg.norm(diagonals, axis=-1))
 
 
@@ -76,7 +76,7 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
         coordinates).
     """
 
-    eps = 2 * np.spacing(90)  # ~1.4e-14
+    eps = 2 * np.spacing(90) # ~1.4e-14
 
     if abs(abs(alpha) - 90) < eps:
         cos_alpha = 0
@@ -103,7 +103,7 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     cy = (cos_alpha - cos_beta * cos_gamma) / sin_gamma
     cz_sqr = 1 - cos_beta ** 2 - cy ** 2
     if cz_sqr < 0:
-        raise RuntimeError('Could not create unit cell from given parameters.')
+        raise ValueError('Could not create unit cell from given parameters.')
 
     cell = np.zeros((3, 3))
     cell[0, 0] = a
@@ -147,12 +147,13 @@ def cellpar_to_cell_2D(a, b, alpha):
     return cell
 
 
+@numba.njit()
 def cell_to_cellpar(cell):
     """Converts a 3x3 :class:`numpy.ndarray` representing a unit cell in
     orthogonal coordinates (as returned by 
-    :func:`cellpar_to_cell() <.utils.cellpar_to_cell>`) into the list
-    a,b,c,α,β,γ of 3 lengths and 3 angles representing the unit cell.
-    
+    :func:`cellpar_to_cell() <.utils.cellpar_to_cell>`) into a list of 3
+    lengths and 3 angles representing the unit cell.
+
     Parameters
     ----------
     cell : :class:`numpy.ndarray`
@@ -165,22 +166,29 @@ def cell_to_cellpar(cell):
         the canonical order a,b,c,α,β,γ.
     """
 
-    lengths = np.linalg.norm(cell, axis=-1)
-    angles = []
-    for i, j in [(1, 2), (0, 2), (0, 1)]:
-        ang_rad = np.arccos(
-            np.dot(cell[i], cell[j]) / (lengths[i] * lengths[j])
-        )
-        angles.append(np.rad2deg(ang_rad))
-    return np.concatenate((lengths, np.array(angles)))
+    cellpar = np.zeros((6, ))
+    cellpar[0] = np.linalg.norm(cell[0])
+    cellpar[1] = np.linalg.norm(cell[1])
+    cellpar[2] = np.linalg.norm(cell[2])
+    cellpar[3] = np.rad2deg(np.arccos(
+        np.dot(cell[1], cell[2]) / (cellpar[1] * cellpar[2])
+    ))
+    cellpar[4] = np.rad2deg(np.arccos(
+        np.dot(cell[0], cell[2]) / (cellpar[0] * cellpar[2])
+    ))
+    cellpar[5] = np.rad2deg(np.arccos(
+        np.dot(cell[0], cell[1]) / (cellpar[0] * cellpar[1])
+    ))
+
+    return cellpar
 
 
 def cell_to_cellpar_2D(cell):
     """Converts a 2x2 :class:`numpy.ndarray` representing a unit cell in
     orthogonal coordinates (as returned by 
     :func:`cellpar_to_cell_2D() <.utils.cellpar_to_cell_2D>`) into a
-    list a,b,α of 2 lengths and 1 angle representing the unit cell.
-    
+    list of 2 lengths and 1 angle representing the unit cell.
+
     Parameters
     ----------
     cell : :class:`numpy.ndarray`
@@ -193,13 +201,11 @@ def cell_to_cellpar_2D(cell):
     """
 
     cellpar = np.zeros((3, ))
-    lengths = np.linalg.norm(cell, axis=-1)
-    ang_rad = np.arccos(
-        np.dot(cell[0], cell[1]) / (lengths[0] * lengths[1])
-    )
-    cellpar[0] = lengths[0]
-    cellpar[1] = lengths[1]
-    cellpar[2] = np.rad2deg(ang_rad)
+    cellpar[0] = np.linalg.norm(cell[0])
+    cellpar[1] = np.linalg.norm(cell[1])
+    cellpar[2] = np.rad2deg(np.arccos(
+        np.dot(cell[0], cell[1]) / (cellpar[0] * cellpar[1])
+    ))
     return cellpar
 
 

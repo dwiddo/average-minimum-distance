@@ -427,6 +427,8 @@ def _collapse_into_groups(overlapping):
     set whether or not the items overlap, in the shape of a condensed
     distance matrix. Returns a list of groups of indices where all items
     in the same group overlap.
+    
+    TODO: This function is not the most efficient way to do this.
     """
 
     overlapping = squareform(overlapping)

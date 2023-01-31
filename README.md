@@ -37,20 +37,18 @@ pip install average-minimum-distance
 
 Then import average-minimum-distance with ```import amd```.
 
-```amd.compare()``` compares a set of crystals from a .cif by AMD or PDD, for example
+The function ```amd.compare()``` compares crystals cif files by AMD or PDD, for example
 
 ```py
 import amd
 df = amd.compare('crystals.cif', by='PDD', k=100)
 ```
 
-The distance matrix is returned as a [pandas DataFrame](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html). It can also take two paths and compare crystals in one file with the other:
+The distance matrix is returned as a [pandas DataFrame](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html). The first argument can also be a folder or list of cifs. It can also take two paths and compare all crystals in one file with all in the other:
 
 ```py
-df = amd.compare('crystals_1.cif', 'crystals_2.cif' by='AMD', k=100)
+df = amd.compare('crystals_1.cif', 'crystals_2.cif', by='AMD', k=100)
 ```
-
-Either argument can a list of paths to .cif files, which are combined in the final distance matrix.
 
 ```amd.compare()``` does three things: reads crystals, calculates their AMD/PDD, and compares them. These steps can be done separately for more flexibility (e.g, saving the descriptors to a file), explained below. ```amd.compare()``` accepts most of the optional parameters from any of these steps, see the documentation for details.
 
@@ -175,15 +173,14 @@ Use the following bib references to cite AMD or PDD.
 }
 ```
 
-*Resolving the data ambiguity for periodic crystals*. Advances in Neural Information Processing Systems (NeurIPS 2022), v.35, to appear. <https://arxiv.org/abs/2108.04798>.
+*Resolving the data ambiguity for periodic crystals*. Advances in Neural Information Processing Systems (NeurIPS 2022), v.35. <https://openreview.net/forum?id=4wrB7Mo9_OQ>.
 
 ```bibtex
-@misc{widdowson2022resolving,
+@inproceedings{widdowson2022resolving,
   title = {Resolving the data ambiguity for periodic crystals},
   author = {Widdowson, Daniel and Kurlin, Vitaliy},
-  journal = {Advances in Neural Information Processing Systems (Proceedings of NeurIPS 2022)},
-  volume = {35},
+  booktitle = {Advances in Neural Information Processing Systems},
   year = {2022},
-  eprint = {arXiv:2108.04798},
+  url = {https://openreview.net/forum?id=4wrB7Mo9_OQ}
 }
 ```

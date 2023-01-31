@@ -23,7 +23,7 @@ def main():
     parser.add_argument('--format', '-f', type=str, default='csv', 
         help='(str) Format of the output file, default csv.')
 
-    # args of amd.compare
+    # amd.compare args 
     parser.add_argument(
         '--by', '-b', type=str, default='AMD', choices=['AMD', 'PDD'],
         help='(str) Use AMD or PDD to compare crystals.')
@@ -33,51 +33,51 @@ def main():
         help='(int) Find n nearest neighbours instead of a full distance ' \
              'matrix between crystals.')
 
-    # reading args
+    # Reading args
+    parser.add_argument(
+        '--supress_warnings', default=False, action='store_true',
+        help='(flag) Do not show warnings encountered during reading.')
     parser.add_argument('--reader', '-r', type=str, default='ase',
         choices=['ase', 'pycodcif', 'ccdc', 'pymatgen', 'gemmi'],
-        help='(str) backend package used for parsing files, default ase.')
+        help='(str) Backend package used to parse files, default ase.')
     parser.add_argument('--remove_hydrogens', default=False,
-        action='store_true', help='(flag) remove Hydrogen atoms.')
+        action='store_true', help='(flag) Remove Hydrogen atoms.')
     parser.add_argument('--disorder', type=str, default='skip',
         choices=['skip', 'ordered_sites', 'all_sites'],
-        help='(str) control how disordered structures are handled.')
+        help='(str) Control how disordered structures are handled.')
     parser.add_argument(
         '--heaviest_component', default=False, action='store_true',
-        help='(flag) (csd-python-api only) keep only the heaviest part of ' \
+        help='(flag) (csd-python-api only) Keep only the heaviest part of ' \
              'the asymmetric unit, intended for removing solvents.')
     parser.add_argument(
         '--molecular_centres', default=False, action='store_true',
-        help='(flag) (csd-python-api only) uses the centres of molecules ' \
+        help='(flag) (csd-python-api only) Uses the centres of molecules ' \
              'for comparisons instead of atoms.')
-    parser.add_argument(
-        '--supress_warnings', default=False, action='store_true',
-        help='(flag) do not show warnings encountered during reading.')
     parser.add_argument('--families', default=False, action='store_true',
-        help='(flag) (csd-python-api only) interpret path_or_refcodes as ' \
+        help='(flag) (csd-python-api only) Interpret path_or_refcodes as ' \
              'refcode families.')
 
     # PDD args
     parser.add_argument('--collapse_tol', type=float, default=1e-4,
-        help='(float) tolerance for collapsing rows of PDDs.')
+        help='(float) Tolerance for collapsing rows of PDDs.')
 
     # compare args
     parser.add_argument('--metric', type=str, default='chebyshev',
-        help='(str) metric used to compare AMDs/rows of PDDs, default chebyshev.')
+        help='(str) Metric used to compare AMDs/rows of PDDs, default chebyshev.')
     parser.add_argument('--n_jobs', type=int, default=1,
-        help='(int) number of cores to use for multiprocessing in PDD comaprisons.')
+        help='(int) Number of cores to use for multiprocessing when comparing PDDs.')
     parser.add_argument('--verbose', type=int, default=0,
-        help='(int) print an ETA to the terminal for PDD comparisons. Passed to joblib.Parallel if using multiprocessing.')
+        help='(int) Print an ETA to the terminal when comparing PDDs. Passed to joblib.Parallel if using multiprocessing.')
     parser.add_argument('--low_memory', default=False, action='store_true',
-        help='(flag) use an alternative slower algorithm for AMD comparisons which uses less memory.')
+        help='(flag) Use an more memory efficient (but slower) method for AMD comparisons.')
 
-    # remove some arguments before passing others to amd.compare
+    # Remove some arguments before passing others to amd.compare
     kwargs = vars(parser.parse_args())
     path_or_refcodes = kwargs.pop('path_or_refcodes')
     outpath = kwargs.pop('output', 'output')
     ext = kwargs.pop('format', 'csv')
 
-    # parameter is show_warnings, here it's a flag supress_warnings
+    # Parameter is show_warnings, here it's a flag supress_warnings
     kwargs['show_warnings'] = not kwargs['supress_warnings']
     kwargs.pop('supress_warnings', None)
 
@@ -103,7 +103,3 @@ def main():
     except AttributeError:
         sys.stdout.write(f'Unknown format {ext}, using csv.')
         df.to_csv(outpath + '.csv')
-
-
-if __name__ == '__main__':
-    main()

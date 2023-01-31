@@ -57,8 +57,9 @@ def test_periodicset_from_ase_atoms(cif_paths, reference_data):
 
         for s, s_ in zip(read_in, references):
             if not s == s_['PeriodicSet']:
+                n = s_['PeriodicSet'].name
                 pytest.fail(
-                    f'Structure {s.name} read with ase.io.iread disagrees with reference.'
+                    f'Structure read with ase.io.iread disagrees with reference ({n}).'
                 )
 
 

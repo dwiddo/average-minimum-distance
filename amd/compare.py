@@ -357,6 +357,10 @@ def PDD_cdist(
         Usually PDD rows are compared with the Chebyshev/l-infinity
         distance. Accepts any metric accepted by
         :func:`scipy.spatial.distance.cdist`.
+    backend : str, default 'multiprocessing'
+        The parallelization backend implementation. For a list of
+        supported backends, see the backend argument of
+        :class:`joblib.Parallel`.
     n_jobs : int, default None
         Maximum number of concurrent jobs for parallel processing with
         ``joblib``. Set to -1 to use the maximum. Using parallel
@@ -365,10 +369,6 @@ def PDD_cdist(
         Verbosity level. If using parallel processing (n_jobs > 1),
         verbose is passed to :class:`joblib.Parallel` and larger values
         = more verbose.
-    backend : str, default 'multiprocessing'
-        The parallelization backend implementation. For a list of
-        supported backends, see the backend argument of
-        :class:`joblib.Parallel`.
 
     Returns
     -------
@@ -415,9 +415,9 @@ def PDD_cdist(
 def PDD_pdist(
         pdds: List[np.ndarray],
         metric: str = 'chebyshev',
+        backend='multiprocessing',
         n_jobs=None,
         verbose=0,
-        backend='multiprocessing',
         **kwargs
 ) -> np.ndarray:
     """Compare a set of PDDs pairwise, returning a condensed distance
@@ -433,6 +433,10 @@ def PDD_pdist(
         Usually PDD rows are compared with the Chebyshev/l-infinity
         distance. Accepts any metric accepted by
         :func:`scipy.spatial.distance.cdist`.
+    backend : str, default 'multiprocessing'
+        The parallelization backend implementation. For a list of
+        supported backends, see the backend argument of
+        :class:`joblib.Parallel`.
     n_jobs : int, default None
         Maximum number of concurrent jobs for parallel processing with
         ``joblib``. Set to -1 to use the maximum. Using parallel
@@ -441,10 +445,6 @@ def PDD_pdist(
         Verbosity level. If using parallel processing (n_jobs > 1),
         verbose is passed to :class:`joblib.Parallel` and larger values
         = more verbose.
-    backend : str, default 'multiprocessing'
-        The parallelization backend implementation. For a list of
-        supported backends, see the backend argument of
-        :class:`joblib.Parallel`.
 
     Returns
     -------

@@ -2,13 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.5] - 05/12/2022
+## [1.3.5] - 31/01/2023
 
 ### Added
 
+- `utils.cell_to_cellpar` and `utils.cell_to_cellpar_2D` have been improved with `numba`.
+
 - Removed `_ETA` class and added dependency `tqdm` for progress bars.
 
-- Cleaned up documentation, conformed to PEP8, added pyproject.toml file.
+- Changes to converter functions in the `io` module have decoupled them from depending on other packages, e.g. `periodicset_from_pymatgen_cifblock()` now has no dependency on `ase`, just `pymatgen`.
+
+- Cleaned up documentation, +PEP8, +pyproject.toml.
 
 ## [1.3.4] - 07/11/2022
 
