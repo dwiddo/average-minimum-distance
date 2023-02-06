@@ -1375,7 +1375,7 @@ def _expand_asym_unit(
                     if inverses[ind] == inv: # site is invariant
                         pass
                     else: # equivalent to a different site
-                        msg = f'has equivalent sites at positions' \
+                        msg = f'has equivalent sites at positions ' \
                               f'{inverses[ind]}, {inv}'
                         warnings.warn(msg)
             else: # new site
