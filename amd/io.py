@@ -9,6 +9,7 @@ import os
 import re
 import functools
 import warnings
+import errno
 from typing import Tuple
 
 import numpy as np
@@ -73,6 +74,8 @@ CIF_TAGS = {
 class _Reader:
 
     _DISORDER_OPTIONS = {'skip', 'ordered_sites', 'all_sites'}
+    _CCDC_IMPORT_ERR_MSG = 'Failed to import csd-python-api, please check ' \
+                           'it is installed and licensed.'
 
     def __init__(self, iterable, converter, show_warnings=True):
         self._iterator = iter(iterable)
@@ -199,7 +202,7 @@ class CifReader(_Reader):
 
         if disorder not in CifReader._DISORDER_OPTIONS:
             msg = 'disorder parameter must be one of ' \
-                  f'{_Reader._DISORDER_OPTIONS} (passed {disorder})'
+                  f'{CifReader._DISORDER_OPTIONS} (passed "{disorder}")'
             raise ValueError(msg)
 
         if reader != 'ccdc':
@@ -246,9 +249,7 @@ class CifReader(_Reader):
             try:
                 import ccdc.io
             except (ImportError, RuntimeError) as e:
-                msg = 'Failed to import csd-python-api, please check it is' \
-                      'installed and licensed.'
-                raise ImportError(msg) from e
+                raise ImportError(_Reader._CCDC_IMPORT_ERR_MSG) from e
 
             extensions = ccdc.io.EntryReader.known_suffixes
             file_parser = ccdc.io.EntryReader
@@ -261,14 +262,15 @@ class CifReader(_Reader):
             )
 
         else:
-            raise ValueError(f'Unknown reader {reader}.')
+            raise ValueError(f'Unknown reader "{reader}".')
 
         if os.path.isfile(path):
             iterable = file_parser(path)
         elif os.path.isdir(path):
             iterable = CifReader._dir_generator(path, file_parser, extensions)
         else:
-            raise FileNotFoundError(f'No such file or directory: {path}')
+            raise FileNotFoundError(
+                errno.ENOENT, os.strerror(errno.ENOENT), path)
 
         super().__init__(iterable, converter, show_warnings=show_warnings)
 
@@ -363,11 +365,9 @@ class CSDReader(_Reader):
         try:
             import ccdc.io
         except (ImportError, RuntimeError) as _:
-            msg = 'Failed to import csd-python-api, please check it is ' \
-                  'installed and licensed.'
-            raise ImportError(msg)
+            raise ImportError(_Reader._CCDC_IMPORT_ERR_MSG)
 
-        if disorder not in CSDReader._DISORDER_OPTIONS:
+        if disorder not in _Reader._DISORDER_OPTIONS:
             msg = 'disorder parameter must be one of ' \
                   f'{_Reader._DISORDER_OPTIONS} (passed {disorder})'
             raise ValueError(msg)
@@ -384,7 +384,7 @@ class CSDReader(_Reader):
                 refcodes = list(refcodes)
 
         if families:
-            refcodes = _refcodes_from_families_ccdc(refcodes)
+            refcodes = self._refcodes_from_families_ccdc(refcodes)
 
         entry_reader = ccdc.io.EntryReader('CSD')
         converter = functools.partial(
@@ -412,6 +412,34 @@ class CSDReader(_Reader):
                     yield entry
                 except RuntimeError:
                     warnings.warn(f'{refcode} not found in database')
+
+    @staticmethod
+    def _refcodes_from_families_ccdc(refcode_families):
+        """List of strings --> all CSD refcodes starting with any of the
+        strings. Intended to be passed a list of families and return all
+        refcodes in them.
+        """
+
+        try:
+            import ccdc.search
+        except (ImportError, RuntimeError) as _:
+            raise ImportError(_Reader._CCDC_IMPORT_ERR_MSG)
+
+        all_refcodes = []
+        for refcode in refcode_families:
+            query = ccdc.search.TextNumericSearch()
+            query.add_identifier(refcode)
+            hits = [hit.identifier for hit in query.search()]
+            all_refcodes.extend(hits)
+
+        # filter to unique refcodes
+        seen = set()
+        seen_add = seen.add
+        refcodes = [
+            refcode for refcode in all_refcodes
+            if not (refcode in seen or seen_add(refcode))]
+
+        return refcodes
 
 
 class ParseError(ValueError):
@@ -464,7 +492,6 @@ def periodicset_from_ase_cifblock(
     """
 
     import ase
-    from ase.spacegroup.spacegroup import parse_sitesym
 
     # Unit cell
     cellpar = [block.get(tag) for tag in CIF_TAGS['cellpar']]
@@ -555,7 +582,7 @@ def periodicset_from_ase_cifblock(
     if cartesian:
         asym_unit = asym_unit @ np.linalg.inv(cell)
     asym_unit = np.mod(asym_unit, 1)
-    # asym_unit = _snap_small_prec_coords(asym_unit) # recommended by pymatgen
+    # asym_unit = _snap_small_prec_coords(asym_unit, 1e-4) # recommended by pymatgen
 
     # Remove overlapping sites unless disorder == 'all_sites'
     if disorder != 'all_sites':
@@ -573,11 +600,11 @@ def periodicset_from_ase_cifblock(
             spg = block.get_spacegroup(True)
             rot, trans = spg.rotations, spg.translations
         except: # no spacegroup, assume P1
-            rot, trans = parse_sitesym(['x,y,z'])
+            rot, trans = _parse_sitesym(['x,y,z'])
     else:
         if isinstance(sitesym, str):
             sitesym = [sitesym]
-        rot, trans = parse_sitesym(sitesym)
+        rot, trans = _parse_sitesym(sitesym)
 
     # Apply symmetries to asymmetric unit
     frac_motif, asym_inds, wyc_muls, inverses = _expand_asym_unit(asym_unit, rot, trans)
@@ -1107,7 +1134,7 @@ def periodicset_from_ccdc_crystal(
     )
 
 
-# Not quite finished.
+# Not quite finished
 def periodicset_from_gemmi_block(
         block,
         remove_hydrogens=False,
@@ -1150,7 +1177,6 @@ def periodicset_from_gemmi_block(
     """
 
     import gemmi
-    from ase.spacegroup.spacegroup import parse_sitesym
 
     # Unit cell
     cellpar = [gemmi.cif.as_number(block.find_value(tag))
@@ -1237,7 +1263,7 @@ def periodicset_from_gemmi_block(
         sitesym = ['x,y,z',]
 
     # Apply symmetries to asymmetric unit
-    rot, trans = parse_sitesym(sitesym)
+    rot, trans = _parse_sitesym(sitesym)
     frac_motif, asym_inds, wyc_muls, inverses = _expand_asym_unit(asym_unit, rot, trans)
     types = np.array([asym_types[i] for i in inverses])
     motif = frac_motif @ cell
@@ -1252,16 +1278,65 @@ def periodicset_from_gemmi_block(
     )
 
 
+def _parse_sitesym(symmetries):
+    """Parses a sequence of symmetries in xyz form and returns rotation
+    and translation arrays. Similar to function found in
+    ase.spacegroup.spacegroup.
+    """
+
+    nsyms = len(symmetries)
+    rotations = np.zeros((nsyms, 3, 3))
+    translations = np.zeros((nsyms, 3))
+
+    for i, sym in enumerate(symmetries):
+        for ind, element in enumerate(sym.split(',')):
+
+            is_positive = True
+            is_fraction = False
+            sng_trans = None
+            fst_trans = []
+            snd_trans = []
+
+            for char in element.lower():
+                if char == '+':
+                    is_positive = True
+                elif char == '-':
+                    is_positive = False
+                elif char == '/':
+                    is_fraction = True
+                elif char in 'xyz':
+                    rot_sgn = 1 if is_positive else -1
+                    rotations[i][ind][ord(char) - ord('x')] = rot_sgn
+                elif char.isdigit() or char == '.':
+                    if sng_trans is None:
+                        sng_trans = 1.0 if is_positive else -1.0
+                    if is_fraction:
+                        snd_trans.append(char)
+                    else:
+                        fst_trans.append(char)
+
+            if not fst_trans:
+                e_trans = 0.0
+            else:
+                e_trans = sng_trans * float(''.join(fst_trans))
+
+            if is_fraction:
+                e_trans /= float(''.join(snd_trans))
+
+            translations[i][ind] = e_trans
+
+    return rotations, translations
+
+
 def _expand_asym_unit(
         asym_unit: np.ndarray,
         rotations: np.ndarray,
         translations: np.ndarray
 ) -> Tuple[np.ndarray, ...]:
     """
-    Asymmetric unit frac coords, list of rotations, list of translations
-    -->
-    full fractional motif, asymmetric unit indices, multiplicities,
-    inverses.
+    Asymmetric unit frac coords, list of rotations & translations -->
+    full fractional motif, asymmetric unit indices, multiplicities and
+    inverses (which motif points come from where in the asym unit).
     """
 
     frac_motif = []     # Full motif
@@ -1325,10 +1400,10 @@ def _unique_sites(asym_unit, tol):
     considering all points modulo 1. Returns an array of bools such that
     asym_unit[_unique_sites(asym_unit, tol)] is the uniquified list.
     """
-
+    
     site_diffs1 = np.abs(np.expand_dims(asym_unit, 1) - asym_unit)
     site_diffs2 = np.abs(site_diffs1 - 1)
-    sites_neq_mask = np.logical_and((site_diffs1 > tol), (site_diffs2 > tol))
+    sites_neq_mask = (site_diffs1 > tol) & (site_diffs2 > tol)
     overlapping = np.triu(sites_neq_mask.sum(axis=-1) == 0, 1)
     return overlapping.sum(axis=0) == 0
 
@@ -1336,7 +1411,7 @@ def _unique_sites(asym_unit, tol):
 def _has_disorder(label, occupancy):
     """Return True if label ends with ? or occupancy is a number < 1.
     """
-    return label.endswith('?') or (np.isscalar(occupancy) and occupancy < 1)
+    return (np.isscalar(occupancy) and occupancy < 1) or label.endswith('?')
 
 
 def _parse_sitesym_pymatgen(data):
@@ -1427,9 +1502,7 @@ def _frac_molecular_centres_ccdc(crystal):
     frac_centres = []
     for comp in crystal.packing(inclusion='CentroidIncluded').components:
         coords = [a.fractional_coordinates for a in comp.atoms]
-        x, y, z = zip(*coords)
-        m = len(coords)
-        frac_centres.append((sum(x) / m, sum(y) / m, sum(z) / m))
+        frac_centres.append((sum(ax) / len(coords) for ax in zip(*coords)))
     frac_centres = np.mod(np.array(frac_centres), 1)
     return frac_centres[_unique_sites(frac_centres, _EQUIV_SITE_TOL)]
 
@@ -1455,36 +1528,6 @@ def _heaviest_component_ccdc(molecule):
     return molecule
 
 
-def _refcodes_from_families_ccdc(refcode_families):
-    """List of strings --> all CSD refcodes starting with any of the
-    strings. Intended to be passed a list of families and return all
-    refcodes in them.
-    """
-
-    try:
-        import ccdc.search
-    except (ImportError, RuntimeError) as _:
-        msg = 'Failed to import csd-python-api, please check it is ' \
-              'installed and licensed.'
-        raise ImportError(msg)
-
-    all_refcodes = []
-    for refcode in refcode_families:
-        query = ccdc.search.TextNumericSearch()
-        query.add_identifier(refcode)
-        hits = [hit.identifier for hit in query.search()]
-        all_refcodes.extend(hits)
-
-    # filter to unique refcodes
-    seen = set()
-    seen_add = seen.add
-    refcodes = [
-        refcode for refcode in all_refcodes
-        if not (refcode in seen or seen_add(refcode))]
-
-    return refcodes
-
-
 def _loop_to_dict_gemmi(gemmi_loop):
     """gemmi Loop object --> dict, tags: values
     """
@@ -1496,10 +1539,10 @@ def _loop_to_dict_gemmi(gemmi_loop):
     return {tag: l for tag, l in zip(gemmi_loop.tags, tablified_loop)}
 
 
-def _snap_small_prec_coords(frac_coords):
+def _snap_small_prec_coords(frac_coords, tol):
     """Find where frac_coords is within 1e-4 of 1/3 or 2/3, change to
     1/3 and 2/3. Recommended by pymatgen's CIF parser.
     """
-    frac_coords[np.abs(1 - 3 * frac_coords) < 1e-4] = 1 / 3.
-    frac_coords[np.abs(1 - 3 * frac_coords / 2) < 1e-4] = 2 / 3.
+    frac_coords[np.abs(1 - 3 * frac_coords) < tol] = 1 / 3.
+    frac_coords[np.abs(1 - 3 * frac_coords / 2) < tol] = 2 / 3.
     return frac_coords
