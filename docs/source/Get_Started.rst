@@ -85,13 +85,13 @@ Reader options
 
 Parameters of :class:`amd.CifReader <amd.io.CifReader>` or :class:`amd.CSDReader <amd.io.CSDReader>`.
 
-* :code:`reader` (default ``ase``) controls the backend package used to parse the file. To use csd-python-api change to ``ccdc``. The ccdc reader should be able to read any format accepted by :class:`ccdc.io.EntryReader`, though only cifs have been tested.
+* :code:`reader` (default ``ase``) controls the backend package used to parse the file. Accepts ``ase``, ``pycodcif``, ``pymatgen``, ``gemmi`` and ``ccdc`` (if these packages are installed). The ccdc reader can read formats accepted by :class:`ccdc.io.EntryReader`.
 * :code:`remove_hydrogens` (default ``False``) removes Hydrogen atoms from the structure.
-* :code:`disorder` (default ``skip``) controls how disordered structures are handled. The default skips any crystal with disorder, since disorder conflicts with the periodic set model. Alternatively, :code:`ordered_sites` removes sites with disorder and :code:`all_sites` includes all sites regardless.
-* :code:`heaviest_component` (default ``False``, csd-python-api only) removes all but the heaviest molecule in the asymmetric unit, intended for removing solvents.
-* :code:`molecular_centres` (default ``False``, csd-python-api only) uses the centres of molecules for comparisons instead of atoms (as in `our paper comparing across landscapes <https://pubs.acs.org/doi/10.1021/jacs.2c02653>`_).
+* :code:`disorder` (default ``skip``) controls how disordered structures are handled. The default skips any crystal with disorder, since disorder conflicts somewhat with the periodic set model. Alternatively, :code:`ordered_sites` removes atoms with disorder and :code:`all_sites` includes all atoms regardless.
+* :code:`heaviest_component` (default ``False``, CSD Python API only) removes all but the heaviest molecule in the asymmetric unit, intended for removing solvents.
+* :code:`molecular_centres` (default ``False``, CSD Python API only) uses centres of molecules instead of atoms as the motif of the periodic set.
 * :code:`show_warnings` (default ``True``) chooses whether to print warnings during reading, e.g. from disordered structures or crystals with missing data.
-* :code:`families` (default ``False``, csd-python-api only) chooses whether to read refcodes or refcode families from the CSD.
+* :code:`families` (default ``False``) will interpret the list of strings given as refcode families, i.e. all crystals with refcodes starting with any in the list are read.
 
 PDD options
 ^^^^^^^^^^^
