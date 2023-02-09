@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.5] - 31/01/2023
+## [1.3.5] - 09/02/2023
 
 ### Added
 
@@ -13,6 +13,10 @@ All notable changes to this project will be documented in this file.
 - Changes to converter functions in the `io` module have decoupled them from depending on other packages, e.g. `periodicset_from_pymatgen_cifblock()` now has no dependency on `ase`, just `pymatgen`.
 
 - Cleaned up documentation, +PEP8, +pyproject.toml.
+
+### Changed
+
+- Fixed issue with the ccdc reader where atoms with missing coordinates would throw a ParseError where they should have been removed.
 
 ## [1.3.4] - 07/11/2022
 

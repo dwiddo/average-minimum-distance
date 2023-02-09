@@ -20,6 +20,8 @@ from .utils import (
     random_cell,
 )
 
+from ase.data import atomic_masses
+
 
 class PeriodicSet:
     """A periodic set representats a crystal by putting a point in the
@@ -75,6 +77,14 @@ class PeriodicSet:
     @property
     def ndim(self):
         return self.cell.shape[0]
+
+    @property
+    def density(self):
+        if self.types is None:
+            raise ValueError('')
+        cell_mass = sum(atomic_masses[n] for n in self.types)
+        cell_vol = np.linalg.det(self.cell)
+        return cell_mass / cell_vol
 
     def __str__(self):
         """Returns a string representation of the format

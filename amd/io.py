@@ -1060,8 +1060,9 @@ def periodicset_from_ccdc_crystal(
             raise ParseError(msg)
 
     elif disorder == 'ordered_sites':
-        molecule.remove_atoms(a for a in molecule.atoms
-                              if _has_disorder(a.label, a.occupancy))
+        molecule.remove_atoms(
+            a for a in molecule.atoms if _has_disorder(a.label, a.occupancy)
+        )
 
     if remove_hydrogens:
         molecule.remove_atoms(
@@ -1072,15 +1073,11 @@ def periodicset_from_ccdc_crystal(
         molecule = _heaviest_component_ccdc(molecule)
 
     # Remove atoms with missing coordinates and warn
-    is_missing = (a.fractional_coordinates is None for a in molecule.atoms)
-    if any(is_missing):
+    if any(a.fractional_coordinates is None for a in molecule.atoms):
         warnings.warn('atoms without sites or missing data will be removed')
         molecule.remove_atoms(
-            a for a, missing in zip(molecule.atoms, is_missing) if missing
+            a for a in molecule.atoms if a.fractional_coordinates is None
         )
-
-    if not molecule.all_atoms_have_sites:
-        raise ParseError(f'{crystal.identifier} has atoms without sites')
 
     crystal.molecule = molecule
     cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
