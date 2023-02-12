@@ -1,10 +1,10 @@
 # average-minimum-distance: geometry based crystal descriptors
 
-[![PyPI](https://img.shields.io/pypi/v/average-minimum-distance.svg)](https://pypi.org/project/average-minimum-distance/)
+[![PyPI](https://img.shields.io/pypi/v/average-minimum-distance)](https://pypi.org/project/average-minimum-distance/)
 [![Status](https://img.shields.io/pypi/status/average-minimum-distance)](https://pypi.org/project/average-minimum-distance/)
 [![Read the Docs](https://img.shields.io/readthedocs/average-minimum-distance)](https://average-minimum-distance.readthedocs.io)
 [![Build Status](https://scrutinizer-ci.com/g/dwiddo/average-minimum-distance/badges/build.png?b=master)](https://scrutinizer-ci.com/g/dwiddo/average-minimum-distance/)
-[![CC-0 license](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-blue.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+[![CC-0 license](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-blue)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
 - **PyPI project:** <https://pypi.org/project/average-minimum-distance>
 - **Documentation:** <https://average-minimum-distance.readthedocs.io>
