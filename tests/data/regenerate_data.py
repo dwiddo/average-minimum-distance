@@ -12,7 +12,7 @@ def regen(name, generator):
     for s in generator:
         pdd = amd.PDD(s, 100)
         data.append({'PeriodicSet': s, 'AMD100': amd.PDD_to_AMD(pdd), 'PDD100': pdd})
-    
+
     with open(os.path.join(root, f'{name}.pkl'), 'wb') as f:
         pickle.dump(data, f)
 

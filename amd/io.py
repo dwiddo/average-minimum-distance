@@ -138,15 +138,17 @@ class CifReader(_Reader):
     Parameters
     ----------
     path : str
-        Path to a .cif file or directory. (Other files are accepted when
+        Path to a .CIF file or directory. (Other files are accepted when
         using ``reader='ccdc'``, if csd-python-api is installed.)
     reader : str, optional
-        The backend package used for parsing. Default is :code:`ase`,
-        to use csd-python-api change to :code:`ccdc`. The ccdc reader
-        should be able to read any format accepted by
-        :class:`ccdc.io.EntryReader`, though only cifs have been tested.
+        The backend package used to parse the CIF. The default is 
+        :code:`ase`, :code:`pymatgen` and :code:`gemmi` are also
+        accepted, as well as :code:`ccdc` if csd-python-api is 
+        installed. The ccdc reader should be able to read any format
+        accepted by :class:`ccdc.io.EntryReader`, though only CIFs have
+        been tested.
     remove_hydrogens : bool, optional
-        Remove Hydrogens from the crystal.
+        Remove Hydrogens from the crystals.
     disorder : str, optional
         Controls how disordered structures are handled. Default is
         ``skip`` which skips any crystal with disorder, since disorder
@@ -302,7 +304,7 @@ class CSDReader(_Reader):
         'families' (e.g. giving 'DEBXIT' reads all entries starting with
         DEBXIT).
     remove_hydrogens : bool, optional
-        Remove hydrogens from the crystal.
+        Remove hydrogens from the crystals.
     disorder : str, optional
         Controls how disordered structures are handled. Default is
         ``skip`` which skips any crystal with disorder, since disorder
@@ -748,8 +750,7 @@ def periodicset_from_pymatgen_cifblock(
         cartesian = True
 
     asym_unit = list(zip(*asym_unit)) # transpose [xs,ys,zs] -> [p1,p2,...]
-    asym_unit = [[str2float(coord) for coord in xyz] 
-                 for xyz in asym_unit]
+    asym_unit = [[str2float(coord) for coord in xyz] for xyz in asym_unit]
 
     # Atomic types
     for tag in CIF_TAGS['atom_symbol']:
@@ -978,7 +979,7 @@ def periodicset_from_ccdc_entry(
         removing Hydrogens and disordered sites.
     """
 
-    # Entry specific flags
+    # Entry specific flag
     if not entry.has_3d_structure:
         raise ParseError(f'{entry.identifier} has no 3D structure')
 
@@ -1179,7 +1180,7 @@ def periodicset_from_gemmi_block(
     cellpar = [gemmi.cif.as_number(block.find_value(tag))
                for tag in CIF_TAGS['cellpar']]
     if None in cellpar:
-        raise ParseError(f'{block.name} has missing cell information')
+        raise ParseError(f'{block.name} has missing cell data')
     cell = cellpar_to_cell(*cellpar)
 
     xyz_loop = block.find(CIF_TAGS['atom_site_fract']).loop
@@ -1462,7 +1463,7 @@ def _parse_sitesym_pymatgen(data):
                         xyz = d['symops']
                         symops = [SymmOp.from_xyz_string(s) for s in xyz]
                         break
-            except Exception:
+            except Exception as e:
                 continue
 
             if symops:

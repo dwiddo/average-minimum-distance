@@ -40,16 +40,8 @@ project_urls = {
     'Changelog': 'https://github.com/dwiddo/average-minimum-distance/blob/master/CHANGELOG.md',
 }
 
-# read requirements.txt
-install_requires = [
-    'numpy>=1.21',
-    'numba>=0.55.2',
-    'scipy>=1.6.1',
-    'joblib>=1.1.0',
-    'pandas>=1.2.5',
-    'ase>=3.22.0',
-    'tqdm>=4.1.0',
-]
+with open(r'requirements.txt') as f:
+    install_requires = [req.strip() for req in f.readlines()]
 
 extras_require = {
     'ccdc': ['csd-python-api'],

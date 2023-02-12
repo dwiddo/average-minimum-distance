@@ -41,7 +41,7 @@ df = amd.compare('file1.cif', 'file2.cif', by='AMD', k=100)
 
 The distance matrix is returned as a [pandas DataFrame](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html). ```amd.compare()``` can also accept a folder or list of cifs.
 
-```amd.compare()``` reads crystals, calculates their descriptors and compares them. These steps can be done separately (e.g. for saving the descriptors to a file), explained below. Many optional parameters are accepted, see [this documentation page](https://average-minimum-distance.readthedocs.io/en/latest/Get_Started.html#full-list-of-optional-parameters) for a full list.
+```amd.compare()``` reads crystals, calculates their descriptors and compares them. These steps can be done separately (e.g. for saving the descriptors to a file), explained below. Many optional parameters are accepted, see [the documentation](https://average-minimum-distance.readthedocs.io/en/latest/Get_Started.html#full-list-of-optional-parameters) for a full list.
 
 *CSD Python API only:* ```amd.compare()``` also accepts one or more CSD refcodes or other file formats instead of cifs (by passing ```reader='ccdc'```).
 
@@ -61,9 +61,9 @@ amds = [amd.AMD(crystal, 100) for crystal in reader]
 # pdds = [amd.PDD(crystal, 100) for crystal in reader]
 ```
 
-CifReader accepts optional parameters, e.g. for removing Hydrogen atoms and handling disorder, see [this documentation page](https://average-minimum-distance.readthedocs.io/en/latest/Reading_cifs.html) for a full list.
+CifReader accepts optional parameters, e.g. for removing Hydrogen atoms and handling disorder, see [the documentation](https://average-minimum-distance.readthedocs.io/en/latest/Reading_cifs.html) for a full list.
 
-*CSD Python API only:* CSD crystals can be read via the CSD Python API with ```amd.CSDReader```, see [this documentation page](https://average-minimum-distance.readthedocs.io/en/latest/Reading_from_the_CSD.html) for details. CifReader can accept file formats other than .cif by passing ```reader='ccdc'```.
+*CSD Python API only:* CSD crystals can be read via the CSD Python API with ```amd.CSDReader```, see [the documentation](https://average-minimum-distance.readthedocs.io/en/latest/Reading_from_the_CSD.html) for details. CifReader can accept file formats other than .cif by passing ```reader='ccdc'```.
 
 ### Comparing by AMD or PDD
 

@@ -26,7 +26,18 @@ def compare(
         by='AMD',
         k=100,
         nearest=None,
-        **kwargs
+        reader='ase',
+        remove_hydrogens=False,
+        disorder='skip',
+        heaviest_component=False,
+        molecular_centres=False,
+        families=False,
+        show_warnings=True,
+        collapse_tol=1e-4,
+        metric='chebyshev',
+        n_jobs=None,
+        verbose=0,
+        low_memory=False,
 ) -> pd.DataFrame:
     r"""Given one or two sets of periodic set(s), paths to cif(s) or
     refcode(s), compare them and return a DataFrame of the distance
@@ -51,9 +62,56 @@ def compare(
     nearest : int, deafult None
         Find a number of nearest neighbours instead of a full distance
         matrix between crystals.
-    **kwargs :
-        Optional arguments to be passed to io, calculate or compare
-        functions.
+    reader : str, optional
+        The backend package used to parse the CIF. The default is 
+        :code:`ase`, :code:`pymatgen` and :code:`gemmi` are also
+        accepted, as well as :code:`ccdc` if csd-python-api is 
+        installed. The ccdc reader should be able to read any format
+        accepted by :class:`ccdc.io.EntryReader`, though only CIFs have
+        been tested.
+    remove_hydrogens : bool, optional
+        Remove hydrogens from the crystals.
+    disorder : str, optional
+        Controls how disordered structures are handled. Default is
+        ``skip`` which skips any crystal with disorder, since disorder
+        conflicts with the periodic set model. To read disordered
+        structures anyway, choose either :code:`ordered_sites` to remove
+        atoms with disorder or :code:`all_sites` include all atoms
+        regardless of disorder.
+    heaviest_component : bool, optional
+        csd-python-api only. Removes all but the heaviest molecule in
+        the asymmeric unit, intended for removing solvents.
+    molecular_centres : bool, default False
+        csd-python-api only. Use the centres of molecules for comparison
+        instead of centres of atoms.
+    families : bool, optional
+        csd-python-api only. Read all entries whose refcode starts with
+        the given strings, or 'families' (e.g. giving 'DEBXIT' reads all
+        entries starting with DEBXIT).
+    show_warnings : bool, optional
+        Controls whether warnings that arise during reading are printed.
+    collapse_tol: float, default 1e-4
+        If two PDD rows have all elements closer than ``collapse_tol``,
+        they are merged and weights are given to rows in proportion to
+        the number of times they appeared.
+    metric : str or callable, default 'chebyshev'
+        The metric to compare AMDs/PDDs with. AMDs are compared directly
+        with this metric. EMD is the metric used between PDDs, which
+        requires giving a metric to use between PDD rows. Chebyshev
+        (L-infinity) distance is the default. Accepts any metric
+        accepted by :func:`scipy.spatial.distance.cdist`.
+    n_jobs : int, default None
+        PDD comparisons only. Maximum number of concurrent jobs for
+        parallel processing with :code:`joblib`. Set to -1 to use the
+        maximum. Using parallel processing may be slower for small
+        inputs.
+    verbose : int, default 0
+        PDD comparisons only. Verbosity level. If using parallel
+        processing (n_jobs > 1), verbose is passed to
+        :class:`joblib.Parallel` and larger values = more verbose.
+    low_memory : bool, default False
+        AMD comparisons only. Use a slower but more memory efficient
+        method for large collections of AMDs (metric 'chebyshev' only).
 
     Returns
     -------
@@ -92,36 +150,31 @@ def compare(
 
     by = by.upper()
     if by not in ('AMD', 'PDD'):
-        msg = f"parameter 'by' accepts 'AMD' or 'PDD', was passed {by}"
+        msg = f"parameter 'by' accepts 'AMD' or 'PDD', passed {by}"
         raise ValueError(msg)
 
-    # redo this way of doing things?
     reader_kwargs = {
-        'reader': 'ase',
-        'families': False,
-        'remove_hydrogens': False,
-        'disorder': 'skip',
-        'heaviest_component': False,
-        'molecular_centres': False,
-        'show_warnings': True,
+        'reader': reader,
+        'families': families,
+        'remove_hydrogens': remove_hydrogens,
+        'disorder': disorder,
+        'heaviest_component': heaviest_component,
+        'molecular_centres': molecular_centres,
+        'show_warnings': show_warnings,
     }
 
-    calc_kwargs = {
+    pdd_kwargs = {
         'collapse': True,
-        'collapse_tol': 1e-4,
+        'collapse_tol': collapse_tol,
         'lexsort': False,
     }
-
+    
     compare_kwargs = {
-        'metric': 'chebyshev',
-        'n_jobs': None,
-        'verbose': 0,
-        'low_memory': False,
+        'metric': metric,
+        'n_jobs': n_jobs,
+        'verbose': verbose,
+        'low_memory': low_memory,
     }
-
-    for default_kwargs in (reader_kwargs, calc_kwargs, compare_kwargs):
-        for key in kwargs.keys() & default_kwargs.keys():
-            default_kwargs[key] = kwargs[key]
 
     crystals = _unwrap_periodicset_list(crystals, **reader_kwargs)
     if not crystals:
@@ -155,13 +208,13 @@ def compare(
 
     elif by == 'PDD':
 
-        invs = [PDD(s, k, **calc_kwargs) for s in crystals]
+        invs = [PDD(s, k, **pdd_kwargs) for s in crystals]
         compare_kwargs.pop('low_memory', None)
 
         if crystals_ is None:
             dm = PDD_pdist(invs, **compare_kwargs)
         else:
-            invs_ = [PDD(s, k, **calc_kwargs) for s in crystals_]
+            invs_ = [PDD(s, k, **pdd_kwargs) for s in crystals_]
             dm = PDD_cdist(invs, invs_, **compare_kwargs)
 
     if nearest:

@@ -15,7 +15,7 @@ def main():
         description='Compare crystals by PDD or AMD from the command line.'
     )
 
-    parser.add_argument('path_or_refcodes', type=str, nargs='+',
+    parser.add_argument('paths_or_refcodes', type=str, nargs='+',
         help='(str) One or two paths to files or folders, or a collection ' \
              'of CSD refcodes if csd-python-api is installed.')
     parser.add_argument('--output', '-o', type=str, default='output',
