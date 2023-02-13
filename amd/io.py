@@ -113,7 +113,7 @@ class _Reader:
                 continue
 
             for warning in warning_msgs:
-                msg = f'{periodic_set.name} {warning.message}'
+                msg = f'(name={periodic_set.name}) {warning.message}'
                 warnings.warn(msg, category=warning.category)
 
             return periodic_set

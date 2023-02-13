@@ -44,8 +44,7 @@ def compare(
     matrix. Default is to comapre by AMD with k = 100. Accepts most
     keyword arguments accepted by :class:`CifReader <.io.CifReader>`,
     :class:`CSDReader <.io.CSDReader>` and functions from
-    :mod:`.compare`, for a full list see the documentation Quick Start
-    page. Note that using refcodes requires ``csd-python-api``.
+    :mod:`.compare`.
 
     Parameters
     ----------
@@ -78,39 +77,39 @@ def compare(
         structures anyway, choose either :code:`ordered_sites` to remove
         atoms with disorder or :code:`all_sites` include all atoms
         regardless of disorder.
-    heaviest_component : bool, optional
-        csd-python-api only. Removes all but the heaviest molecule in
+    heaviest_component : bool, optional, csd-python-api only
+        Removes all but the heaviest molecule in
         the asymmeric unit, intended for removing solvents.
-    molecular_centres : bool, default False
-        csd-python-api only. Use the centres of molecules for comparison
+    molecular_centres : bool, default False, csd-python-api only
+        Use the centres of molecules for comparison
         instead of centres of atoms.
-    families : bool, optional
-        csd-python-api only. Read all entries whose refcode starts with
+    families : bool, optional, csd-python-api only
+        Read all entries whose refcode starts with
         the given strings, or 'families' (e.g. giving 'DEBXIT' reads all
-        entries starting with DEBXIT).
+        entries with refcodes starting with DEBXIT).
     show_warnings : bool, optional
         Controls whether warnings that arise during reading are printed.
-    collapse_tol: float, default 1e-4
-        If two PDD rows have all elements closer than ``collapse_tol``,
-        they are merged and weights are given to rows in proportion to
-        the number of times they appeared.
+    collapse_tol: float, default 1e-4, ``by='PDD'`` only
+        If two PDD rows have all elements closer
+        than ``collapse_tol``, they are merged and weights are given to
+        rows in proportion to the number of times they appeared.
     metric : str or callable, default 'chebyshev'
         The metric to compare AMDs/PDDs with. AMDs are compared directly
         with this metric. EMD is the metric used between PDDs, which
         requires giving a metric to use between PDD rows. Chebyshev
         (L-infinity) distance is the default. Accepts any metric
         accepted by :func:`scipy.spatial.distance.cdist`.
-    n_jobs : int, default None
-        PDD comparisons only. Maximum number of concurrent jobs for
+    n_jobs : int, default None, ``by='PDD'`` only
+        Maximum number of concurrent jobs for
         parallel processing with :code:`joblib`. Set to -1 to use the
         maximum. Using parallel processing may be slower for small
         inputs.
-    verbose : int, default 0
-        PDD comparisons only. Verbosity level. If using parallel
-        processing (n_jobs > 1), verbose is passed to
-        :class:`joblib.Parallel` and larger values = more verbose.
-    low_memory : bool, default False
-        AMD comparisons only. Use a slower but more memory efficient
+    verbose : int, default 0, ``by='PDD'`` only
+        Verbosity level. If using parallel processing (n_jobs > 1),
+        passed to :class:`joblib.Parallel` where larger values = more
+        verbose. Otherwise uses tqdm if verbose is True.
+    low_memory : bool, default False, ``by='AMD'`` only
+        Use a slower but more memory efficient
         method for large collections of AMDs (metric 'chebyshev' only).
 
     Returns
@@ -420,8 +419,8 @@ def PDD_cdist(
         processing may be slower for small inputs.
     verbose : int, default 0
         Verbosity level. If using parallel processing (n_jobs > 1),
-        verbose is passed to :class:`joblib.Parallel` and larger values
-        = more verbose.
+        passed to :class:`joblib.Parallel` where larger values = more
+        verbose. Otherwise uses tqdm if verbose is True.
 
     Returns
     -------
@@ -496,8 +495,8 @@ def PDD_pdist(
         processing may be slower for small inputs.
     verbose : int, default 0
         Verbosity level. If using parallel processing (n_jobs > 1),
-        verbose is passed to :class:`joblib.Parallel` and larger values
-        = more verbose.
+        passed to :class:`joblib.Parallel` where larger values = more
+        verbose. Otherwise uses tqdm if verbose is True.
 
     Returns
     -------
@@ -540,9 +539,24 @@ def emd(pdd: np.ndarray, pdd_: np.ndarray, **kwargs):
 
 
 def _unwrap_periodicset_list(psets_or_str, **reader_kwargs):
-    """Valid input for compare (``PeriodicSet``, path, refcode, lists of
-    such) --> list of PeriodicSets.
+    """Valid input for amd.compare() (``PeriodicSet``, path, refcode,
+    lists of such) --> list of PeriodicSets.
     """
+
+    def _extract_periodicsets(item, **reader_kwargs):
+        """str (path/refcode), file or ``PeriodicSet`` --> list of
+        ``PeriodicSets``.
+        """
+
+        if isinstance(item, PeriodicSet):
+            return [item]
+        if isinstance(item, str) and not os.path.isfile(item) \
+                                 and not os.path.isdir(item):
+            reader_kwargs.pop('reader', None)
+            return list(CSDReader(item, **reader_kwargs))
+        reader_kwargs.pop('families', None)
+        reader_kwargs.pop('refcodes', None)
+        return list(CifReader(item, **reader_kwargs))
 
     if isinstance(psets_or_str, PeriodicSet):
         return [psets_or_str]
@@ -550,18 +564,3 @@ def _unwrap_periodicset_list(psets_or_str, **reader_kwargs):
         return [s for item in psets_or_str
                 for s in _extract_periodicsets(item, **reader_kwargs)]
     return _extract_periodicsets(psets_or_str, **reader_kwargs)
-
-
-def _extract_periodicsets(item, **reader_kwargs):
-    """str (path/refocde), file or ``PeriodicSet`` --> list of
-    ``PeriodicSets``.
-    """
-
-    if isinstance(item, PeriodicSet):
-        return [item]
-    if isinstance(item, str) and not os.path.isfile(item) and not os.path.isdir(item):
-        reader_kwargs.pop('reader', None)
-        return list(CSDReader(item, **reader_kwargs))
-    reader_kwargs.pop('families', None)
-    reader_kwargs.pop('refcodes', None)
-    return list(CifReader(item, **reader_kwargs))

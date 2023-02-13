@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.5] - 09/02/2023
+## [1.3.5] - 12/02/2023
 
 ### Added
 
@@ -16,7 +16,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- Fixed issue with the ccdc reader where atoms with missing coordinates would throw a ParseError where they should have been removed.
+- Fixed issue with ccdc reader where atoms with missing coordinates would throw a ParseError where they should have been removed.
 
 ## [1.3.4] - 07/11/2022
 

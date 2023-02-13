@@ -2,21 +2,21 @@
 average-minimum-distance: geometry-based crystal descriptors
 ============================================================
 
-Documentation is available in the docstrings and online at
+Documentation is available in the docstrings and at
 https://average-minimum-distance.readthedocs.io.
 
 List of modules
 ***************
 
-===================    ==============================================================
+===================    ===================================
 Module                 Description
-===================    ==============================================================
-:mod:`.calculate`      Calculate descriptors (invariants) of periodic sets (crystals)
-:mod:`.compare`        Compare invariants of crystals
-:mod:`.io`             Read crystals from a file or the CSD
+===================    ===================================
+:mod:`.calculate`      Calculate descriptors
+:mod:`.compare`        Compare descriptors
+:mod:`.io`             Read crystals from files or the CSD
 :mod:`.periodicset`    Implements the PeriodicSet object
 :mod:`.utils`          Utility functions
-===================    ==============================================================
+===================    ===================================
 """
 
 __version__ = '1.3.5a3'

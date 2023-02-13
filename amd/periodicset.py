@@ -20,19 +20,16 @@ from .utils import (
     random_cell,
 )
 
-from ase.data import atomic_masses
-
 
 class PeriodicSet:
-    """A periodic set representats a crystal by putting a point in the
-    center of each atom. Mathematically it's defined by a basis (unit 
-    cell) and collection of points (motif) which repeats according to
-    the basis. Periodic sets are defined for any dimension.
+    """A periodic set is a collection of points (motif) which
+    periodically repeats according to a lattice (unit cell), often
+    representing a crystal.
 
     :class:`PeriodicSet` s are returned by the readers in the
     :mod:`.io` module. They can be passed to
     :func:`amd.AMD() <.calculate.AMD>` or 
-    :func:`amd.PDD() <.calculate.PDD>` to calculate the invariants.
+    :func:`amd.PDD() <.calculate.PDD>` to calculate their invariants.
 
     Parameters
     ----------
@@ -78,18 +75,9 @@ class PeriodicSet:
     def ndim(self):
         return self.cell.shape[0]
 
-    @property
-    def density(self):
-        if self.types is None:
-            raise ValueError('')
-        cell_mass = sum(atomic_masses[n] for n in self.types)
-        cell_vol = np.linalg.det(self.cell)
-        return cell_mass / cell_vol
-
     def __str__(self):
-        """Returns a string representation of the format
-        PeriodicSet(name, motif (m, d), t asym sites, 
-        abcαβγ=cellpar).
+        """Returns a string representation of the PeriodicSet:
+        PeriodicSet(name, motif (m, d), t asym sites, abcαβγ=cellpar).
         """
 
         if self.asymmetric_unit is None:
@@ -119,24 +107,19 @@ class PeriodicSet:
 
     def __repr__(self):
 
-        if self.asymmetric_unit is None:
-            n_asym_sites = len(self.motif)
-        else:
-            n_asym_sites = len(self.asymmetric_unit)
-
         s = f'PeriodicSet(name={self.name}, ' \
-            f'motif={self.motif} ({n_asym_sites} asym sites), ' \
-            f'cell={self.cell})'
+            f'motif={self.motif}, cell={self.cell}, ' \
+            f'asymmetric_unit={self.asymmetric_unit}, ' \
+            f'wyckoff_multiplicities={self.wyckoff_multiplicities}, ' \
+            f'types={self.types})'
 
         return s
 
-    
     def __eq__(self, other):
-        """Used for debugging/tests. Returns True if:
-        1. The unit cells are identical (element for element within tol)
-        2. The motifs are the same shape, and when transformed into
-        fractional coordinates every point in one motif has an identical
-        (within tol) point somewhere in the other, accounting for pbc.
+        """Used for debugging/tests. True if both 1. the unit cells are
+        (close to) identical, and 2. the motifs are the same shape, and
+        every point in one motif has a (close to) identical point
+        somewhere in the other, accounting for pbc.
         """
 
         if self.cell.shape != other.cell.shape or \
@@ -150,7 +133,8 @@ class PeriodicSet:
         d2 = np.abs(d1 - 1)
         diffs = np.amax(np.minimum(d1, d2), axis=-1)
 
-        if not np.all((np.amin(diffs, axis=0) <= 1e-8) | (np.amin(diffs, axis=-1) <= 1e-8)):
+        if not np.all((np.amin(diffs, axis=0) <= 1e-8) | 
+                      (np.amin(diffs, axis=-1) <= 1e-8)):
             return False
 
         return True

@@ -6,6 +6,7 @@ from typing import Tuple
 import numpy as np
 import numba
 from scipy.spatial.distance import squareform
+from ase.data import atomic_masses
 
 
 def diameter(cell):
@@ -246,7 +247,7 @@ def neighbours_from_distance_matrix(
         inds = np.array(inds)
     else:
         msg = "Input must be a NumPy ndarray, either a 2D distance matrix " \
-              "or a condensed distance matrix (returned by SciPy's pdist)."
+              "or a condensed distance matrix (as returned by SciPy's pdist)."
         ValueError(msg)
 
     # inds are the indexes of nns: inds[i,j] is the j-th nn to point i
