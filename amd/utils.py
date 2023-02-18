@@ -1,4 +1,4 @@
-"""General utility functions.
+"""Miscellaneous utility functions.
 """
 
 from typing import Tuple
@@ -6,7 +6,6 @@ from typing import Tuple
 import numpy as np
 import numba
 from scipy.spatial.distance import squareform
-from ase.data import atomic_masses
 
 
 def diameter(cell):
@@ -50,10 +49,10 @@ def diameter(cell):
 
 @numba.njit()
 def cellpar_to_cell(a, b, c, alpha, beta, gamma):
-    """Simplified version of function from :mod:`ase.geometry` of the
-    same name. Converts canonical 3D unit cell parameters a,b,c,α,β,γ
-    into a 3x3 :class:`numpy.ndarray` representing the unit cell (in
-    orthogonal coordinates).
+    """Numba-accelerated version of function from :mod:`ase.geometry` of
+    the same name. Converts canonical 3D unit cell parameters
+    a,b,c,α,β,γ into a 3x3 :class:`numpy.ndarray` representing the unit
+    cell (in orthogonal coordinates).
 
     Parameters
     ----------
@@ -73,8 +72,7 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     Returns
     -------
     cell : :class:`numpy.ndarray`
-        Unit cell represented as a 3x3 matrix (in orthogonal
-        coordinates).
+        Unit cell represented as a 3x3 matrix in orthogonal coordinates.
     """
 
     eps = 2 * np.spacing(90) # ~1.4e-14
@@ -113,13 +111,12 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
     cell[2, 0] = c * cos_beta
     cell[2, 1] = c * cy
     cell[2, 2] = c * np.sqrt(cz_sqr)
-
     return cell
 
 
 @numba.njit()
 def cellpar_to_cell_2D(a, b, alpha):
-    """Converts 2D unit cell parameters a,b,α into a 2x2
+    """Converts 3 parameters defining a 2D unit cell a,b,α into a 2x2
     :class:`numpy.ndarray` representing the unit cell in orthogonal
     coordinates.
 
@@ -135,8 +132,7 @@ def cellpar_to_cell_2D(a, b, alpha):
     Returns
     -------
     cell : :class:`numpy.ndarray`
-        Unit cell represented as a 2x2 matrix (in orthogonal
-        coordinates).
+        Unit cell represented as a 2x2 matrix in orthogonal coordinates.
     """
 
     cell = np.zeros((2, 2))
@@ -144,7 +140,6 @@ def cellpar_to_cell_2D(a, b, alpha):
     cell[0, 0] = a
     cell[1, 0] = b * np.cos(ang)
     cell[1, 1] = b * np.sin(ang)
-
     return cell
 
 
@@ -163,8 +158,8 @@ def cell_to_cellpar(cell):
     Returns
     -------
     cellpar : :class:`numpy.ndarray`
-        Vector with 6 elements, containing the 6 unit cell parameters in
-        the canonical order a,b,c,α,β,γ.
+        Vector of 6 unit cell parameters in the canonical order
+        a,b,c,α,β,γ.
     """
 
     cellpar = np.zeros((6, ))
@@ -180,10 +175,10 @@ def cell_to_cellpar(cell):
     cellpar[5] = np.rad2deg(np.arccos(
         np.dot(cell[0], cell[1]) / (cellpar[0] * cellpar[1])
     ))
-
     return cellpar
 
 
+@numba.njit()
 def cell_to_cellpar_2D(cell):
     """Converts a 2x2 :class:`numpy.ndarray` representing a unit cell in
     orthogonal coordinates (as returned by 
@@ -226,7 +221,7 @@ def neighbours_from_distance_matrix(
 
     Returns
     -------
-    (nn_dm, inds) :
+    (nn_dm, inds) : tuple of :class:`numpy.ndarray` s
         ``nn_dm[i][j]`` is the distance from item :math:`i` to its
         :math:`j+1` st nearest neighbour, and ``inds[i][j]`` is the
         index of this neighbour (:math:`j+1` since index 0 is the first

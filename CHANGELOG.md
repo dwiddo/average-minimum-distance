@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.5] - 12/02/2023
+## [1.3.5] - 18/02/2023
 
 ### Added
 
@@ -12,7 +12,7 @@ All notable changes to this project will be documented in this file.
 
 - Changes to converter functions in the `io` module have decoupled them from depending on other packages, e.g. `periodicset_from_pymatgen_cifblock()` now has no dependency on `ase`, just `pymatgen`.
 
-- Cleaned up documentation, +PEP8, +pyproject.toml.
+- Cleaned up documentation, PEP8, pyproject.toml.
 
 ### Changed
 

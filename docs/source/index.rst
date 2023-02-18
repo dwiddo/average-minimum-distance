@@ -3,7 +3,7 @@
    :maxdepth: 2
    :caption: Using amd
 
-   Get_Started
+   Getting_Started
    Description_of_AMD_PDD
    Reading_cifs
    Reading_from_the_CSD

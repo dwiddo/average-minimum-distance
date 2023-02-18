@@ -29,10 +29,11 @@ pip install average-minimum-distance
 
 Then import average-minimum-distance with ```import amd```.
 
-```amd.compare()``` can compare crystals in cif files by the AMD or PDD descriptors, e.g.
+```amd.compare()``` compares crystals in cif files by AMD or PDD, e.g.
 
 ```py
 import amd
+
 # compare all items in one cif by PDD, k=100
 df = amd.compare('file.cif', by='PDD', k=100)
 # compare all in file1 vs all in file2 by AMD, k=100
@@ -41,9 +42,9 @@ df = amd.compare('file1.cif', 'file2.cif', by='AMD', k=100)
 
 The distance matrix is returned as a [pandas DataFrame](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html). ```amd.compare()``` can also accept a folder or list of cifs.
 
-```amd.compare()``` reads crystals, calculates their descriptors and compares them. These steps can be done separately (e.g. for saving the descriptors to a file), explained below. Many optional parameters are accepted, see [the documentation](https://average-minimum-distance.readthedocs.io/en/latest/Get_Started.html#full-list-of-optional-parameters) for a full list.
+```amd.compare()``` reads crystals, calculates their descriptors and compares them. These steps can be done separately (e.g. for saving the descriptors to a file), explained below. Many optional parameters are accepted, see [the documentation](https://average-minimum-distance.readthedocs.io/en/latest/Getting_Started.html#full-list-of-optional-parameters) for a full list.
 
-*CSD Python API only:* ```amd.compare()``` also accepts one or more CSD refcodes or other file formats instead of cifs (by passing ```reader='ccdc'```).
+*CSD Python API only:* ```amd.compare()``` accepts one or more CSD refcodes or other file formats instead of cifs (by passing ```reader='ccdc'```).
 
 #### Choosing a value of k
 
@@ -55,6 +56,7 @@ This code reads a cif file and computes the list of AMDs (k = 100):
 
 ```py
 import amd
+
 reader = amd.CifReader('file.cif')
 amds = [amd.AMD(crystal, 100) for crystal in reader]
 # # To calculate the PDDs:
@@ -93,6 +95,7 @@ To compare crystals in one set with those in another set, use ```amd.AMD_cdist``
 
 ```py
 import amd
+
 amds1 = [amd.AMD(c, 100) for c in amd.CifReader('set1.cif')]
 amds2 = [amd.AMD(c, 100) for c in amd.CifReader('set2.cif')]
 # dm[i][j] = AMD distance between amds1[i] & amds2[j]

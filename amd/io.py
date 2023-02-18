@@ -2,7 +2,7 @@
 ``csd-python-api``. The readers return
 :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` objects representing
 the crystal which can be passed to :func:`amd.AMD() <.calculate.AMD>`
-and :func:`amd.PDD() <.calculate.PDD>` to get their invariants.
+and :func:`amd.PDD() <.calculate.PDD>`.
 """
 
 import os
@@ -494,6 +494,7 @@ def periodicset_from_ase_cifblock(
     """
 
     import ase
+    import ase.spacegroup
 
     # Unit cell
     cellpar = [block.get(tag) for tag in CIF_TAGS['cellpar']]
@@ -595,30 +596,32 @@ def periodicset_from_ase_cifblock(
             asym_unit = asym_unit[keep_sites]
             asym_types = [t for t, keep in zip(asym_types, keep_sites) if keep]
 
-    # Symmetry operations
+    # Get symmetry operations
     sitesym = block._get_any(CIF_TAGS['symop'])
-    if sitesym is None: # no symops, use spacegroup
-        try:
-            spg = block.get_spacegroup(True)
-            rot, trans = spg.rotations, spg.translations
-        except: # no spacegroup, assume P1
-            rot, trans = _parse_sitesym(['x,y,z'])
+    if sitesym is None:
+        label_or_num = block._get_any(CIF_TAGS['spacegroup_name'])
+        if label_or_num is None:
+            label_or_num = block._get_any(CIF_TAGS['spacegroup_number'])
+        if label_or_num is None:
+            warnings.warn('no symmetry data found, defaulting to P1')
+            label_or_num = 1
+        spg = ase.spacegroup.Spacegroup(label_or_num)
+        rot, trans = spg.get_op()
     else:
         if isinstance(sitesym, str):
             sitesym = [sitesym]
-        rot, trans = _parse_sitesym(sitesym)
+        rot, trans =  _parse_sitesyms(sitesym)
 
-    # Apply symmetries to asymmetric unit
-    frac_motif, asym_inds, wyc_muls, inverses = _expand_asym_unit(asym_unit, rot, trans)
-    types = np.array([asym_types[i] for i in inverses])
-    motif = frac_motif @ cell
+    fr_motif, asym_inds, muls, invs = _expand_asym_unit(asym_unit, rot, trans)
+    types = np.array([asym_types[i] for i in invs])
+    motif = fr_motif @ cell
 
     return PeriodicSet(
         motif=motif,
         cell=cell,
         name=block.name,
         asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=wyc_muls,
+        wyckoff_multiplicities=muls,
         types=types
     )
 
@@ -671,18 +674,23 @@ def periodicset_from_ase_atoms(
     if 'spacegroup' in atoms.info:
         spg = atoms.info['spacegroup']
         rot, trans = spg.rotations, spg.translations
-    # else assume no symmetries?
+    else:
+        warnings.warn('no symmetry data found, defaulting to P1')
+        rot = np.identity(3)[None, :]
+        trans = np.zeros((1, 3))
 
     # Asymmetric unit. ase default tol is 1e-5
+    # do differently! get_basis determines a reduced asym unit from the atoms;
+    # surely this is not needed!
     asym_unit = get_basis(atoms, spacegroup=spg, tol=_EQUIV_SITE_TOL)
-    frac_motif, asym_inds, wyc_muls, _ = _expand_asym_unit(asym_unit, rot, trans)
-    motif = frac_motif @ cell
+    fr_motif, asym_inds, muls, _ = _expand_asym_unit(asym_unit, rot, trans)
+    motif = fr_motif @ cell
 
     return PeriodicSet(
         motif=motif,
         cell=cell,
         asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=wyc_muls,
+        wyckoff_multiplicities=muls,
         types=atoms.get_atomic_numbers()
     )
 
@@ -795,12 +803,13 @@ def periodicset_from_pymatgen_cifblock(
         asym_unit = [c for i, c in enumerate(asym_unit) if i not in invalid]
         asym_types = [c for i, c in enumerate(asym_types) if i not in invalid]
         if disorder != 'all_sites':
-            has_disorder = [d for i, d in enumerate(has_disorder) if i not in invalid]
+            has_disorder = [d for i, d in enumerate(has_disorder) 
+                            if i not in invalid]
 
     remove_sites = []
 
     if remove_hydrogens:
-        remove_sites.extend((i for i, num in enumerate(asym_types) if num == 1))
+        remove_sites.extend((i for i, n in enumerate(asym_types) if n == 1))
 
     # Remove atoms with fractional occupancy or raise ParseError
     if disorder != 'all_sites':
@@ -839,17 +848,17 @@ def periodicset_from_pymatgen_cifblock(
         asym_types = [sym for sym, keep in zip(asym_types, keep_sites) if keep]
 
     # Apply symmetries to asymmetric unit
-    rot, trans = _parse_sitesym_pymatgen(odict)
-    frac_motif, asym_inds, wyc_muls, inverses = _expand_asym_unit(asym_unit, rot, trans)
-    types = np.array([asym_types[i] for i in inverses])
-    motif = frac_motif @ cell
+    rot, trans = _get_syms_pymatgen(odict)
+    fr_motif, asym_inds, muls, invs = _expand_asym_unit(asym_unit, rot, trans)
+    types = np.array([asym_types[i] for i in invs])
+    motif = fr_motif @ cell
 
     return PeriodicSet(
         motif=motif,
         cell=cell,
         name=block.header,
         asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=wyc_muls,
+        wyckoff_multiplicities=muls,
         types=types
     )
 
@@ -916,14 +925,14 @@ def periodicset_from_pymatgen_structure(
     cell = structure.lattice.matrix
     sym_structure = SpacegroupAnalyzer(structure).get_symmetrized_structure()
     asym_unit = np.array([l[0] for l in sym_structure.equivalent_indices])
-    wyc_muls = np.array([len(l) for l in sym_structure.equivalent_indices])
+    muls = np.array([len(l) for l in sym_structure.equivalent_indices])
     types = np.array(sym_structure.atomic_numbers)
 
     return PeriodicSet(
         motif=motif,
         cell=cell,
         asymmetric_unit=asym_unit,
-        wyckoff_multiplicities=wyc_muls,
+        wyckoff_multiplicities=muls,
         types=types
     )
 
@@ -1112,27 +1121,25 @@ def periodicset_from_ccdc_crystal(
     sitesym = crystal.symmetry_operators
     # try spacegroup numbers?
     if not sitesym:
+        warnings.warn('no symmetry data found, defaulting to P1')
         sitesym = ['x,y,z']
-    rot = np.array([np.array(crystal.symmetry_rotation(op)).reshape((3, 3)) 
-                    for op in sitesym])
-    trans = np.array([crystal.symmetry_translation(op) for op in sitesym])
 
     # Apply symmetries to asymmetric unit
-    frac_motif, asym_inds, wyc_muls, inverses = _expand_asym_unit(asym_unit, rot, trans)
-    motif = frac_motif @ cell
-    types = np.array([asym_types[i] for i in inverses])
+    rot, trans = _parse_sitesyms(sitesym)
+    fr_motif, asym_inds, muls, invs = _expand_asym_unit(asym_unit, rot, trans)
+    motif = fr_motif @ cell
+    types = np.array([asym_types[i] for i in invs])
 
     return PeriodicSet(
         motif=motif,
         cell=cell,
         name=crystal.identifier,
         asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=wyc_muls,
+        wyckoff_multiplicities=muls,
         types=types
     )
 
 
-# Not quite finished
 def periodicset_from_gemmi_block(
         block,
         remove_hydrogens=False,
@@ -1175,9 +1182,10 @@ def periodicset_from_gemmi_block(
     """
 
     import gemmi
+    from gemmi.cif import as_number, as_string, as_int
 
     # Unit cell
-    cellpar = [gemmi.cif.as_number(block.find_value(tag))
+    cellpar = [as_number(block.find_value(tag))
                for tag in CIF_TAGS['cellpar']]
     if None in cellpar:
         raise ParseError(f'{block.name} has missing cell data')
@@ -1191,7 +1199,7 @@ def periodicset_from_gemmi_block(
     # Asymmetric unit coordinates
     loop_dict = _loop_to_dict_gemmi(xyz_loop)
     xyz_str = [loop_dict[t] for t in CIF_TAGS['atom_site_fract']]
-    asym_unit = [[gemmi.cif.as_number(c) for c in coords] for coords in xyz_str]
+    asym_unit = [[as_number(c) for c in coords] for coords in xyz_str]
     asym_unit = np.mod(np.array(asym_unit).T, 1)
     # asym_unit = _snap_small_prec_coords(asym_unit) # recommended by pymatgen
 
@@ -1212,7 +1220,7 @@ def periodicset_from_gemmi_block(
         labels = [''] * xyz_loop.length()
 
     if '_atom_site_occupancy' in loop_dict:
-        occupancies = [gemmi.cif.as_number(occ)
+        occupancies = [as_number(occ)
                        for occ in loop_dict['_atom_site_occupancy']]
     else:
         occupancies = [None for _ in range(xyz_loop.length())]
@@ -1248,43 +1256,57 @@ def periodicset_from_gemmi_block(
         asym_unit = asym_unit[keep_sites]
         asym_types = [sym for sym, keep in zip(asym_types, keep_sites) if keep]
 
-    # Symmetry operations
+    # Get symmetry operations
     sitesym = []
     for tag in CIF_TAGS['symop']:
         symop_loop = block.find([tag]).loop
         if symop_loop is not None:
-            symop_loop_dict = _loop_to_dict_gemmi(symop_loop)
-            sitesym = symop_loop_dict[tag]
+            sitesym = _loop_to_dict_gemmi(symop_loop)[tag]
             break
-    # Try spacegroup names/numbers?
-    if not sitesym:
-        sitesym = ['x,y,z',]
 
-    # Apply symmetries to asymmetric unit
-    rot, trans = _parse_sitesym(sitesym)
-    frac_motif, asym_inds, wyc_muls, inverses = _expand_asym_unit(asym_unit, rot, trans)
-    types = np.array([asym_types[i] for i in inverses])
-    motif = frac_motif @ cell
+    if not sitesym:
+        for tag in CIF_TAGS['spacegroup_name']:
+            label_or_num = block.find_value(tag)
+            if label_or_num is not None:
+                label_or_num = as_string(label_or_num)
+                break
+        if label_or_num is None:
+            for tag in CIF_TAGS['spacegroup_number']:
+                label_or_num = block.find_value(tag)
+                if label_or_num is not None:
+                    label_or_num = as_int(label_or_num)
+                    break
+        if label_or_num is None:
+            warnings.warn('no symmetry data found, defaulting to P1')
+            label_or_num = 1
+        ops = list(gemmi.SpaceGroup(label_or_num).operations())
+        rot = np.array([np.array(o.rot) / o.DEN for o in ops])
+        trans = np.array([np.array(o.tran) / o.DEN for o in ops])
+    else:
+        rot, trans =  _parse_sitesyms(sitesym)
+
+    fr_motif, asym_inds, muls, invs = _expand_asym_unit(asym_unit, rot, trans)
+    types = np.array([asym_types[i] for i in invs])
+    motif = fr_motif @ cell
 
     return PeriodicSet(
         motif=motif,
         cell=cell,
         name=block.name,
         asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=wyc_muls,
+        wyckoff_multiplicities=muls,
         types=types
     )
 
 
-def _parse_sitesym(symmetries):
+def _parse_sitesyms(symmetries):
     """Parses a sequence of symmetries in xyz form and returns rotation
-    and translation arrays. Similar to function found in
-    ase.spacegroup.spacegroup.
+    and translation arrays. Similar to function found in ase.spacegroup.
     """
 
     nsyms = len(symmetries)
-    rotations = np.zeros((nsyms, 3, 3))
-    translations = np.zeros((nsyms, 3))
+    rotations = np.zeros((nsyms, 3, 3), dtype=np.float64)
+    translations = np.zeros((nsyms, 3), dtype=np.float64)
 
     for i, sym in enumerate(symmetries):
         for ind, element in enumerate(sym.split(',')):
@@ -1303,7 +1325,7 @@ def _parse_sitesym(symmetries):
                 elif char == '/':
                     is_fraction = True
                 elif char in 'xyz':
-                    rot_sgn = 1 if is_positive else -1
+                    rot_sgn = 1.0 if is_positive else -1.0
                     rotations[i][ind][ord(char) - ord('x')] = rot_sgn
                 elif char.isdigit() or char == '.':
                     if sng_trans is None:
@@ -1331,8 +1353,7 @@ def _expand_asym_unit(
         rotations: np.ndarray,
         translations: np.ndarray
 ) -> Tuple[np.ndarray, ...]:
-    """
-    Asymmetric unit frac coords, list of rotations & translations -->
+    """Asymmetric unit frac coords, list of rotations & translations -->
     full fractional motif, asymmetric unit indices, multiplicities and
     inverses (which motif points come from where in the asym unit).
     """
@@ -1344,7 +1365,7 @@ def _expand_asym_unit(
     m, dims = asym_unit.shape
 
     # Apply all symmetries first
-    expanded_sites = np.zeros((m, len(rotations), dims))
+    expanded_sites = np.zeros((m, len(rotations), dims), dtype=np.float64)
     for i in range(m):
         expanded_sites[i] = np.dot(rotations, asym_unit[i]) + translations
     expanded_sites = np.mod(expanded_sites, 1)
@@ -1385,9 +1406,9 @@ def _expand_asym_unit(
             multiplicities.append(multiplicity)
             asym_inds.append(len(frac_motif))
 
-    frac_motif = np.array(frac_motif)
-    asym_inds = np.array(asym_inds[:-1])
-    multiplicities = np.array(multiplicities)
+    frac_motif = np.array(frac_motif, dtype=np.float64)
+    asym_inds = np.array(asym_inds[:-1], dtype=np.int32)
+    multiplicities = np.array(multiplicities, dtype=np.int32)
 
     return frac_motif, asym_inds, multiplicities, inverses
 
@@ -1412,10 +1433,11 @@ def _has_disorder(label, occupancy):
     return (np.isscalar(occupancy) and occupancy < 1) or label.endswith('?')
 
 
-def _parse_sitesym_pymatgen(data):
-    """Parse symmetry operations given data = block.data where block is
-    a pymatgen CifBlock object. If the symops are not present the space
-    group symbol is parsed and symops are generated.
+def _get_syms_pymatgen(data):
+    """Parse symmetry operations given by data = block.data where block
+    is a pymatgen CifBlock object. If the symops are not present the
+    space group symbol/international number is parsed and symops are
+    generated.
     """
 
     from pymatgen.symmetry.groups import SpaceGroup
@@ -1424,9 +1446,8 @@ def _parse_sitesym_pymatgen(data):
 
     symops = []
 
-    # Try to parse xyz symmetry operations
+    # Try xyz symmetry operations
     for symmetry_label in CIF_TAGS['symop']:
-
         xyz = data.get(symmetry_label)
         if not xyz:
             continue
@@ -1438,11 +1459,9 @@ def _parse_sitesym_pymatgen(data):
         except ValueError:
             continue
 
-    # Spacegroup symbol
+    # Try spacegroup symbol
     if not symops:
-
         for symmetry_label in CIF_TAGS['spacegroup_name']:
-
             sg = data.get(symmetry_label)
             if not sg:
                 continue
@@ -1460,8 +1479,8 @@ def _parse_sitesym_pymatgen(data):
             try:
                 for d in pymatgen.io.cif._get_cod_data():
                     if sg == re.sub(r'\s+', '', d['hermann_mauguin']):
-                        xyz = d['symops']
-                        symops = [SymmOp.from_xyz_string(s) for s in xyz]
+                        symops = [SymmOp.from_xyz_string(s)
+                                  for s in d['symops']]
                         break
             except Exception as e:
                 continue
@@ -1469,7 +1488,7 @@ def _parse_sitesym_pymatgen(data):
             if symops:
                 break
 
-    # International number
+    # Try international number
     if not symops:
         for symmetry_label in CIF_TAGS['spacegroup_number']:
             num = data.get(symmetry_label)
@@ -1484,7 +1503,8 @@ def _parse_sitesym_pymatgen(data):
                 continue
 
     if not symops:
-        symops = [SymmOp.from_xyz_string(s) for s in ['x', 'y', 'z']]
+        warnings.warn('no symmetry data found, defaulting to P1')
+        symops = [SymmOp.from_xyz_string('x,y,z')]
 
     rotations = [op.rotation_matrix for op in symops]
     translations = [op.translation_vector for op in symops]

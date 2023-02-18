@@ -2,7 +2,6 @@ Reading from the CSD
 ====================
 
 If csd-python-api is installed, ``amd`` can use it to read crystals directly from the CSD. 
-
 :class:`amd.CSDReader <amd.io.CSDReader>` accepts a list of CSD refcode(s) and yields the crystals. 
 If ``None`` or ``'CSD'`` are passed instead of refcodes, it reads the whole CSD::
 

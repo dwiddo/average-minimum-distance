@@ -2,8 +2,7 @@
 set, defined by a motif and unit cell. This models a crystal with a
 point at the center of each atom.
 
-This is the type yielded by the readers 
-:class:`amd.CifReader <.io.CifReader>` and 
+This is the type yielded by :class:`amd.CifReader <.io.CifReader>` and 
 :class:`amd.CSDReader <.io.CSDReader>`. A :class:`PeriodicSet` can be
 passed as the first argument to :func:`amd.AMD() <.calculate.AMD>` or
 :func:`amd.PDD() <.calculate.PDD>` to calculate its invariants.
@@ -144,7 +143,7 @@ class PeriodicSet:
 
     @staticmethod
     def cubic(scale=1, dims=3):
-        """Return a :class:`PeriodicSet` representing a cubic lattice.
+        """Returns a :class:`PeriodicSet` representing a cubic lattice.
         """
 
         cell = np.identity(dims) * scale
