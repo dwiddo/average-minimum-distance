@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Cif/CSD Reader internals have been improved (expanding the asymmetric unit to the full motif is ~5x faster, giving to an overall reading improvement of 2-3x).
+
 - `utils.cell_to_cellpar` and `utils.cell_to_cellpar_2D` have been improved with `numba`.
 
 - Removed `_ETA` class and added dependency `tqdm` for progress bars.

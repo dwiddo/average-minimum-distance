@@ -612,16 +612,19 @@ def periodicset_from_ase_cifblock(
             sitesym = [sitesym]
         rot, trans =  _parse_sitesyms(sitesym)
 
-    fr_motif, asym_inds, muls, invs = _expand_asym_unit(asym_unit, rot, trans)
-    types = np.array([asym_types[i] for i in invs])
-    motif = fr_motif @ cell
+    frac_motif, inverses = _expand_asym_unit(asym_unit, rot, trans)
+    _, wyc_muls = np.unique(inverses, return_counts=True)
+    asym_inds = np.zeros_like(wyc_muls)
+    asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
+    types = np.array([asym_types[i] for i in inverses])
+    motif = frac_motif @ cell
 
     return PeriodicSet(
         motif=motif,
         cell=cell,
         name=block.name,
         asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=muls,
+        wyckoff_multiplicities=wyc_muls,
         types=types
     )
 
@@ -683,14 +686,17 @@ def periodicset_from_ase_atoms(
     # do differently! get_basis determines a reduced asym unit from the atoms;
     # surely this is not needed!
     asym_unit = get_basis(atoms, spacegroup=spg, tol=_EQUIV_SITE_TOL)
-    fr_motif, asym_inds, muls, _ = _expand_asym_unit(asym_unit, rot, trans)
-    motif = fr_motif @ cell
+    frac_motif, inverses = _expand_asym_unit(asym_unit, rot, trans)
+    _, wyc_muls = np.unique(inverses, return_counts=True)
+    asym_inds = np.zeros_like(wyc_muls)
+    asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
+    motif = frac_motif @ cell
 
     return PeriodicSet(
         motif=motif,
         cell=cell,
         asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=muls,
+        wyckoff_multiplicities=wyc_muls,
         types=atoms.get_atomic_numbers()
     )
 
@@ -849,16 +855,19 @@ def periodicset_from_pymatgen_cifblock(
 
     # Apply symmetries to asymmetric unit
     rot, trans = _get_syms_pymatgen(odict)
-    fr_motif, asym_inds, muls, invs = _expand_asym_unit(asym_unit, rot, trans)
-    types = np.array([asym_types[i] for i in invs])
-    motif = fr_motif @ cell
+    frac_motif, inverses = _expand_asym_unit(asym_unit, rot, trans)
+    _, wyc_muls = np.unique(inverses, return_counts=True)
+    asym_inds = np.zeros_like(wyc_muls)
+    asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
+    types = np.array([asym_types[i] for i in inverses])
+    motif = frac_motif @ cell
 
     return PeriodicSet(
         motif=motif,
         cell=cell,
         name=block.header,
         asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=muls,
+        wyckoff_multiplicities=wyc_muls,
         types=types
     )
 
@@ -925,14 +934,14 @@ def periodicset_from_pymatgen_structure(
     cell = structure.lattice.matrix
     sym_structure = SpacegroupAnalyzer(structure).get_symmetrized_structure()
     asym_unit = np.array([l[0] for l in sym_structure.equivalent_indices])
-    muls = np.array([len(l) for l in sym_structure.equivalent_indices])
+    wyc_muls = np.array([len(l) for l in sym_structure.equivalent_indices])
     types = np.array(sym_structure.atomic_numbers)
 
     return PeriodicSet(
         motif=motif,
         cell=cell,
         asymmetric_unit=asym_unit,
-        wyckoff_multiplicities=muls,
+        wyckoff_multiplicities=wyc_muls,
         types=types
     )
 
@@ -1126,16 +1135,20 @@ def periodicset_from_ccdc_crystal(
 
     # Apply symmetries to asymmetric unit
     rot, trans = _parse_sitesyms(sitesym)
-    fr_motif, asym_inds, muls, invs = _expand_asym_unit(asym_unit, rot, trans)
-    motif = fr_motif @ cell
-    types = np.array([asym_types[i] for i in invs])
+    frac_motif, inverses = _expand_asym_unit(asym_unit, rot, trans)
+    _, wyc_muls = np.unique(inverses, return_counts=True)
+    asym_inds = np.zeros_like(wyc_muls)
+    asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
+    # print(wyc_muls, asym_inds)
+    motif = frac_motif @ cell
+    types = np.array([asym_types[i] for i in inverses])
 
     return PeriodicSet(
         motif=motif,
         cell=cell,
         name=crystal.identifier,
         asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=muls,
+        wyckoff_multiplicities=wyc_muls,
         types=types
     )
 
@@ -1285,16 +1298,19 @@ def periodicset_from_gemmi_block(
     else:
         rot, trans =  _parse_sitesyms(sitesym)
 
-    fr_motif, asym_inds, muls, invs = _expand_asym_unit(asym_unit, rot, trans)
-    types = np.array([asym_types[i] for i in invs])
-    motif = fr_motif @ cell
+    frac_motif, inverses = _expand_asym_unit(asym_unit, rot, trans)
+    _, wyc_muls = np.unique(inverses, return_counts=True)
+    asym_inds = np.zeros_like(wyc_muls)
+    asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
+    types = np.array([asym_types[i] for i in inverses])
+    motif = frac_motif @ cell
 
     return PeriodicSet(
         motif=motif,
         cell=cell,
         name=block.name,
         asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=muls,
+        wyckoff_multiplicities=wyc_muls,
         types=types
     )
 
@@ -1354,63 +1370,84 @@ def _expand_asym_unit(
         translations: np.ndarray
 ) -> Tuple[np.ndarray, ...]:
     """Asymmetric unit frac coords, list of rotations & translations -->
-    full fractional motif, asymmetric unit indices, multiplicities and
-    inverses (which motif points come from where in the asym unit).
+    full fractional motif + inverse indices (which motif points come
+    from where in the asym unit).
     """
 
-    frac_motif = []     # Full motif
-    asym_inds = [0]     # Indices of asymmetric unit 
-    multiplicities = [] # Wyckoff multiplicities
-    inverses = []       # Motif -> Asymmetric unit
-    m, dims = asym_unit.shape
+    frac_motif, inverses = _expand_asym_unit_fast(
+        asym_unit, rotations, translations
+    )
 
-    # Apply all symmetries first
-    expanded_sites = np.zeros((m, len(rotations), dims), dtype=np.float64)
-    for i in range(m):
-        expanded_sites[i] = np.dot(rotations, asym_unit[i]) + translations
-    expanded_sites = np.mod(expanded_sites, 1)
+    if not all(_unique_sites(frac_motif, _EQUIV_SITE_TOL)):
+        frac_motif, inverses = _expand_asym_unit_equiv_sites(
+            asym_unit, rotations, translations
+        )
 
-    for inv, sites in enumerate(expanded_sites):
+    return frac_motif, inverses
 
-        multiplicity = 0
 
-        for site_ in sites:
+def _expand_asym_unit_fast(
+        asym_unit: np.ndarray,
+        rotations: np.ndarray,
+        translations: np.ndarray
+) -> Tuple[np.ndarray, ...]:
+    """Asymmetric unit frac coords, list of rotations & translations -->
+    full fractional motif + inverse indices (which motif points come
+    from where in the asym unit).
+    """
 
-            if not frac_motif:
-                frac_motif.append(site_)
-                inverses.append(inv)
-                multiplicity += 1
-                continue
+    frac_motif = []
+    inverses = []
 
-            # check if site_ overlaps with existing sites
+    for i in range(len(asym_unit)):
+        expanded_sites = np.dot(rotations, asym_unit[i]) + translations
+        expanded_sites = np.mod(expanded_sites, 1)
+        unique_inds = _unique_sites(expanded_sites, _EQUIV_SITE_TOL)
+        points = expanded_sites[unique_inds]
+        inverses.extend(i for _ in range(len(points)))
+        frac_motif.append(points)
+
+    return np.concatenate(frac_motif), np.array(inverses)
+
+
+def _expand_asym_unit_equiv_sites(
+        asym_unit: np.ndarray,
+        rotations: np.ndarray,
+        translations: np.ndarray
+) -> Tuple[np.ndarray, ...]:
+    """Asymmetric unit frac coords, list of rotations & translations -->
+    full fractional motif + inverse indices (which motif points come
+    from where in the asym unit).
+    """
+
+    expanded_sites = np.mod(np.dot(rotations, asym_unit[0]) + translations, 1)
+    unique_inds = _unique_sites(expanded_sites, _EQUIV_SITE_TOL)
+    frac_motif = expanded_sites[unique_inds]
+    inverses = [0] * len(frac_motif)
+
+    for i in range(1, len(asym_unit)):
+        expanded_sites = np.mod(np.dot(rotations, asym_unit[i]) + translations, 1)
+        unique_inds = _unique_sites(expanded_sites, _EQUIV_SITE_TOL)
+
+        points = []
+        for site_ in expanded_sites[unique_inds]:
             diffs1 = np.abs(site_ - frac_motif)
             diffs2 = np.abs(diffs1 - 1)
             mask = np.all((diffs1 <= _EQUIV_SITE_TOL) | 
                           (diffs2 <= _EQUIV_SITE_TOL), axis=-1)
 
-            if np.any(mask): # site is not new
-                where_equal = np.argwhere(mask).flatten()
-                for ind in where_equal:
-                    if inverses[ind] == inv: # site is invariant
-                        pass
-                    else: # equivalent to a different site
-                        msg = f'has equivalent sites at positions ' \
-                              f'{inverses[ind]}, {inv}'
-                        warnings.warn(msg)
-            else: # new site
-                frac_motif.append(site_)
-                inverses.append(inv)
-                multiplicity += 1
+            if not np.any(mask):
+                points.append(site_)
+            else:
+                msg = f'has equivalent sites at positions ' \
+                      f'{inverses[np.argmax(mask)]}, {i}'
+                warnings.warn(msg)
 
-        if multiplicity > 0:
-            multiplicities.append(multiplicity)
-            asym_inds.append(len(frac_motif))
+        if points:
+            inverses.extend(i for _ in range(len(points)))
+            frac_motif = np.concatenate((frac_motif, np.array(points)))
 
-    frac_motif = np.array(frac_motif, dtype=np.float64)
-    asym_inds = np.array(asym_inds[:-1], dtype=np.int32)
-    multiplicities = np.array(multiplicities, dtype=np.int32)
-
-    return frac_motif, asym_inds, multiplicities, inverses
+    return frac_motif, np.array(inverses)
 
 
 @numba.njit()
@@ -1419,7 +1456,7 @@ def _unique_sites(asym_unit, tol):
     considering all points modulo 1. Returns an array of bools such that
     asym_unit[_unique_sites(asym_unit, tol)] is the uniquified list.
     """
-    
+
     site_diffs1 = np.abs(np.expand_dims(asym_unit, 1) - asym_unit)
     site_diffs2 = np.abs(site_diffs1 - 1)
     sites_neq_mask = (site_diffs1 > tol) & (site_diffs2 > tol)
