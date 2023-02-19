@@ -18,7 +18,7 @@ def main():
     parser.add_argument('paths_or_refcodes', type=str, nargs='+',
         help='(str) One or two paths to files or folders, or a collection ' \
              'of CSD refcodes if csd-python-api is installed.')
-    parser.add_argument('--output', '-o', type=str, default='output',
+    parser.add_argument('--outpath', '-o', type=str,
         help='(str) Path of the output file.')
     parser.add_argument('--format', '-f', type=str, default='csv', 
         help='(str) Format of the output file, default csv.')
@@ -66,7 +66,7 @@ def main():
         help='(str) Metric used to compare AMDs/rows of PDDs, default chebyshev.')
     parser.add_argument('--n_jobs', type=int, default=1,
         help='(int) Number of cores to use for multiprocessing when comparing PDDs.')
-    parser.add_argument('--verbose', type=int, default=0,
+    parser.add_argument('--verbose', type=int, default=1,
         help='(int) Print an ETA to the terminal when comparing PDDs. Passed to joblib.Parallel if using multiprocessing.')
     parser.add_argument('--low_memory', default=False, action='store_true',
         help='(flag) Use an more memory efficient (but slower) method for AMD comparisons.')
@@ -74,7 +74,9 @@ def main():
     # Remove some arguments before passing others to amd.compare
     kwargs = vars(parser.parse_args())
     path_or_refcodes = kwargs.pop('path_or_refcodes')
-    outpath = kwargs.pop('output', 'output')
+    outpath = kwargs.pop('outpath', None)
+    if outpath is None:
+        outpath = f"{kwargs['by']}_k={kwargs['k']}_dist_matrix"
     ext = kwargs.pop('format', 'csv')
 
     # Parameter is show_warnings, here it's a flag supress_warnings

@@ -23,9 +23,11 @@ def _custom_warning(message, category, filename, lineno, *args, **kwargs):
     return f'{category.__name__}: {message}\n'
 warnings.formatwarning = _custom_warning
 
-_EQUIV_SITE_TOL = 1e-3
 
-CIF_TAGS = {
+_EQUIV_SITE_TOL = 1e-3
+_DISORDER_OPTIONS = {'skip', 'ordered_sites', 'all_sites'}
+_CCDC_IMPORT_ERR_MSG = 'Failed to import csd-python-api.'
+_CIF_TAGS = {
     'cellpar': [
         '_cell_length_a',
         '_cell_length_b',
@@ -72,10 +74,8 @@ CIF_TAGS = {
 
 
 class _Reader:
-
-    _DISORDER_OPTIONS = {'skip', 'ordered_sites', 'all_sites'}
-    _CCDC_IMPORT_ERR_MSG = 'Failed to import csd-python-api, please check ' \
-                           'it is installed and licensed.'
+    """Base reader class.
+    """
 
     def __init__(self, iterable, converter, show_warnings=True):
         self._iterator = iter(iterable)
@@ -202,9 +202,9 @@ class CifReader(_Reader):
             show_warnings=True,
     ):
 
-        if disorder not in CifReader._DISORDER_OPTIONS:
+        if disorder not in _DISORDER_OPTIONS:
             msg = 'disorder parameter must be one of ' \
-                  f'{CifReader._DISORDER_OPTIONS} (passed "{disorder}")'
+                  f'{_DISORDER_OPTIONS} (passed {disorder})'
             raise ValueError(msg)
 
         if reader != 'ccdc':
@@ -251,7 +251,7 @@ class CifReader(_Reader):
             try:
                 import ccdc.io
             except (ImportError, RuntimeError) as e:
-                raise ImportError(_Reader._CCDC_IMPORT_ERR_MSG) from e
+                raise ImportError(_CCDC_IMPORT_ERR_MSG) from e
 
             extensions = ccdc.io.EntryReader.known_suffixes
             file_parser = ccdc.io.EntryReader
@@ -366,12 +366,12 @@ class CSDReader(_Reader):
 
         try:
             import ccdc.io
-        except (ImportError, RuntimeError) as _:
-            raise ImportError(_Reader._CCDC_IMPORT_ERR_MSG)
+        except (ImportError, RuntimeError) as e:
+            raise ImportError(_CCDC_IMPORT_ERR_MSG) from e
 
-        if disorder not in _Reader._DISORDER_OPTIONS:
+        if disorder not in _DISORDER_OPTIONS:
             msg = 'disorder parameter must be one of ' \
-                  f'{_Reader._DISORDER_OPTIONS} (passed {disorder})'
+                  f'{_DISORDER_OPTIONS} (passed {disorder})'
             raise ValueError(msg)
 
         if isinstance(refcodes, str) and refcodes.lower() == 'csd':
@@ -424,8 +424,8 @@ class CSDReader(_Reader):
 
         try:
             import ccdc.search
-        except (ImportError, RuntimeError) as _:
-            raise ImportError(_Reader._CCDC_IMPORT_ERR_MSG)
+        except (ImportError, RuntimeError) as e:
+            raise ImportError(_CCDC_IMPORT_ERR_MSG) from e
 
         all_refcodes = []
         for refcode in refcode_families:
@@ -497,23 +497,23 @@ def periodicset_from_ase_cifblock(
     import ase.spacegroup
 
     # Unit cell
-    cellpar = [block.get(tag) for tag in CIF_TAGS['cellpar']]
+    cellpar = [block.get(tag) for tag in _CIF_TAGS['cellpar']]
     if None in cellpar:
         raise ParseError(f'{block.name} has missing cell data')
     cell = cellpar_to_cell(*cellpar)
 
     # Asymmetric unit coordinates. ase removes uncertainty brackets
     cartesian = False # flag needed for later
-    asym_unit = [block.get(name) for name in CIF_TAGS['atom_site_fract']]
+    asym_unit = [block.get(name) for name in _CIF_TAGS['atom_site_fract']]
     if None in asym_unit: # missing scaled coords, try Cartesian
-        asym_unit = [block.get(name) for name in CIF_TAGS['atom_site_cartn']]
+        asym_unit = [block.get(name) for name in _CIF_TAGS['atom_site_cartn']]
         if None in asym_unit:
             raise ParseError(f'{block.name} has missing coordinates')
         cartesian = True
     asym_unit = list(zip(*asym_unit)) # transpose [xs,ys,zs] -> [p1,p2,...]
 
     # Atomic types
-    asym_symbols = block._get_any(CIF_TAGS['atom_symbol'])
+    asym_symbols = block._get_any(_CIF_TAGS['atom_symbol'])
     if asym_symbols is None:
         warnings.warn('missing atomic types will be labelled 0')
         asym_types = [0] * len(asym_unit)
@@ -597,11 +597,11 @@ def periodicset_from_ase_cifblock(
             asym_types = [t for t, keep in zip(asym_types, keep_sites) if keep]
 
     # Get symmetry operations
-    sitesym = block._get_any(CIF_TAGS['symop'])
+    sitesym = block._get_any(_CIF_TAGS['symop'])
     if sitesym is None:
-        label_or_num = block._get_any(CIF_TAGS['spacegroup_name'])
+        label_or_num = block._get_any(_CIF_TAGS['spacegroup_name'])
         if label_or_num is None:
-            label_or_num = block._get_any(CIF_TAGS['spacegroup_number'])
+            label_or_num = block._get_any(_CIF_TAGS['spacegroup_number'])
         if label_or_num is None:
             warnings.warn('no symmetry data found, defaulting to P1')
             label_or_num = 1
@@ -741,7 +741,7 @@ def periodicset_from_pymatgen_cifblock(
     odict = block.data
 
     # Unit cell
-    cellpar = [odict.get(tag) for tag in CIF_TAGS['cellpar']]
+    cellpar = [odict.get(tag) for tag in _CIF_TAGS['cellpar']]
     if None in cellpar:
         raise ParseError(f'{block.header} has missing cell data')
     cellpar = [str2float(v) for v in cellpar]
@@ -749,10 +749,10 @@ def periodicset_from_pymatgen_cifblock(
 
     # Asymmetric unit coordinates
     cartesian = False
-    asym_unit = [odict.get(tag) for tag in CIF_TAGS['atom_site_fract']]
+    asym_unit = [odict.get(tag) for tag in _CIF_TAGS['atom_site_fract']]
 
     if None in asym_unit: # missing scaled coordinates, try Cartesian
-        asym_unit = [odict.get(tag) for tag in CIF_TAGS['atom_site_cartn']]
+        asym_unit = [odict.get(tag) for tag in _CIF_TAGS['atom_site_cartn']]
         if None in asym_unit:
             raise ParseError(f'{block.header} has no coordinates')
         cartesian = True
@@ -761,7 +761,7 @@ def periodicset_from_pymatgen_cifblock(
     asym_unit = [[str2float(coord) for coord in xyz] for xyz in asym_unit]
 
     # Atomic types
-    for tag in CIF_TAGS['atom_symbol']:
+    for tag in _CIF_TAGS['atom_symbol']:
         asym_symbols = odict.get(tag)
         if asym_symbols is not None:
             asym_types = []
@@ -995,7 +995,7 @@ def periodicset_from_ccdc_entry(
     # Disorder
     if disorder == 'skip' and entry.has_disorder:
         msg = f"{entry.identifier} has disorder, pass " \
-                "disorder='ordered_sites' or 'all_sites' to remove/ignore" \
+                "disorder='ordered_sites' or 'all_sites' to remove/ignore " \
                 "disorder"
         raise ParseError(msg)
 
@@ -1065,8 +1065,8 @@ def periodicset_from_ccdc_crystal(
         if crystal.has_disorder or \
          any(_has_disorder(a.label, a.occupancy) for a in molecule.atoms):
             msg = f"{crystal.identifier} has disorder, pass " \
-                   "disorder='ordered_sites' or 'all_sites' to remove/ignore" \
-                   "disorder"
+                   "disorder='ordered_sites' or 'all_sites' to " \
+                   "remove/ignore disorder"
             raise ParseError(msg)
 
     elif disorder == 'ordered_sites':
@@ -1186,19 +1186,19 @@ def periodicset_from_gemmi_block(
 
     # Unit cell
     cellpar = [as_number(block.find_value(tag))
-               for tag in CIF_TAGS['cellpar']]
+               for tag in _CIF_TAGS['cellpar']]
     if None in cellpar:
         raise ParseError(f'{block.name} has missing cell data')
     cell = cellpar_to_cell(*cellpar)
 
-    xyz_loop = block.find(CIF_TAGS['atom_site_fract']).loop
+    xyz_loop = block.find(_CIF_TAGS['atom_site_fract']).loop
     if xyz_loop is None:
         # check for Cartesian coordinates
         raise ParseError(f'{block.name} has missing coordinate data')
 
     # Asymmetric unit coordinates
     loop_dict = _loop_to_dict_gemmi(xyz_loop)
-    xyz_str = [loop_dict[t] for t in CIF_TAGS['atom_site_fract']]
+    xyz_str = [loop_dict[t] for t in _CIF_TAGS['atom_site_fract']]
     asym_unit = [[as_number(c) for c in coords] for coords in xyz_str]
     asym_unit = np.mod(np.array(asym_unit).T, 1)
     # asym_unit = _snap_small_prec_coords(asym_unit) # recommended by pymatgen
@@ -1258,20 +1258,20 @@ def periodicset_from_gemmi_block(
 
     # Get symmetry operations
     sitesym = []
-    for tag in CIF_TAGS['symop']:
+    for tag in _CIF_TAGS['symop']:
         symop_loop = block.find([tag]).loop
         if symop_loop is not None:
             sitesym = _loop_to_dict_gemmi(symop_loop)[tag]
             break
 
     if not sitesym:
-        for tag in CIF_TAGS['spacegroup_name']:
+        for tag in _CIF_TAGS['spacegroup_name']:
             label_or_num = block.find_value(tag)
             if label_or_num is not None:
                 label_or_num = as_string(label_or_num)
                 break
         if label_or_num is None:
-            for tag in CIF_TAGS['spacegroup_number']:
+            for tag in _CIF_TAGS['spacegroup_number']:
                 label_or_num = block.find_value(tag)
                 if label_or_num is not None:
                     label_or_num = as_int(label_or_num)
@@ -1447,7 +1447,7 @@ def _get_syms_pymatgen(data):
     symops = []
 
     # Try xyz symmetry operations
-    for symmetry_label in CIF_TAGS['symop']:
+    for symmetry_label in _CIF_TAGS['symop']:
         xyz = data.get(symmetry_label)
         if not xyz:
             continue
@@ -1461,7 +1461,7 @@ def _get_syms_pymatgen(data):
 
     # Try spacegroup symbol
     if not symops:
-        for symmetry_label in CIF_TAGS['spacegroup_name']:
+        for symmetry_label in _CIF_TAGS['spacegroup_name']:
             sg = data.get(symmetry_label)
             if not sg:
                 continue
@@ -1490,7 +1490,7 @@ def _get_syms_pymatgen(data):
 
     # Try international number
     if not symops:
-        for symmetry_label in CIF_TAGS['spacegroup_number']:
+        for symmetry_label in _CIF_TAGS['spacegroup_number']:
             num = data.get(symmetry_label)
             if not num:
                 continue

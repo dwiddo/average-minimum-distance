@@ -57,23 +57,6 @@ Write crystals or their descriptors to a file
     with open('crystals.pkl', 'rb') as f: # read
         crystals = pickle.load(f)
 
-An option for large collections of PDDs is ``h5py``, which can read and write the descriptors lazily
-(only one item is in memory at a time).
-::
-
-    import h5py
-
-    # write lazily
-    with h5py.File('PDDs.hdf5', 'w', track_order=True) as file:
-        for crystal in amd.CifReader('crystals.cif'):
-            file.create_dataset(crystal.name, data=amd.PDD(crystal, 100))
-
-    # read lazily
-    with h5py.File('PDDs.hdf5', 'r', track_order=True) as file:
-        for name in file['/'].keys():
-            pdd = file[name][:]
-            ...
-
 List of optional parameters
 ---------------------------
 

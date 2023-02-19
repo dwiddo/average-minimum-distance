@@ -99,7 +99,7 @@ class PeriodicSet:
             cellpar_str = f''
 
         s = f'PeriodicSet(name={self.name}, ' \
-            f'motif {self.motif.shape} ({n_asym_sites} asym sites)' \
+            f'motif shape {self.motif.shape} ({n_asym_sites} asym sites)' \
             f'{cellpar_str})'
 
         return s

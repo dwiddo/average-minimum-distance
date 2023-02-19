@@ -2,8 +2,8 @@
 
 [![PyPI](https://img.shields.io/pypi/v/average-minimum-distance)](https://pypi.org/project/average-minimum-distance/)
 [![Status](https://img.shields.io/pypi/status/average-minimum-distance)](https://pypi.org/project/average-minimum-distance/)
-[![Read the Docs](https://img.shields.io/readthedocs/average-minimum-distance)](https://average-minimum-distance.readthedocs.io)
 [![Build Status](https://scrutinizer-ci.com/g/dwiddo/average-minimum-distance/badges/build.png?b=master)](https://scrutinizer-ci.com/g/dwiddo/average-minimum-distance/)
+[![Read the Docs](https://img.shields.io/readthedocs/average-minimum-distance)](https://average-minimum-distance.readthedocs.io)
 [![CC-0 license](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-blue)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
 - **PyPI project:** <https://pypi.org/project/average-minimum-distance>
@@ -15,9 +15,9 @@
 
 ## What's amd?
 
-The typical representation of a crystal as a motif and unit cell is ambiguous, as many choices of cell and motif define the same crystal. This package implements crystal descriptors that are *isometry invariants*, meaning they are always same for any two crystals which are equivalent by an *isometry* (rotation, translation and reflection), independent of the unit cell and motif. The descriptors can be compared to give a distance which is 0 for geometrically identical crystals, and close to 0 for similar crystals (a *continuous metric*).
+The typical representation of a crystal as a motif and unit cell is ambiguous, because many choices of cell and motif define the same crystal. This package implements crystal descriptors designed to be *isometry invariants*, meaning they are always same for any two crystals which are geometrically equivalent, independent of the unit cell and motif. The descriptors can be compared to give a distance which is 0 for identical crystals, and close to 0 for similar crystals (a *continuous metric*).
 
-The *pointwise distance distribution* (PDD) records the environment of each atom in the unit cell by listing distances to neighbouring atoms. Two PDDs are compared using an optimal matching algorithm ([Earth Mover's distance](https://en.wikipedia.org/wiki/Earth_mover%27s_distance)). The average of a PDD is a vector called the *average minimum distance* (AMD), which is significantly faster to compare but can still identify crystals with similar geometry. Both AMD and PDD take a parameter k, the number of neighbouring atoms considered for each atom in the unit cell.
+The *pointwise distance distribution* (PDD) is a descriptor that records the environment of each atom in the unit cell by listing distances to neighbouring atoms. Two PDDs are compared using an optimal matching algorithm ([Earth Mover's distance](https://en.wikipedia.org/wiki/Earth_mover%27s_distance)). Taking the average of a PDD gives a vector called the *average minimum distance* (AMD), which is significantly faster to compare but can still identify crystals with similar geometry. Both AMD and PDD take a parameter k, the number of neighbouring atoms considered for each atom in the unit cell.
 
 ## Getting started
 
@@ -29,26 +29,26 @@ pip install average-minimum-distance
 
 Then import average-minimum-distance with ```import amd```.
 
-```amd.compare()``` compares crystals in cif files by AMD or PDD, e.g.
+```amd.compare()``` compares crystals in cif files by AMD or PDD descriptors, e.g.
 
 ```py
 import amd
 
-# compare all items in one cif by PDD, k=100
-df = amd.compare('file.cif', by='PDD', k=100)
-# compare all in file1 vs all in file2 by AMD, k=100
-df = amd.compare('file1.cif', 'file2.cif', by='AMD', k=100)
+# compare all items in one cif by AMD, k=100
+df = amd.compare('file.cif', by='AMD', k=100)
+# compare all in file1 vs all in file2 by PDD, k=100
+df = amd.compare('file1.cif', 'file2.cif', by='PDD', k=100)
 ```
 
 The distance matrix is returned as a [pandas DataFrame](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html). ```amd.compare()``` can also accept a folder or list of cifs.
 
-```amd.compare()``` reads crystals, calculates their descriptors and compares them. These steps can be done separately (e.g. for saving the descriptors to a file), explained below. Many optional parameters are accepted, see [the documentation](https://average-minimum-distance.readthedocs.io/en/latest/Getting_Started.html#full-list-of-optional-parameters) for a full list.
+```amd.compare()``` reads crystals, calculates their descriptors and compares them, but these steps can be done separately (e.g. to save the descriptors to a file, see below). ```amd.compare()``` accepts several optional parameters, see [the documentation for a full list](https://average-minimum-distance.readthedocs.io/en/latest/Getting_Started.html#full-list-of-optional-parameters).
 
 *CSD Python API only:* ```amd.compare()``` accepts one or more CSD refcodes or other file formats instead of cifs (by passing ```reader='ccdc'```).
 
 #### Choosing a value of k
 
-The parameter k is the number of neighbouring atoms considered for each atom in the unit cell. Two crystals with the same unit molecule will have a small AMD/PDD distance for small enough k (e.g. k = 5), and a larger k means the geometry must be similar up to a larger radius for the distance to be small. The default for ```amd.compare()``` is k = 100, but if this is significantly smaller than the number of atoms in the unit molecule, it may be better to choose a larger value e.g. k = 300. It is usually not useful to choose k too large (e.g. >30 times the number of atoms in a unit molecule).
+The parameter k is the number of neighbouring atoms considered for each atom in a unit cell. Two crystals with the same unit molecule will have a small AMD/PDD distance for small enough k (e.g. k = 5), and a larger k means the geometry must be similar up to a larger radius for the distance to be small. The default for ```amd.compare()``` is k = 100, but if this is significantly smaller than the number of atoms in the unit molecule, it may be better to choose a larger value e.g. k = 300. It is usually not useful to choose k too large (many times larger than the number of atoms in the unit molecule).
 
 ### Reading crystals, calculating AMDs/PDDs
 
@@ -63,13 +63,13 @@ amds = [amd.AMD(crystal, 100) for crystal in reader]
 # pdds = [amd.PDD(crystal, 100) for crystal in reader]
 ```
 
-CifReader accepts optional parameters, e.g. for removing Hydrogen atoms and handling disorder, see [the documentation](https://average-minimum-distance.readthedocs.io/en/latest/Reading_cifs.html) for a full list.
+CifReader accepts some optional parameters, e.g. for removing Hydrogen or handling disorder, [see here for a full list](https://average-minimum-distance.readthedocs.io/en/latest/Reading_cifs.html).
 
-*CSD Python API only:* CSD crystals can be read via the CSD Python API with ```amd.CSDReader```, see [the documentation](https://average-minimum-distance.readthedocs.io/en/latest/Reading_from_the_CSD.html) for details. CifReader can accept file formats other than .cif by passing ```reader='ccdc'```.
+*CSD Python API only:* CSD crystals can be read via the CSD Python API with ```amd.CSDReader```, [see the documentation for details](https://average-minimum-distance.readthedocs.io/en/latest/Reading_from_the_CSD.html). CifReader can accept file formats other than .cif by passing ```reader='ccdc'```.
 
 ### Comparing by AMD or PDD
 
-To compare all crystals in one collection with each other, use ```amd.AMD_pdist()``` or ```amd.PDD_pdist()```, which accept a list of AMDs/PDDs and return a *condensed distance matrix* like SciPy's ```pdist()```:
+To compare all crystals in one collection with each other, use ```amd.AMD_pdist()``` or ```amd.PDD_pdist()```, which accept a list of AMDs/PDDs and return a *condensed distance matrix* like SciPy's ```pdist()```. Here's a full example of reading crystals from a .cif, calculating the descriptors and comparing them:
 
 ```py
 import amd
