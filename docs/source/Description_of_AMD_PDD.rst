@@ -18,7 +18,7 @@ The result is the kth PDD of the periodic set. In practice, the weights are kept
 A much more detailed description can be found in our papers on AMD and PDD:
 
 - *Average minimum distances of periodic point sets - foundational invariants for mapping periodic crystals*. MATCH Communications in Mathematical and in Computer Chemistry, 87(3):529-559 (2022). `<https://doi.org/10.46793/match.87-3.529W>`_
-- *Resolving the data ambiguity for periodic crystals*. Advances in Neural Information Processing Systems (Proceedings of NeurIPS 2022), to appear. `<https://arxiv.org/abs/2108.04798>`_
+- *Resolving the data ambiguity for periodic crystals*. Advances in Neural Information Processing Systems (NeurIPS 2022), v.35. <https://openreview.net/forum?id=4wrB7Mo9_OQ>.
 
 Comparing by AMD/PDD
 ********************

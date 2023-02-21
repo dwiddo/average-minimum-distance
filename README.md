@@ -11,7 +11,7 @@
 - **Source code:** <https://github.com/dwiddo/average-minimum-distance>
 - **References** ([bib references at the bottom of this page](#citeus)):
   - *Average minimum distances of periodic point sets - foundational invariants for mapping periodic crystals*. MATCH Communications in Mathematical and in Computer Chemistry, 87(3):529-559 (2022). <https://doi.org/10.46793/match.87-3.529W>
-  - *Resolving the data ambiguity for periodic crystals*. Advances in Neural Information Processing Systems (Proceedings of NeurIPS 2022), to appear. <https://arxiv.org/abs/2108.04798>
+  - *Resolving the data ambiguity for periodic crystals*. Advances in Neural Information Processing Systems (NeurIPS 2022), v.35. <https://openreview.net/forum?id=4wrB7Mo9_OQ>.
 
 ## What's amd?
 
