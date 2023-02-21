@@ -110,4 +110,4 @@ def test_heaviest_component(T2_alpha_cif_path, ccdc_enabled):
     ).read()
 
     if not s.asymmetric_unit.shape[0] == 26:
-        pytest.fail(f'Heaviest component test failed.')
+        pytest.fail('Heaviest component test failed.')
