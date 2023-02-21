@@ -9,11 +9,11 @@
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
-#
+
 import os
 import re
 import sys
-sys.path.insert(0, os.path.abspath(r'../../src'))
+sys.path.insert(0, os.path.abspath(r'../..'))
 
 import mock
 
@@ -52,10 +52,12 @@ extensions = [
 
 intersphinx_mapping = {
     'numpy':    ('https://numpy.org/doc/stable/', None),
+    # 'numba':    ('https://numba.pydata.org/numba-doc/latest/', None),
     'scipy':    ('https://docs.scipy.org/doc/scipy/', None),
     'pandas':   ('https://pandas.pydata.org/docs/', None),
     'ase':      ('https://wiki.fysik.dtu.dk/ase/', None),
     'joblib':   ('https://joblib.readthedocs.io/en/latest/', None),
+    # 'tqdm':     ('https://tqdm.github.io/', None),
     'ccdc':     ('https://downloads.ccdc.cam.ac.uk/documentation/API/', None),
     'pymatgen': ('https://pymatgen.org/', None),
     'gemmi':    ('https://gemmi.readthedocs.io/en/latest/', None),

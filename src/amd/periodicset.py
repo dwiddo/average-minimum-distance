@@ -9,6 +9,7 @@ passed as the first argument to :func:`amd.AMD() <.calculate.AMD>` or
 """
 
 from typing import Optional, Union, Tuple
+
 import numpy as np
 
 from .utils import (

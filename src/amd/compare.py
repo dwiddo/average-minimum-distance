@@ -289,9 +289,9 @@ def AMD_cdist(
 
     Parameters
     ----------
-    amds : array_like
+    amds : ArrayLike
         A list/array of AMDs.
-    amds\_ : array_like
+    amds\_ : ArrayLike
         A list/array of AMDs.
     metric : str or callable, default 'chebyshev'
         Usually AMDs are compared with the Chebyshev (L-infinitys) distance.
@@ -341,7 +341,7 @@ def AMD_pdist(
 
     Parameters
     ----------
-    amds : array_like
+    amds : ArrayLike
         An list/array of AMDs.
     metric : str or callable, default 'chebyshev'
         Usually AMDs are compared with the Chebyshev (L-infinity)
