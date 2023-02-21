@@ -1,9 +1,10 @@
 [project]
 name = "average-minimum-distance"
 description = "Descriptors of crystals based on geometry (isometry invariants)."
+readme = "README.md"
 requires-python = ">=3.7"
 license = {file = "LICENSE"}
-dynamic = ["version", "readme", "dependencies"]
+dynamic = ["version", "dependencies"]
 keywords = [
     "isometry", "invariant", "descriptor", "crystal", "amd", "pdd",
     "similarity", "average", "minimum", "pointwise", "distance", "cif"
@@ -36,7 +37,6 @@ where = ["src"]
 
 [tool.setuptools.dynamic]
 version = {attr = "amd.__version__"}
-readme = {file = "README.md"}
 dependencies = {file = "requirements.txt"}
 
 [project.optional-dependencies]
