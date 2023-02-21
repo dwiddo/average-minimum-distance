@@ -23,7 +23,7 @@ project = 'average-minimum-distance'
 copyright = '2023, Daniel Widdowson'
 author = 'Daniel Widdowson'
 
-with open(r'../../amd/__init__.py') as f:
+with open(r'../../src/amd/__init__.py') as f:
     version = re.search("__version__ = '(.*)'", f.read()).group(1)
 
 MOCK_MODULES = [

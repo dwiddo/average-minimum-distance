@@ -8,7 +8,7 @@ import numba
 from scipy.spatial.distance import squareform
 
 
-def diameter(cell):
+def diameter(cell: np.ndarray) -> float:
     """Diameter of a unit cell (given as a square matrix in orthogonal 
     coordinates) in 3 or fewer dimensions. The diameter is the maxiumum
     distance between any two points in the unit cell.
@@ -48,7 +48,7 @@ def diameter(cell):
 
 
 @numba.njit()
-def cellpar_to_cell(a, b, c, alpha, beta, gamma):
+def cellpar_to_cell(cellpar: np.ndarray) -> np.ndarray:
     """Numba-accelerated version of function from :mod:`ase.geometry` of
     the same name. Converts canonical 3D unit cell parameters
     a,b,c,α,β,γ into a 3x3 :class:`numpy.ndarray` representing the unit
@@ -56,18 +56,9 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
 
     Parameters
     ----------
-    a : float
-        Unit cell side length a.
-    b : float
-        Unit cell side length b.
-    c : float
-        Unit cell side length c.
-    alpha : float
-        Unit cell angle alpha (degrees).
-    beta : float
-        Unit cell angle beta (degrees).
-    gamma : float
-        Unit cell angle gamma (degrees).
+    cellpar : :class:`numpy.ndarray`
+        Vector of six unit cell parameters in the canonical order
+        a,b,c,α,β,γ.
 
     Returns
     -------
@@ -75,6 +66,7 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
         Unit cell represented as a 3x3 matrix in orthogonal coordinates.
     """
 
+    a, b, c, alpha, beta, gamma = cellpar
     eps = 2 * np.spacing(90) # ~1.4e-14
 
     if abs(abs(alpha) - 90) < eps:
@@ -115,26 +107,24 @@ def cellpar_to_cell(a, b, c, alpha, beta, gamma):
 
 
 @numba.njit()
-def cellpar_to_cell_2D(a, b, alpha):
+def cellpar_to_cell_2D(cellpar: np.ndarray):
     """Converts 3 parameters defining a 2D unit cell a,b,α into a 2x2
     :class:`numpy.ndarray` representing the unit cell in orthogonal
     coordinates.
 
     Parameters
     ----------
-    a : float
-        Unit cell side length a.
-    b : float
-        Unit cell side length b.
-    alpha : float
-        Unit cell angle alpha (degrees).
-
+    cellpar : :class:`numpy.ndarray`
+        Vector of three unit cell parameters a,b,α, where a and b are
+        lengths of sides of the unit cell and α is the angle between the
+        sides.
     Returns
     -------
     cell : :class:`numpy.ndarray`
         Unit cell represented as a 2x2 matrix in orthogonal coordinates.
     """
 
+    a, b, alpha = cellpar
     cell = np.zeros((2, 2))
     ang = alpha * np.pi / 180.
     cell[0, 0] = a
@@ -144,7 +134,7 @@ def cellpar_to_cell_2D(a, b, alpha):
 
 
 @numba.njit()
-def cell_to_cellpar(cell):
+def cell_to_cellpar(cell: np.ndarray) -> np.ndarray:
     """Converts a 3x3 :class:`numpy.ndarray` representing a unit cell in
     orthogonal coordinates (as returned by 
     :func:`cellpar_to_cell() <.utils.cellpar_to_cell>`) into a list of 3
@@ -179,7 +169,7 @@ def cell_to_cellpar(cell):
 
 
 @numba.njit()
-def cell_to_cellpar_2D(cell):
+def cell_to_cellpar_2D(cell: np.ndarray) -> np.ndarray:
     """Converts a 2x2 :class:`numpy.ndarray` representing a unit cell in
     orthogonal coordinates (as returned by 
     :func:`cellpar_to_cell_2D() <.utils.cellpar_to_cell_2D>`) into a
@@ -253,7 +243,11 @@ def neighbours_from_distance_matrix(
     return nn_dm, inds
 
 
-def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
+def random_cell(
+        length_bounds: Tuple = (1, 2),
+        angle_bounds: Tuple = (60, 120),
+        dims: int = 3
+) -> np.ndarray:
     """Dimensions 2 and 3 only. Random unit cell with uniformally chosen
     length and angle parameters between bounds.
     """
@@ -265,17 +259,17 @@ def random_cell(length_bounds=(1, 2), angle_bounds=(60, 120), dims=3):
         while True:
             lengths = [np.random.uniform(low=ll, high=lu) for _ in range(dims)]
             angles = [np.random.uniform(low=al, high=au) for _ in range(dims)]
-
+            cellpar = np.array(lengths + angles)
             try:
-                cell = cellpar_to_cell(*lengths, *angles)
+                cell = cellpar_to_cell(cellpar)
                 break
             except RuntimeError:
                 continue
 
     elif dims == 2:
-        lengths = [np.random.uniform(low=ll, high=lu) for _ in range(dims)]
-        alpha = np.random.uniform(low=al, high=au)
-        cell = cellpar_to_cell_2D(*lengths, alpha)
+        cellpar = [np.random.uniform(low=ll, high=lu) for _ in range(2)]
+        cellpar.append(np.random.uniform(low=al, high=au))
+        cell = cellpar_to_cell_2D(np.array(cellpar))
 
     else:
         msg = 'random_cell only implimented for dimensions 2 and 3 (passed ' \

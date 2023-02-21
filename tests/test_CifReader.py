@@ -25,22 +25,22 @@ def test_CifReader(reader, cif_paths, reference_data):
 
         if (not len(references) == len(read_in)) or len(read_in) == 0:
             pytest.fail(
-                f'There are {len(references)} references, but {len(read_in)} structures were read.'
+                f'There are {len(references)} references, but ' \
+                f'{len(read_in)} structures were read.'
             )
 
         for s, s_ in zip(read_in, references):
             if not s == s_['PeriodicSet']:
                 pytest.fail(
-                    f'Structure {s.name} read with CifReader disagrees with reference.'
+                    f'Structure {s.name} read with CifReader disagrees with ' \
+                    'reference.'
                 )
 
 def test_periodicset_from_ase_atoms(cif_paths, reference_data):
     try:
         from ase.io import iread
     except ImportError as _:    
-        pytest.skip(
-            f'Skipping test_periodicset_from_ase_atoms as ase failed to import.'
-        )
+        pytest.fail('Failed to import ase.')
 
     for name in cif_paths:
         references = reference_data[name]
@@ -52,14 +52,16 @@ def test_periodicset_from_ase_atoms(cif_paths, reference_data):
         read_in = [amd.periodicset_from_ase_atoms(a) for a in atoms]
         if (not len(references) == len(read_in)) or len(read_in) == 0:
             pytest.fail(
-                f'There are {len(references)} references, but {len(read_in)} structures were read.'
+                f'There are {len(references)} references, but ' \
+                f'{len(read_in)} structures were read.'
             )
 
         for s, s_ in zip(read_in, references):
             if not s == s_['PeriodicSet']:
                 n = s_['PeriodicSet'].name
                 pytest.fail(
-                    f'Structure read with ase.io.iread disagrees with reference ({n}).'
+                    'Structure read with ase.io.iread disagrees with ' \
+                    f'reference ({n}).'
                 )
 
 
@@ -68,10 +70,12 @@ def asym_unit_test_cif_path(root_dir):
     return os.path.join(root_dir, 'OJIGOG.cif')
 
 def test_CifReader_equiv_structs(asym_unit_test_cif_path):
-    pdds = [amd.PDD(struct, 100) for struct in amd.CifReader(asym_unit_test_cif_path, show_warnings=False)]
+    reader = amd.CifReader(asym_unit_test_cif_path, show_warnings=False)
+    pdds = [amd.PDD(struct, 100) for struct in reader]
     if amd.emd(pdds[0], pdds[1]) > 0:
         pytest.fail(
-            f'Asymmetric structure was read differently than identical expanded version.'
+            'Asymmetric structure was read differently than identical ' \
+            'expanded version.'
         )
 
 
@@ -80,20 +84,22 @@ def equiv_sites_cif_path(root_dir):
     return os.path.join(root_dir, 'BABMUQ.cif')
 
 def test_equiv_sites(equiv_sites_cif_path):
-    pdds = [amd.PDD(s, 100) for s in amd.CifReader(equiv_sites_cif_path, show_warnings=False)]
+    reader = amd.CifReader(equiv_sites_cif_path, show_warnings=False)
+    pdds = [amd.PDD(s, 100) for s in reader]
     if amd.PDD_pdist(pdds):
-        pytest.fail(f'Equivalent structures by symmetry differ by PDD.')
+        pytest.fail('Equivalent structures by symmetry differ by PDD.')
 
 
 @pytest.fixture(scope='module')
 def T2_alpha_cif_path(root_dir):
     return os.path.join(root_dir, 'T2-alpha-solvent.cif')
 
+
 def test_heaviest_component(T2_alpha_cif_path, ccdc_enabled):
 
     if not ccdc_enabled:
         pytest.skip(
-            'Skipping test_CSDReader as csd-python-api is not installed.'
+            'Skipping test_CSDReader as csd-python-api failed to import.'
         )
 
     s = amd.CifReader(

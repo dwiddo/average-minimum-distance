@@ -2,11 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.5] - 18/02/2023
+## [1.3.5] - 21/02/2023
 
 ### Added
 
-- Cif/CSD Reader internals have been improved (expanding the asymmetric unit to the full motif is ~5x faster, giving to an overall reading improvement of 2-3x).
+- CIF/CSD Reader internals have been improved (expanding the asymmetric unit to the full motif is ~10x faster, giving to an overall reading improvement of ~3x).
 
 - `utils.cell_to_cellpar` and `utils.cell_to_cellpar_2D` have been improved with `numba`.
 
@@ -14,11 +14,13 @@ All notable changes to this project will be documented in this file.
 
 - Changes to converter functions in the `io` module have decoupled them from depending on other packages, e.g. `periodicset_from_pymatgen_cifblock()` now has no dependency on `ase`, just `pymatgen`.
 
-- Cleaned up documentation, PEP8, pyproject.toml.
+- Cleaned/added more documentation, docstrings, PEP8 compliance, type hints. Moved be pyproject.toml only and use a src layout instead of flat.
 
 ### Changed
 
 - Fixed issue with ccdc reader where atoms with missing coordinates would throw a ParseError where they should have been removed.
+
+- Fixed `molecular_centres` parameter to work correctly in `amd.compare`.
 
 ## [1.3.4] - 07/11/2022
 

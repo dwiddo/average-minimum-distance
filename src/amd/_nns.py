@@ -3,7 +3,7 @@ calculations.
 """
 
 import collections
-from typing import Iterable
+from typing import Tuple, Iterable
 from itertools import product
 
 import numba
@@ -15,7 +15,8 @@ def nearest_neighbours(
         motif: np.ndarray,
         cell: np.ndarray,
         x: np.ndarray,
-        k: int):
+        k: int
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Given a periodic set represented by (motif, cell) and an integer k,
     find the k nearest neighbours in the periodic set to points in x.
@@ -73,7 +74,11 @@ def nearest_neighbours(
     return pdd_[:, 1:], cloud, inds[:, 1:]
 
 
-def nearest_neighbours_minval(motif, cell, min_val):
+def nearest_neighbours_minval(
+        motif: np.ndarray,
+        cell: np.ndarray,
+        min_val: float
+) -> np.ndarray:
     """The same as nearest_neighbours except a value is given instead of
     an integer k and the result has at least enough columns so all
     values in the last column are at least the given value.
@@ -138,8 +143,11 @@ def generate_concentric_cloud(
         lattice = int_lattice @ cell
         layer = np.empty((m * len(lattice), cell.shape[0]))
 
-        for i, translation in enumerate(lattice):
-            layer[m*i:m*(i+1)] = motif + translation
+        i1 = 0
+        for translation in lattice:
+            i2 = i1 + m
+            layer[i1:i2] = motif + translation
+            i1 = i2
 
         yield layer
 
@@ -175,22 +183,20 @@ def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
         positive_int_lattice = []
         while True:
             batch = []
-            for xy in product(range(d+1), repeat=dims-1):
-                if _dist(xy, ymax[xy]) <= d**2:
+            for xy in product(range(d + 1), repeat=dims-1):
+                if _dist(xy, ymax[xy]) <= d ** 2:
                     batch.append((*xy, ymax[xy]))
                     ymax[xy] += 1
             if not batch:
                 break
             positive_int_lattice += batch
 
-        positive_int_lattice = np.array(positive_int_lattice)
-        batches = _reflect_positive_lattice(positive_int_lattice)
-        yield np.concatenate(batches)
+        yield _reflect_positive_lattice(np.array(positive_int_lattice))
         d += 1
 
 
 @numba.njit()
-def _dist(xy, z):
+def _dist(xy: Tuple[float, float], z: float) -> float:
     s = z ** 2
     for val in xy:
         s += val ** 2
@@ -198,18 +204,20 @@ def _dist(xy, z):
 
 
 @numba.njit()
-def _reflect_positive_lattice(positive_int_lattice):
+def _reflect_positive_lattice(positive_int_lattice: np.ndarray) -> np.ndarray:
     """Reflect a set of points in the +ve quadrant in all axes. Does not
     duplicate points lying on the axes themselves.
     """
 
     dims = positive_int_lattice.shape[-1]
-    batches = [positive_int_lattice]
+    
+    batches = []
+    batches.extend(positive_int_lattice)
 
     for n_reflections in range(1, dims + 1):
 
         indices = np.arange(n_reflections)
-        batches.append(_reflect_batch(positive_int_lattice, indices))
+        batches.extend(_reflect_batch(positive_int_lattice, indices))
 
         while True:
             i = n_reflections - 1
@@ -223,13 +231,20 @@ def _reflect_positive_lattice(positive_int_lattice):
             for j in range(i+1, n_reflections):
                 indices[j] = indices[j-1] + 1
 
-            batches.append(_reflect_batch(positive_int_lattice, indices))
+            batches.extend(_reflect_batch(positive_int_lattice, indices))
 
-    return batches
+    int_lattice = np.empty(shape=(len(batches), dims))
+    for i in range(len(batches)):
+        int_lattice[i] = batches[i]
+
+    return int_lattice
 
 
 @numba.njit()
-def _reflect_batch(positive_int_lattice, indices):
+def _reflect_batch(
+        positive_int_lattice: np.ndarray, 
+        indices: np.ndarray
+) -> np.ndarray:
     """Takes a collection of points in any dimension and the indices of
     axes to reflect in, returning a batch of reflected points not
     including any points which are invariant under the reflections.

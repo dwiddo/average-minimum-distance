@@ -3,6 +3,7 @@
 
 import argparse
 import sys
+
 from .compare import compare
 
 
@@ -11,9 +12,14 @@ def main():
     :func:`amd.compare() <.compare.compare>.
     """
 
-    parser = argparse.ArgumentParser(
-        description='Compare crystals by PDD or AMD from the command line.'
-    )
+    desc = "Compare crystals by PDD or AMD from the command line. Given one " \
+           "or two paths to cifs/folders, lists of CSD refcodes or periodic " \
+           "sets, compare them and return a DataFrame of the distance " \
+           "matrix. Default is to comapre by AMD with k = 100. Accepts most " \
+           "keyword arguments accepted by amd's CIF/CSD readers and " \
+           "comparison functions."
+
+    parser = argparse.ArgumentParser(description=desc)
 
     parser.add_argument('paths_or_refcodes', type=str, nargs='+',
         help='(str) One or two paths to files or folders, or a collection ' \

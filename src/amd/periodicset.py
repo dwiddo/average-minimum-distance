@@ -8,7 +8,7 @@ passed as the first argument to :func:`amd.AMD() <.calculate.AMD>` or
 :func:`amd.PDD() <.calculate.PDD>` to calculate its invariants.
 """
 
-from typing import Optional
+from typing import Optional, Union, Tuple
 import numpy as np
 
 from .utils import (
@@ -71,7 +71,7 @@ class PeriodicSet:
         self.types = types
 
     @property
-    def ndim(self):
+    def ndim(self) -> int:
         return self.cell.shape[0]
 
     def __str__(self):
@@ -156,9 +156,10 @@ class PeriodicSet:
         """
 
         if dims == 3:
-            cell = cellpar_to_cell(scale, scale, scale, 90, 90, 120)
+            cellpar = np.array([scale, scale, scale, 90., 90., 120.])
+            cell = cellpar_to_cell(cellpar)
         elif dims == 2:
-            cell = cellpar_to_cell_2D(scale, scale, 60)
+            cell = cellpar_to_cell_2D(np.array([scale, scale, 60.]))
         else:
             msg = 'PeriodicSet.hexagonal() only implemented for dimensions ' \
                   f'2 and 3 (passed {dims})'
@@ -185,3 +186,6 @@ class PeriodicSet:
         )
         frac_motif = np.random.uniform(size=(n_points, dims))
         return PeriodicSet(frac_motif @ cell, cell)
+
+
+PeriodicSetType = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]

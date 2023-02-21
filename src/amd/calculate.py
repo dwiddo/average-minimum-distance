@@ -3,24 +3,18 @@ point-wise distance distribution (PDD) isometric invariants of
 periodic crystals and finite sets.
 """
 
-from typing import Union, Tuple
 import collections
 
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
 
-from .periodicset import PeriodicSet
+from .periodicset import PeriodicSet, PeriodicSetType
 from ._nns import nearest_neighbours, nearest_neighbours_minval
 from .utils import diameter
 
 
-PERIODIC_SET = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
 
-
-def AMD(
-        periodic_set: PERIODIC_SET,
-        k: int
-) -> np.ndarray:
+def AMD(periodic_set: PeriodicSetType, k: int) -> np.ndarray:
     """The AMD of a periodic set (crystal) up to k.
 
     Parameters
@@ -68,7 +62,7 @@ def AMD(
 
 
 def PDD(
-        periodic_set: PERIODIC_SET,
+        periodic_set: PeriodicSetType,
         k: int,
         lexsort: bool = True,
         collapse: bool = True,
@@ -289,7 +283,7 @@ def PDD_finite(
 
 
 def PDD_reconstructable(
-        periodic_set: PERIODIC_SET,
+        periodic_set: PeriodicSetType,
         lexsort: bool = True
 ) -> np.ndarray:
     """The PDD of a periodic set with `k` (number of columns) large
@@ -328,7 +322,7 @@ def PDD_reconstructable(
     return pdd
 
 
-def PPC(periodic_set: PERIODIC_SET) -> float:
+def PPC(periodic_set: PeriodicSetType) -> float:
     r"""The point packing coefficient (PPC) of ``periodic_set``.
 
     The PPC is a constant of any periodic set determining the
@@ -374,7 +368,7 @@ def PPC(periodic_set: PERIODIC_SET) -> float:
     return (det / (m * v)) ** (1. / n)
 
 
-def AMD_estimate(periodic_set: PERIODIC_SET, k: int) -> np.ndarray:
+def AMD_estimate(periodic_set: PeriodicSetType, k: int) -> np.ndarray:
     r"""Calculates an estimate of AMD based on the PPC.
 
     Parameters
@@ -397,7 +391,7 @@ def AMD_estimate(periodic_set: PERIODIC_SET, k: int) -> np.ndarray:
     return PPC((motif, cell)) * np.power(np.arange(1, k + 1), 1. / n)
 
 
-def _extract_motif_cell(pset: PERIODIC_SET):
+def _extract_motif_cell(pset: PeriodicSetType):
     """``pset`` is either a
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or a tuple of
     :class:`numpy.ndarray` s (motif, cell). If possible, extracts the
@@ -422,7 +416,7 @@ def _extract_motif_cell(pset: PERIODIC_SET):
     return motif, cell, asymmetric_unit, weights
 
 
-def _collapse_into_groups(overlapping):
+def _collapse_into_groups(overlapping: np.ndarray) -> list:
     """The vector ``overlapping`` indicates for each pair of items in a
     set whether or not the items overlap, in the shape of a condensed
     distance matrix. Returns a list of groups of indices where all items

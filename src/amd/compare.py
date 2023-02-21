@@ -2,12 +2,13 @@
 """
 
 import warnings
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple
 from functools import partial
 from itertools import combinations
 import os
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 from scipy.spatial.distance import cdist, pdist, squareform
 from joblib import Parallel, delayed
@@ -16,31 +17,31 @@ import tqdm
 from .io import CifReader, CSDReader
 from .calculate import AMD, PDD
 from ._emd import network_simplex
-from .periodicset import PeriodicSet
+from .periodicset import PeriodicSet, PeriodicSetType
 from .utils import neighbours_from_distance_matrix
 
 
 def compare(
-        crystals,
-        crystals_=None,
-        by='AMD',
-        k=100,
-        nearest=None,
-        reader='ase',
-        remove_hydrogens=False,
-        disorder='skip',
-        heaviest_component=False,
-        molecular_centres=False,
-        families=False,
-        show_warnings=True,
-        collapse_tol=1e-4,
-        metric='chebyshev',
-        n_jobs=None,
-        verbose=0,
-        low_memory=False,
+        crystals: Union[str, PeriodicSetType, List],
+        crystals_: Optional[Union[str, PeriodicSetType, List]] = None,
+        by: str = 'AMD',
+        k: int = 100,
+        nearest: Optional[int] = None,
+        reader: str = 'ase',
+        remove_hydrogens: bool = False,
+        disorder: str = 'skip',
+        heaviest_component: bool = False,
+        molecular_centres: bool = False,
+        families: bool = False,
+        show_warnings: bool = True,
+        collapse_tol: float = 1e-4,
+        metric: str = 'chebyshev',
+        n_jobs: Optional[int] = None,
+        verbose: int = 0,
+        low_memory: bool = False,
 ) -> pd.DataFrame:
-    r"""Given one or two sets of periodic set(s), paths to cif(s) or
-    refcode(s), compare them and return a DataFrame of the distance
+    r"""Given one or two paths to cifs/folders, lists of CSD refcodes or
+    periodic sets, compare them and return a DataFrame of the distance
     matrix. Default is to comapre by AMD with k = 100. Accepts most
     keyword arguments accepted by :class:`CifReader <.io.CifReader>`,
     :class:`CSDReader <.io.CSDReader>` and functions from
@@ -188,11 +189,6 @@ def compare(
             raise ValueError('No valid crystals to compare in second set.')
         names_ = [s.name for s in crystals_]
 
-    if reader_kwargs['molecular_centres']:
-        crystals = [(c.molecular_centres, c.cell) for c in crystals]
-        if crystals_:
-            crystals_ = [(c.molecular_centres, c.cell) for c in crystals_]
-
     if by == 'AMD':
 
         invs = [AMD(s, k) for s in crystals]
@@ -237,7 +233,8 @@ def EMD(
         pdd_: np.ndarray,
         metric: Optional[str] = 'chebyshev',
         return_transport: Optional[bool] = False,
-        **kwargs):
+        **kwargs
+) -> float:
     r"""Earth mover's distance (EMD) between two PDDs, aka the
     Wasserstein metric.
 
@@ -279,8 +276,8 @@ def EMD(
 
 
 def AMD_cdist(
-        amds: Union[np.ndarray, List[np.ndarray]],
-        amds_: Union[np.ndarray, List[np.ndarray]],
+        amds: npt.ArrayLike,
+        amds_: npt.ArrayLike,
         metric: str = 'chebyshev',
         low_memory: bool = False,
         **kwargs
@@ -332,7 +329,7 @@ def AMD_cdist(
 
 
 def AMD_pdist(
-        amds: Union[np.ndarray, List[np.ndarray]],
+        amds: npt.ArrayLike,
         metric: str = 'chebyshev',
         low_memory: bool = False,
         **kwargs
@@ -389,9 +386,9 @@ def PDD_cdist(
         pdds: List[np.ndarray],
         pdds_: List[np.ndarray],
         metric: str = 'chebyshev',
-        backend='multiprocessing',
-        n_jobs=None,
-        verbose=0,
+        backend: str = 'multiprocessing',
+        n_jobs: Optional[int] = None,
+        verbose: int = 0,
         **kwargs
 ) -> np.ndarray:
     r"""Compare two sets of PDDs with each other, returning a distance
@@ -467,9 +464,9 @@ def PDD_cdist(
 def PDD_pdist(
         pdds: List[np.ndarray],
         metric: str = 'chebyshev',
-        backend='multiprocessing',
-        n_jobs=None,
-        verbose=0,
+        backend: str = 'multiprocessing',
+        n_jobs: Optional[int] = None,
+        verbose: int = 0,
         **kwargs
 ) -> np.ndarray:
     """Compare a set of PDDs pairwise, returning a condensed distance
@@ -533,7 +530,7 @@ def PDD_pdist(
     return cdm
 
 
-def emd(pdd: np.ndarray, pdd_: np.ndarray, **kwargs):
+def emd(pdd: np.ndarray, pdd_: np.ndarray, **kwargs) -> float:
     """Alias for :func:`EMD() <.compare.EMD>`."""
     return EMD(pdd, pdd_, **kwargs)
 
@@ -550,6 +547,8 @@ def _unwrap_periodicset_list(psets_or_str, **reader_kwargs):
 
         if isinstance(item, PeriodicSet):
             return [item]
+        if isinstance(psets_or_str, Tuple):
+            return [PeriodicSet(psets_or_str[0], psets_or_str[1])]
         if isinstance(item, str) and not os.path.isfile(item) \
                                  and not os.path.isdir(item):
             reader_kwargs.pop('reader', None)
@@ -558,8 +557,6 @@ def _unwrap_periodicset_list(psets_or_str, **reader_kwargs):
         reader_kwargs.pop('refcodes', None)
         return list(CifReader(item, **reader_kwargs))
 
-    if isinstance(psets_or_str, PeriodicSet):
-        return [psets_or_str]
     if isinstance(psets_or_str, list):
         return [s for item in psets_or_str
                 for s in _extract_periodicsets(item, **reader_kwargs)]

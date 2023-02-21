@@ -6,12 +6,18 @@ Copyright (C) 2020 Cameron Hargreaves. This code is adapted from the
 Element Movers Distance project https://github.com/lrcfmd/ElMD.
 """
 
+from typing import Tuple
+
 import numba
 import numpy as np
 
 
 @numba.njit(cache=True)
-def network_simplex(source_demands, sink_demands, network_costs):
+def network_simplex(
+        source_demands: np.ndarray,
+        sink_demands: np.ndarray,
+        network_costs: np.ndarray
+) -> Tuple[float, np.ndarray]:
     """Given two sets of weights and a cost matrix on two
     distributions, calculate the Earth mover's distance 
     (Wasserstien metric).

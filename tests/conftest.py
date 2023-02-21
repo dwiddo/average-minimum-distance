@@ -18,7 +18,8 @@ def ccdc_enabled():
 @pytest.fixture(scope='session', autouse=True)
 def reference_data(root_dir):
 
-    filenames = {   # root_dir contains .pkl files with PeriodicSets
+    # root_dir contains .pkl files with PeriodicSets
+    filenames = {
         'cubic':           'cubic',
         'T2_experimental': 'T2_experimental',
         'CSD_families':    'CSD_families',

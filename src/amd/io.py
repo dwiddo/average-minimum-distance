@@ -10,7 +10,8 @@ import re
 import functools
 import warnings
 import errno
-from typing import Tuple
+from typing import Tuple, List
+import math
 
 import numpy as np
 import numba
@@ -24,7 +25,7 @@ def _custom_warning(message, category, filename, lineno, *args, **kwargs):
 warnings.formatwarning = _custom_warning
 
 
-_EQUIV_SITE_TOL = 1e-3
+_EQ_SITE_TOL = 1e-3
 _DISORDER_OPTIONS = {'skip', 'ordered_sites', 'all_sites'}
 _CCDC_IMPORT_ERR_MSG = 'Failed to import csd-python-api.'
 _CIF_TAGS = {
@@ -500,7 +501,7 @@ def periodicset_from_ase_cifblock(
     cellpar = [block.get(tag) for tag in _CIF_TAGS['cellpar']]
     if None in cellpar:
         raise ParseError(f'{block.name} has missing cell data')
-    cell = cellpar_to_cell(*cellpar)
+    cell = cellpar_to_cell(np.array(cellpar))
 
     # Asymmetric unit coordinates. ase removes uncertainty brackets
     cartesian = False # flag needed for later
@@ -535,7 +536,7 @@ def periodicset_from_ase_cifblock(
     if disorder != 'all_sites':
         occupancies = block.get('_atom_site_occupancy')
         if occupancies is None:
-            occupancies = np.ones((len(asym_unit), ))
+            occupancies = [1] * len(asym_unit)
         labels = block.get('_atom_site_label')
         if labels is None:
             labels = [''] * len(asym_unit)
@@ -585,11 +586,13 @@ def periodicset_from_ase_cifblock(
     if cartesian:
         asym_unit = asym_unit @ np.linalg.inv(cell)
     asym_unit = np.mod(asym_unit, 1)
-    # asym_unit = _snap_small_prec_coords(asym_unit, 1e-4) # recommended by pymatgen
+
+    # recommended by pymatgen, they use tol=1e-4
+    # asym_unit = _snap_small_prec_coords(asym_unit, 1e-4)
 
     # Remove overlapping sites unless disorder == 'all_sites'
     if disorder != 'all_sites':
-        keep_sites = _unique_sites(asym_unit, _EQUIV_SITE_TOL)
+        keep_sites = _unique_sites(asym_unit, _EQ_SITE_TOL)
         if not np.all(keep_sites):
             msg = 'may have overlapping sites, duplicates will be removed'
             warnings.warn(msg)
@@ -612,11 +615,11 @@ def periodicset_from_ase_cifblock(
             sitesym = [sitesym]
         rot, trans =  _parse_sitesyms(sitesym)
 
-    frac_motif, inverses = _expand_asym_unit(asym_unit, rot, trans)
-    _, wyc_muls = np.unique(inverses, return_counts=True)
+    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
+    _, wyc_muls = np.unique(invs, return_counts=True)
     asym_inds = np.zeros_like(wyc_muls)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
-    types = np.array([asym_types[i] for i in inverses])
+    types = np.array([asym_types[i] for i in invs])
     motif = frac_motif @ cell
 
     return PeriodicSet(
@@ -685,9 +688,9 @@ def periodicset_from_ase_atoms(
     # Asymmetric unit. ase default tol is 1e-5
     # do differently! get_basis determines a reduced asym unit from the atoms;
     # surely this is not needed!
-    asym_unit = get_basis(atoms, spacegroup=spg, tol=_EQUIV_SITE_TOL)
-    frac_motif, inverses = _expand_asym_unit(asym_unit, rot, trans)
-    _, wyc_muls = np.unique(inverses, return_counts=True)
+    asym_unit = get_basis(atoms, spacegroup=spg, tol=_EQ_SITE_TOL)
+    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
+    _, wyc_muls = np.unique(invs, return_counts=True)
     asym_inds = np.zeros_like(wyc_muls)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
     motif = frac_motif @ cell
@@ -750,8 +753,7 @@ def periodicset_from_pymatgen_cifblock(
     cellpar = [odict.get(tag) for tag in _CIF_TAGS['cellpar']]
     if None in cellpar:
         raise ParseError(f'{block.header} has missing cell data')
-    cellpar = [str2float(v) for v in cellpar]
-    cell = cellpar_to_cell(*cellpar)
+    cell = cellpar_to_cell(np.array([str2float(v) for v in cellpar]))
 
     # Asymmetric unit coordinates
     cartesian = False
@@ -792,6 +794,8 @@ def periodicset_from_pymatgen_cifblock(
         occupancies = odict.get('_atom_site_occupancy')
         if occupancies is None:
             occupancies = np.ones((len(asym_unit), ))
+        else:
+            occupancies = np.array([str2float(occ) for occ in occupancies])
         labels = odict.get('_atom_site_label')
         if labels is None:
             labels = [''] * len(asym_unit)
@@ -842,11 +846,13 @@ def periodicset_from_pymatgen_cifblock(
     if cartesian:
         asym_unit = asym_unit @ np.linalg.inv(cell)
     asym_unit = np.mod(asym_unit, 1)
-    # asym_unit = _snap_small_prec_coords(asym_unit) # recommended by pymatgen
+
+    # recommended by pymatgen, they use tol=1e-4
+    # asym_unit = _snap_small_prec_coords(asym_unit, 1e-4)
 
     # Remove overlapping sites unless disorder == 'all_sites'
     if disorder != 'all_sites':      
-        keep_sites = _unique_sites(asym_unit, _EQUIV_SITE_TOL)
+        keep_sites = _unique_sites(asym_unit, _EQ_SITE_TOL)
         if not np.all(keep_sites):
             msg = 'may have overlapping sites; duplicates will be removed'
             warnings.warn(msg)
@@ -855,11 +861,11 @@ def periodicset_from_pymatgen_cifblock(
 
     # Apply symmetries to asymmetric unit
     rot, trans = _get_syms_pymatgen(odict)
-    frac_motif, inverses = _expand_asym_unit(asym_unit, rot, trans)
-    _, wyc_muls = np.unique(inverses, return_counts=True)
+    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
+    _, wyc_muls = np.unique(invs, return_counts=True)
     asym_inds = np.zeros_like(wyc_muls)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
-    types = np.array([asym_types[i] for i in inverses])
+    types = np.array([asym_types[i] for i in invs])
     motif = frac_motif @ cell
 
     return PeriodicSet(
@@ -1099,10 +1105,13 @@ def periodicset_from_ccdc_crystal(
         )
 
     crystal.molecule = molecule
-    cell = cellpar_to_cell(*crystal.cell_lengths, *crystal.cell_angles)
+    cellpar = crystal.cell_lengths + crystal.cell_angles
+    if None in cellpar:
+        raise ParseError(f'{crystal.identifier} has missing cell data')
+    cell = cellpar_to_cell(np.array(cellpar))
 
     if molecular_centres:
-        frac_centres = _frac_molecular_centres_ccdc(crystal)
+        frac_centres = _frac_molecular_centres_ccdc(crystal, _EQ_SITE_TOL)
         mol_centres = frac_centres @ cell
         return PeriodicSet(mol_centres, cell, name=crystal.identifier)
 
@@ -1114,12 +1123,15 @@ def periodicset_from_ccdc_crystal(
         raise ParseError(f'{crystal.identifier} has no valid sites')
 
     asym_unit = np.mod(asym_unit, 1)
-    # asym_unit = _snap_small_prec_coords(asym_unit) # recommended by pymatgen
+
+    # recommended by pymatgen, they use tol=1e-4
+    # asym_unit = _snap_small_prec_coords(asym_unit, 1e-4)
+
     asym_types = [a.atomic_number for a in asym_atoms]
 
-    # Disorder
+    # Remove overlapping sites unless disorder == 'all_sites'
     if disorder != 'all_sites':
-        keep_sites = _unique_sites(asym_unit, _EQUIV_SITE_TOL)
+        keep_sites = _unique_sites(asym_unit, _EQ_SITE_TOL)
         if not np.all(keep_sites):
             msg = 'may have overlapping sites; duplicates will be removed'
             warnings.warn(msg)
@@ -1135,13 +1147,12 @@ def periodicset_from_ccdc_crystal(
 
     # Apply symmetries to asymmetric unit
     rot, trans = _parse_sitesyms(sitesym)
-    frac_motif, inverses = _expand_asym_unit(asym_unit, rot, trans)
-    _, wyc_muls = np.unique(inverses, return_counts=True)
+    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
+    _, wyc_muls = np.unique(invs, return_counts=True)
     asym_inds = np.zeros_like(wyc_muls)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
-    # print(wyc_muls, asym_inds)
     motif = frac_motif @ cell
-    types = np.array([asym_types[i] for i in inverses])
+    types = np.array([asym_types[i] for i in invs])
 
     return PeriodicSet(
         motif=motif,
@@ -1164,7 +1175,7 @@ def periodicset_from_gemmi_block(
 
     Parameters
     ----------
-    block : :class:`ase.io.cif.CIFBlock`
+    block : :class:`gemmi.cif.Block`
         An ase CIFBlock object representing a crystal.
     remove_hydrogens : bool, optional
         Remove Hydrogens from the crystal.
@@ -1198,28 +1209,32 @@ def periodicset_from_gemmi_block(
     from gemmi.cif import as_number, as_string, as_int
 
     # Unit cell
-    cellpar = [as_number(block.find_value(tag))
-               for tag in _CIF_TAGS['cellpar']]
-    if None in cellpar:
+    cellpar = [as_number(block.find_value(t)) for t in _CIF_TAGS['cellpar']]
+    if any(p is None or math.isnan(p) for p in cellpar):
         raise ParseError(f'{block.name} has missing cell data')
-    cell = cellpar_to_cell(*cellpar)
+    cell = cellpar_to_cell(np.array(cellpar))
 
     xyz_loop = block.find(_CIF_TAGS['atom_site_fract']).loop
     if xyz_loop is None:
-        # check for Cartesian coordinates
+        # TODO: check for Cartesian coordinates
         raise ParseError(f'{block.name} has missing coordinate data')
 
-    # Asymmetric unit coordinates
     loop_dict = _loop_to_dict_gemmi(xyz_loop)
+
+    # Asymmetric unit coordinates
     xyz_str = [loop_dict[t] for t in _CIF_TAGS['atom_site_fract']]
     asym_unit = [[as_number(c) for c in coords] for coords in xyz_str]
     asym_unit = np.mod(np.array(asym_unit).T, 1)
-    # asym_unit = _snap_small_prec_coords(asym_unit) # recommended by pymatgen
+
+    # recommended by pymatgen, they use tol=1e-4
+    # asym_unit = _snap_small_prec_coords(asym_unit, 1e-4)
 
     # Asymmetric unit types
     if '_atom_site_type_symbol' in loop_dict:
-        asym_syms = loop_dict['_atom_site_type_symbol']
-        asym_types = [gemmi.Element(s).atomic_number for s in asym_syms]
+        asym_syms = [as_string(s) for s in loop_dict['_atom_site_type_symbol']]
+        asym_types = []
+        for s in asym_syms:
+            asym_types.append(gemmi.Element(s).atomic_number if s else 0)
     else:
         warnings.warn('missing atomic types will be labelled 0')
         asym_types = [0 for _ in range(len(asym_unit))]
@@ -1228,25 +1243,27 @@ def periodicset_from_gemmi_block(
 
     # Disorder
     if '_atom_site_label' in loop_dict:
-        labels = loop_dict['_atom_site_label']
+        labels = [as_string(l) for l in loop_dict['_atom_site_label']]
     else:
         labels = [''] * xyz_loop.length()
 
     if '_atom_site_occupancy' in loop_dict:
-        occupancies = [as_number(occ)
-                       for occ in loop_dict['_atom_site_occupancy']]
+        occs = [as_number(occ) for occ in loop_dict['_atom_site_occupancy']]
+        occupancies = []
+        for occ in occs:
+            occupancies.append(1 if math.isnan(occ) else occ)
     else:
-        occupancies = [None for _ in range(xyz_loop.length())]
+        occupancies = [1] * xyz_loop.length()
 
     if disorder == 'skip':
-        if any(_has_disorder(l, o) for l, o in zip(labels, occupancies)):
+        if any(_has_disorder(l, occ) for l, occ in zip(labels, occupancies)):
             msg = f"{block.name} has disorder, pass " \
                    "disorder='ordered_sites' or 'all_sites' to " \
                    "remove/ignore disorder"
             raise ParseError(msg)
     elif disorder == 'ordered_sites':
-        for i, (lab, occ) in enumerate(zip(labels, occupancies)):
-            if _has_disorder(lab, occ):
+        for i, (label, occ) in enumerate(zip(labels, occupancies)):
+            if _has_disorder(label, occ):
                 remove_sites.append(i)
 
     if remove_hydrogens:
@@ -1262,13 +1279,14 @@ def periodicset_from_gemmi_block(
 
     # Remove overlapping sites unless disorder == 'all_sites'
     if disorder != 'all_sites':
-        keep_sites = _unique_sites(asym_unit, _EQUIV_SITE_TOL)
+        keep_sites = _unique_sites(asym_unit, _EQ_SITE_TOL)
         if not np.all(keep_sites):
             msg = 'may have overlapping sites; duplicates will be removed'
             warnings.warn(msg)
         asym_unit = asym_unit[keep_sites]
         asym_types = [sym for sym, keep in zip(asym_types, keep_sites) if keep]
 
+    # TODO: recheck below making sure missing/bad values are handled (as_string)
     # Get symmetry operations
     sitesym = []
     for tag in _CIF_TAGS['symop']:
@@ -1298,11 +1316,11 @@ def periodicset_from_gemmi_block(
     else:
         rot, trans =  _parse_sitesyms(sitesym)
 
-    frac_motif, inverses = _expand_asym_unit(asym_unit, rot, trans)
-    _, wyc_muls = np.unique(inverses, return_counts=True)
+    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
+    _, wyc_muls = np.unique(invs, return_counts=True)
     asym_inds = np.zeros_like(wyc_muls)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
-    types = np.array([asym_types[i] for i in inverses])
+    types = np.array([asym_types[i] for i in invs])
     motif = frac_motif @ cell
 
     return PeriodicSet(
@@ -1315,7 +1333,7 @@ def periodicset_from_gemmi_block(
     )
 
 
-def _parse_sitesyms(symmetries):
+def _parse_sitesyms(symmetries: List[str]) -> Tuple[np.ndarray, np.ndarray]:
     """Parses a sequence of symmetries in xyz form and returns rotation
     and translation arrays. Similar to function found in ase.spacegroup.
     """
@@ -1367,77 +1385,107 @@ def _parse_sitesyms(symmetries):
 def _expand_asym_unit(
         asym_unit: np.ndarray,
         rotations: np.ndarray,
-        translations: np.ndarray
-) -> Tuple[np.ndarray, ...]:
+        translations: np.ndarray,
+        tol: float
+) -> Tuple[np.ndarray, np.ndarray]:
     """Asymmetric unit frac coords, list of rotations & translations -->
     full fractional motif + inverse indices (which motif points come
     from where in the asym unit).
     """
 
-    frac_motif, inverses = _expand_asym_unit_fast(
-        asym_unit, rotations, translations
-    )
+    asym_unit = asym_unit.astype(np.float64)
+    rotations = rotations.astype(np.float64)
+    translations = translations.astype(np.float64)
+    expanded_sites = _expand_sites(asym_unit, rotations, translations)
+    frac_motif, invs = _reduce_expanded_sites(expanded_sites, tol)
 
-    if not all(_unique_sites(frac_motif, _EQUIV_SITE_TOL)):
-        frac_motif, inverses = _expand_asym_unit_equiv_sites(
-            asym_unit, rotations, translations
-        )
+    if not all(_unique_sites(frac_motif, tol)):
+        frac_motif, invs = _reduce_expanded_equiv_sites(expanded_sites, tol)
+
+    return frac_motif, invs
+
+
+@numba.njit()
+def _expand_sites(
+        asym_unit: np.ndarray, 
+        rotations: np.ndarray, 
+        translations: np.ndarray
+) -> np.ndarray:
+    """Expand the asymmetric unit by applying rotations and
+    translations. Returns a 3D array shape (# points, # syms, dims).
+    """
+
+    m, dims = asym_unit.shape
+    expanded_sites = np.empty((m, len(rotations), dims), dtype=np.float64)
+    for i in range(m):
+        p = asym_unit[i]
+        for j in range(len(rotations)):
+            expanded_sites[i, j] = np.dot(rotations[j], p) + translations[j]
+    expanded_sites = np.mod(expanded_sites, 1)
+    return expanded_sites
+
+
+@numba.njit()
+def _reduce_expanded_sites(
+        expanded_sites: np.ndarray,
+        tol: float
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Reduce the asymmetric unit after being expended by symmetries by
+    removing invariant points. This is the fast version which works in
+    the case that no two sites in the asymmetric unit are equivalent.
+    If they are, the reduction is re-ran with
+    _reduce_expanded_equiv_sites() to account for it.
+    """
+
+    all_unqiue_inds = []
+    multiplicities = np.zeros(shape=(expanded_sites.shape[0], ))
+
+    for i, sites in enumerate(expanded_sites):
+        unique_inds = _unique_sites(sites, tol)
+        all_unqiue_inds.append(unique_inds)
+        multiplicities[i] = np.sum(unique_inds)
+
+    m = int(np.sum(multiplicities))
+    frac_motif = np.zeros(shape=(m, expanded_sites.shape[-1]))
+    inverses = np.zeros(shape=(m, ), dtype=np.int32)
+    
+    s = 0
+    for i in range(expanded_sites.shape[0]):
+        t = s + multiplicities[i]
+        frac_motif[s:t, :] = expanded_sites[i][all_unqiue_inds[i]]
+        inverses[s:t] = i
+        s = t
 
     return frac_motif, inverses
 
 
-def _expand_asym_unit_fast(
-        asym_unit: np.ndarray,
-        rotations: np.ndarray,
-        translations: np.ndarray
-) -> Tuple[np.ndarray, ...]:
-    """Asymmetric unit frac coords, list of rotations & translations -->
-    full fractional motif + inverse indices (which motif points come
-    from where in the asym unit).
+def _reduce_expanded_equiv_sites(
+        expanded_sites: np.ndarray,
+        tol: float
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Reduce the asymmetric unit after being expended by symmetries by
+    removing invariant points. This is the slower version, called after
+    the fast version if we find equivalent motif points which need to be
+    removed.
     """
 
-    frac_motif = []
-    inverses = []
-
-    for i in range(len(asym_unit)):
-        expanded_sites = np.dot(rotations, asym_unit[i]) + translations
-        expanded_sites = np.mod(expanded_sites, 1)
-        unique_inds = _unique_sites(expanded_sites, _EQUIV_SITE_TOL)
-        points = expanded_sites[unique_inds]
-        inverses.extend(i for _ in range(len(points)))
-        frac_motif.append(points)
-
-    return np.concatenate(frac_motif), np.array(inverses)
-
-
-def _expand_asym_unit_equiv_sites(
-        asym_unit: np.ndarray,
-        rotations: np.ndarray,
-        translations: np.ndarray
-) -> Tuple[np.ndarray, ...]:
-    """Asymmetric unit frac coords, list of rotations & translations -->
-    full fractional motif + inverse indices (which motif points come
-    from where in the asym unit).
-    """
-
-    expanded_sites = np.mod(np.dot(rotations, asym_unit[0]) + translations, 1)
-    unique_inds = _unique_sites(expanded_sites, _EQUIV_SITE_TOL)
-    frac_motif = expanded_sites[unique_inds]
+    sites = expanded_sites[0]
+    unique_inds = _unique_sites(sites, tol)
+    frac_motif = sites[unique_inds]
     inverses = [0] * len(frac_motif)
 
-    for i in range(1, len(asym_unit)):
-        expanded_sites = np.mod(np.dot(rotations, asym_unit[i]) + translations, 1)
-        unique_inds = _unique_sites(expanded_sites, _EQUIV_SITE_TOL)
+    for i in range(1, len(expanded_sites)):
+        sites = expanded_sites[i]
+        unique_inds = _unique_sites(sites, tol)
 
         points = []
-        for site_ in expanded_sites[unique_inds]:
-            diffs1 = np.abs(site_ - frac_motif)
+        for site in sites[unique_inds]:
+            diffs1 = np.abs(site - frac_motif)
             diffs2 = np.abs(diffs1 - 1)
-            mask = np.all((diffs1 <= _EQUIV_SITE_TOL) | 
-                          (diffs2 <= _EQUIV_SITE_TOL), axis=-1)
+            mask = np.all((diffs1 <= tol) | (diffs2 <= tol), axis=-1)
 
             if not np.any(mask):
-                points.append(site_)
+                points.append(site)
             else:
                 msg = f'has equivalent sites at positions ' \
                       f'{inverses[np.argmax(mask)]}, {i}'
@@ -1451,26 +1499,37 @@ def _expand_asym_unit_equiv_sites(
 
 
 @numba.njit()
-def _unique_sites(asym_unit, tol):
+def _unique_sites(asym_unit: np.ndarray, tol: float) -> np.ndarray:
     """Uniquify (within tol) a list of fractional coordinates,
     considering all points modulo 1. Returns an array of bools such that
     asym_unit[_unique_sites(asym_unit, tol)] is the uniquified list.
     """
 
-    site_diffs1 = np.abs(np.expand_dims(asym_unit, 1) - asym_unit)
-    site_diffs2 = np.abs(site_diffs1 - 1)
-    sites_neq_mask = (site_diffs1 > tol) & (site_diffs2 > tol)
-    overlapping = np.triu(sites_neq_mask.sum(axis=-1) == 0, 1)
-    return overlapping.sum(axis=0) == 0
+    m, _ = asym_unit.shape
+    where_unique = np.full(shape=(m, ), fill_value=True)
+
+    for i in range(1, m):
+        asym_unit[i]
+        site_diffs1 = np.abs(asym_unit[:i, :] - asym_unit[i])
+        site_diffs2 = np.abs(site_diffs1 - 1)
+        sites_neq_mask = (site_diffs1 > tol) & (site_diffs2 > tol)
+        if not np.all(np.sum(sites_neq_mask, axis=-1)):
+            where_unique[i] = False
+
+    return where_unique
 
 
-def _has_disorder(label, occupancy):
-    """Return True if label ends with ? or occupancy is a number < 1.
+def _has_disorder(label: str, occupancy):
+    """Return True if label ends with ?, or occupancy is a number < 1.
     """
-    return (np.isscalar(occupancy) and occupancy < 1) or label.endswith('?')
+    try:
+        occupancy = float(occupancy)
+    except:
+        occupancy = 1
+    return (occupancy < 1) or label.endswith('?')
 
 
-def _get_syms_pymatgen(data):
+def _get_syms_pymatgen(data: dict) -> Tuple[np.ndarray, np.ndarray]:
     """Parse symmetry operations given by data = block.data where block
     is a pymatgen CifBlock object. If the symops are not present the
     space group symbol/international number is parsed and symops are
@@ -1545,11 +1604,13 @@ def _get_syms_pymatgen(data):
 
     rotations = [op.rotation_matrix for op in symops]
     translations = [op.translation_vector for op in symops]
+    rotations = np.array(rotations, dtype=np.float64)
+    translations = np.array(translations, dtype=np.float64)
 
     return rotations, translations
 
 
-def _frac_molecular_centres_ccdc(crystal):
+def _frac_molecular_centres_ccdc(crystal, tol):
     """Returns the geometric centres of molecules in the unit cell.
     Expects a ccdc Crystal object and returns fractional coordiantes.
     """
@@ -1559,7 +1620,7 @@ def _frac_molecular_centres_ccdc(crystal):
         coords = [a.fractional_coordinates for a in comp.atoms]
         frac_centres.append((sum(ax) / len(coords) for ax in zip(*coords)))
     frac_centres = np.mod(np.array(frac_centres), 1)
-    return frac_centres[_unique_sites(frac_centres, _EQUIV_SITE_TOL)]
+    return frac_centres[_unique_sites(frac_centres, tol)]
 
 
 def _heaviest_component_ccdc(molecule):
@@ -1594,7 +1655,7 @@ def _loop_to_dict_gemmi(gemmi_loop):
     return {tag: l for tag, l in zip(gemmi_loop.tags, tablified_loop)}
 
 
-def _snap_small_prec_coords(frac_coords, tol):
+def _snap_small_prec_coords(frac_coords: np.ndarray, tol: float) -> np.ndarray:
     """Find where frac_coords is within 1e-4 of 1/3 or 2/3, change to
     1/3 and 2/3. Recommended by pymatgen's CIF parser.
     """
