@@ -97,7 +97,7 @@ def cellpar_to_cell(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
     if cz_sqr < 0:
         raise ValueError('Could not create unit cell from given parameters.')
 
-    cell = np.empty((3, 3), dtype=np.float64)
+    cell = np.zeros((3, 3), dtype=np.float64)
     cell[0, 0] = a
     cell[1, 0] = b * cos_gamma
     cell[1, 1] = b * sin_gamma
@@ -126,7 +126,7 @@ def cellpar_to_cell_2D(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
     """
 
     a, b, alpha = cellpar
-    cell = np.empty((2, 2), dtype=np.float64)
+    cell = np.zeros((2, 2), dtype=np.float64)
     ang = alpha * np.pi / 180.0
     cell[0, 0] = a
     cell[1, 0] = b * np.cos(ang)
