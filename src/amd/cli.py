@@ -72,6 +72,8 @@ def main():
         help='(str) Metric used to compare AMDs/rows of PDDs, default chebyshev.')
     parser.add_argument('--n_jobs', type=int, default=1,
         help='(int) Number of cores to use for multiprocessing when comparing PDDs.')
+    parser.add_argument('--backend', type=str, default='multiprocessing',
+        help='(str) The parallelization backend implementation for PDD comparisons.')
     parser.add_argument('--verbose', type=int, default=1,
         help='(int) Print an ETA to the terminal when comparing PDDs. Passed to joblib.Parallel if using multiprocessing.')
     parser.add_argument('--low_memory', default=False, action='store_true',

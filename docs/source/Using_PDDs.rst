@@ -102,4 +102,5 @@ Comparison options and multiprocessing
 
 * :code:`metric` (default ``chebyshev``) chooses the metric used to compare PDD rows. See `SciPy's cdist/pdist <https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.pdist.html>`_ for a list of accepted metrics.
 * :code:`n_jobs` (new in 1.2.3, default ``None``) is the number of cores to use for multiprocessing (passed to :class:`joblib.Parallel`). Pass -1 to use the maximum.
-* :code:`verbose` (changed in 1.2.3, default 0) controls the verbosity level, increasing with larger numbers. This is passed to :class:`joblib.Parallel`, see its documentation for details.
+* :code:`backend` (default ``multiprocessing``) is the parallelization backend implementation for PDD comparisons.
+* :code:`verbose` (requires ``by='PDD'``, default ``False``) controls the verbosity level. With parallel processing the verbose argument of :class:`joblib.Parallel` is used, otherwise ``tqdm`` is used.

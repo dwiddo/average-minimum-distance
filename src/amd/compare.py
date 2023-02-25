@@ -37,7 +37,8 @@ def compare(
         collapse_tol: float = 1e-4,
         metric: str = 'chebyshev',
         n_jobs: Optional[int] = None,
-        verbose: int = 0,
+        backend: str = 'multiprocessing',
+        verbose: bool = False,
         low_memory: bool = False,
 ) -> pd.DataFrame:
     r"""Given one or two paths to cifs/folders, lists of CSD refcodes or
@@ -105,10 +106,14 @@ def compare(
         parallel processing with :code:`joblib`. Set to -1 to use the
         maximum. Using parallel processing may be slower for small
         inputs.
-    verbose : int, default 0, ``by='PDD'`` only
-        Verbosity level. If using parallel processing (n_jobs > 1),
-        passed to :class:`joblib.Parallel` where larger values = more
-        verbose. Otherwise uses tqdm if verbose is True.
+    backend : str, default 'multiprocessing', ``by='PDD'`` only
+        The parallelization backend implementation for PDD comparisons.
+        For a list of supported backends, see the backend argument of
+        :class:`joblib.Parallel`.
+    verbose : bool, default False
+        Prints a progress bar when reading crystals and comparing PDDs.
+        If using parallel processing (n_jobs > 1), the verbose argument
+        of :class:`joblib.Parallel` is used, otherwise uses tqdm.
     low_memory : bool, default False, ``by='AMD'`` only
         Use a slower but more memory efficient
         method for large collections of AMDs (metric 'chebyshev' only).
@@ -161,6 +166,7 @@ def compare(
         'heaviest_component': heaviest_component,
         'molecular_centres': molecular_centres,
         'show_warnings': show_warnings,
+        'verbose': verbose,
     }
 
     pdd_kwargs = {
@@ -172,6 +178,7 @@ def compare(
     compare_kwargs = {
         'metric': metric,
         'n_jobs': n_jobs,
+        'backend': backend,
         'verbose': verbose,
         'low_memory': low_memory,
     }
@@ -190,9 +197,9 @@ def compare(
         names_ = [s.name for s in crystals_]
 
     if by == 'AMD':
-
         invs = [AMD(s, k) for s in crystals]
         compare_kwargs.pop('n_jobs', None)
+        compare_kwargs.pop('backend', None)
         compare_kwargs.pop('verbose', None)
 
         if crystals_ is None:
@@ -202,7 +209,6 @@ def compare(
             dm = AMD_cdist(invs, invs_, **compare_kwargs)
 
     elif by == 'PDD':
-
         invs = [PDD(s, k, **pdd_kwargs) for s in crystals]
         compare_kwargs.pop('low_memory', None)
 
@@ -219,7 +225,6 @@ def compare(
             data['ID ' + str(i+1)] = [names_[j] for j in inds[:, i]]
             data['DIST ' + str(i+1)] = nn_dm[:, i]
         df = pd.DataFrame(data, index=names)
-
     else:
         if dm.ndim == 1:
             dm = squareform(dm)
@@ -229,8 +234,8 @@ def compare(
 
 
 def EMD(
-        pdd: np.ndarray,
-        pdd_: np.ndarray,
+        pdd: npt.NDArray,
+        pdd_: npt.NDArray,
         metric: Optional[str] = 'chebyshev',
         return_transport: Optional[bool] = False,
         **kwargs
@@ -271,7 +276,6 @@ def EMD(
 
     if return_transport:
         return emd_dist, transport_plan
-
     return emd_dist
 
 
@@ -281,7 +285,7 @@ def AMD_cdist(
         metric: str = 'chebyshev',
         low_memory: bool = False,
         **kwargs
-) -> np.ndarray:
+) -> npt.NDArray:
     r"""Compare two sets of AMDs with each other, returning a distance
     matrix. This function is essentially
     :func:`scipy.spatial.distance.cdist` with the default metric
@@ -333,7 +337,7 @@ def AMD_pdist(
         metric: str = 'chebyshev',
         low_memory: bool = False,
         **kwargs
-) -> np.ndarray:
+) -> npt.NDArray:
     """Compare a set of AMDs pairwise, returning a condensed distance
     matrix. This function is essentially
     :func:`scipy.spatial.distance.pdist` with the default metric
@@ -368,9 +372,9 @@ def AMD_pdist(
     if low_memory:
         m = len(amds)
         if metric != 'chebyshev':
-            msg = "Using only allowed metric 'chebyshev' for low_memory"
+            msg = 'Using only implemented metric "chebyshev" for low_memory'
             warnings.warn(msg, UserWarning)
-        cdm = np.empty((m * (m - 1)) // 2, dtype=np.double)
+        cdm = np.empty((m * (m - 1)) // 2, dtype=np.float64)
         ind = 0
         for i in range(m):
             ind_ = ind + m - i - 1
@@ -383,14 +387,14 @@ def AMD_pdist(
 
 
 def PDD_cdist(
-        pdds: List[np.ndarray],
-        pdds_: List[np.ndarray],
+        pdds: List[npt.NDArray],
+        pdds_: List[npt.NDArray],
         metric: str = 'chebyshev',
         backend: str = 'multiprocessing',
         n_jobs: Optional[int] = None,
-        verbose: int = 0,
+        verbose: bool = False,
         **kwargs
-) -> np.ndarray:
+) -> npt.NDArray:
     r"""Compare two sets of PDDs with each other, returning a distance
     matrix. Supports parallel processing via joblib. If using
     parallelisation, make sure to include a if __name__ == '__main__'
@@ -414,10 +418,10 @@ def PDD_cdist(
         Maximum number of concurrent jobs for parallel processing with
         ``joblib``. Set to -1 to use the maximum. Using parallel
         processing may be slower for small inputs.
-    verbose : int, default 0
-        Verbosity level. If using parallel processing (n_jobs > 1),
-        passed to :class:`joblib.Parallel` where larger values = more
-        verbose. Otherwise uses tqdm if verbose is True.
+    verbose : bool, default False
+        Prints a progress bar. If using parallel processing
+        (n_jobs > 1), the verbose argument of :class:`joblib.Parallel`
+        is used, otherwise uses tqdm.
 
     Returns
     -------
@@ -427,15 +431,10 @@ def PDD_cdist(
         ``pdds_[j]`` given by Earth mover's distance.
     """
 
-    if isinstance(pdds, np.ndarray):
-        if len(pdds.shape) == 2:
-            pdds = [pdds]
-
-    if isinstance(pdds_, np.ndarray):
-        if len(pdds_.shape) == 2:
-            pdds_ = [pdds_]
-
     kwargs.pop('return_transport', None)
+    k = pdds[0].shape[-1] - 1
+    if verbose:
+        verbose = 3
 
     if n_jobs is not None and n_jobs not in (0, 1):
         # TODO: put results into preallocated empty array in place
@@ -449,26 +448,27 @@ def PDD_cdist(
         n, m = len(pdds), len(pdds_)
         dm = np.empty((n, m))
         if verbose:
-            pbar = tqdm.tqdm(total=n*m)
+            desc = f'Comparing {len(pdds)}x{len(pdds_)} items by PDD (k={k})'
+            progress_bar = tqdm.tqdm(desc=desc, total=n*m)
         for i in range(n):
             for j in range(m):
                 dm[i, j] = EMD(pdds[i], pdds_[j], metric=metric, **kwargs)
                 if verbose:
-                    pbar.update(1)
+                    progress_bar.update(1)
         if verbose:
-            pbar.close()
+            progress_bar.close()
 
     return dm
 
 
 def PDD_pdist(
-        pdds: List[np.ndarray],
+        pdds: List[npt.NDArray],
         metric: str = 'chebyshev',
         backend: str = 'multiprocessing',
         n_jobs: Optional[int] = None,
-        verbose: int = 0,
+        verbose: bool = False,
         **kwargs
-) -> np.ndarray:
+) -> npt.NDArray:
     """Compare a set of PDDs pairwise, returning a condensed distance
     matrix. Supports parallelisation via joblib. If using
     parallelisation, make sure to include a if __name__ == '__main__'
@@ -490,10 +490,10 @@ def PDD_pdist(
         Maximum number of concurrent jobs for parallel processing with
         ``joblib``. Set to -1 to use the maximum. Using parallel
         processing may be slower for small inputs.
-    verbose : int, default 0
-        Verbosity level. If using parallel processing (n_jobs > 1),
-        passed to :class:`joblib.Parallel` where larger values = more
-        verbose. Otherwise uses tqdm if verbose is True.
+    verbose : bool, default False
+        Prints a progress bar. If using parallel processing
+        (n_jobs > 1), the verbose argument of :class:`joblib.Parallel`
+        is used, otherwise uses tqdm.
 
     Returns
     -------
@@ -505,6 +505,9 @@ def PDD_pdist(
     """
 
     kwargs.pop('return_transport', None)
+    k = pdds[0].shape[-1] - 1
+    if verbose:
+        verbose = 3
 
     if n_jobs is not None and n_jobs > 1:
         # TODO: put results into preallocated empty array in place
@@ -517,20 +520,21 @@ def PDD_pdist(
     else:
         m = len(pdds)
         cdm_len = (m * (m - 1)) // 2
-        cdm = np.empty(cdm_len, dtype=np.double)
+        cdm = np.empty(cdm_len, dtype=np.float64)
         inds = ((i, j) for i in range(0, m - 1) for j in range(i + 1, m))
         if verbose:
-            eta = tqdm.tqdm(cdm_len)
+            desc = f'Comparing {len(pdds)} items pairwise by PDD (k={k})'
+            progress_bar = tqdm.tqdm(desc=desc, total=cdm_len)
         for r, (i, j) in enumerate(inds):
             cdm[r] = EMD(pdds[i], pdds[j], metric=metric, **kwargs)
             if verbose:
-                eta.update(1)
+                progress_bar.update(1)
         if verbose:
-            eta.close()
+            progress_bar.close()
     return cdm
 
 
-def emd(pdd: np.ndarray, pdd_: np.ndarray, **kwargs) -> float:
+def emd(pdd: npt.NDArray, pdd_: npt.NDArray, **kwargs) -> float:
     """Alias for :func:`EMD() <.compare.EMD>`."""
     return EMD(pdd, pdd_, **kwargs)
 

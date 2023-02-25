@@ -10,11 +10,13 @@ import re
 import functools
 import warnings
 import errno
-from typing import Tuple, List
 import math
+from typing import Iterable, Iterator, Optional, Union, Callable, Tuple, List
 
 import numpy as np
+import numpy.typing as npt
 import numba
+import tqdm
 
 from .utils import cellpar_to_cell
 from .periodicset import PeriodicSet
@@ -78,21 +80,28 @@ class _Reader:
     """Base reader class.
     """
 
-    def __init__(self, iterable, converter, show_warnings=True):
+    def __init__(
+            self,
+            iterable: Iterable,
+            converter: Callable,
+            show_warnings: bool,
+            verbose: bool
+    ):
+
         self._iterator = iter(iterable)
         self._converter = converter
         self.show_warnings = show_warnings
+        self._progress_bar = tqdm.tqdm() if verbose else None
 
     def __iter__(self):
-        if self._iterator is None or self._converter is None:
-            raise RuntimeError(f'{self.__class__.__name__} not initialized.')
         return self
 
     def __next__(self):
-        """Iterates over self._iterator, passing items through
-        self._converter. Catches :class:`ParseError <.io.ParseError>`
-        and warnings raised in self._converter, optionally printing
-        them.
+        """Iterates over self._iterator, passing through self._converter
+        and yielding. If :class:`ParseError <.io.ParseError>` is raised
+        in a call to self._converter, the item is skipped. Warnings
+        raised in self._converter are printed if self.show_warnings is
+        True.
         """
 
         if not self.show_warnings:
@@ -117,9 +126,12 @@ class _Reader:
                 msg = f'(name={periodic_set.name}) {warning.message}'
                 warnings.warn(msg, category=warning.category)
 
+            if self._progress_bar is not None:
+                self._progress_bar.update(1)
+
             return periodic_set
 
-    def read(self):
+    def read(self) -> Union[PeriodicSet, List[PeriodicSet]]:
         """Reads the crystal(s), returns one
         :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` if there is
         only one, otherwise returns a list.
@@ -165,6 +177,9 @@ class CifReader(_Reader):
         unit cell and store in the attribute molecular_centres.
     show_warnings : bool, optional
         Controls whether warnings that arise during reading are printed.
+    verbose : bool, default False
+        If True, prints a progress bar showing the number of items
+        processed.
 
     Yields
     ------
@@ -194,13 +209,14 @@ class CifReader(_Reader):
 
     def __init__(
             self,
-            path,
-            reader='ase',
-            remove_hydrogens=False,
-            disorder='skip',
-            heaviest_component=False,
-            molecular_centres=False,
-            show_warnings=True,
+            path: str,
+            reader: str = 'ase',
+            remove_hydrogens: bool = False,
+            disorder: str = 'skip',
+            heaviest_component: bool = False,
+            molecular_centres: bool = False,
+            show_warnings: bool = True,
+            verbose: bool = False
     ):
 
         if disorder not in _DISORDER_OPTIONS:
@@ -273,19 +289,24 @@ class CifReader(_Reader):
             iterable = CifReader._dir_generator(path, file_parser, extensions)
         else:
             raise FileNotFoundError(
-                errno.ENOENT, os.strerror(errno.ENOENT), path)
+                errno.ENOENT, os.strerror(errno.ENOENT), path
+            )
 
-        super().__init__(iterable, converter, show_warnings=show_warnings)
+        super().__init__(iterable, converter, show_warnings, verbose)
 
     @staticmethod
-    def _dir_generator(path, callable, extensions):
+    def _dir_generator(
+            path: str,
+            callable: Callable,
+            extensions: Iterable
+    ) -> Iterator:
         for file in os.listdir(path):
             suff = os.path.splitext(file)[1][1:]
             if suff.lower() in extensions:
                 yield from callable(os.path.join(path, file))
 
     @staticmethod
-    def _pymatgen_cifblock_generator(path):
+    def _pymatgen_cifblock_generator(path: str) -> Iterator:
         """Path to .cif --> generator of pymatgen CifBlock objects."""
         from pymatgen.io.cif import CifFile
         yield from CifFile.from_file(path).data.values()
@@ -321,6 +342,9 @@ class CSDReader(_Reader):
         attribute molecular_centres.
     show_warnings : bool, optional
         Controls whether warnings that arise during reading are printed.
+    verbose : bool, default False
+        If True, prints a progress bar showing the number of items
+        processed.
 
     Yields
     ------
@@ -356,13 +380,14 @@ class CSDReader(_Reader):
 
     def __init__(
             self,
-            refcodes=None,
-            families=False,
-            remove_hydrogens=False,
-            disorder='skip',
-            heaviest_component=False,
-            molecular_centres=False,
-            show_warnings=True,
+            refcodes: Optional[Union[str, List[str]]] = None,
+            families: bool = False,
+            remove_hydrogens: bool = False,
+            disorder: str = 'skip',
+            heaviest_component: bool = False,
+            molecular_centres: bool = False,
+            show_warnings: bool = True,
+            verbose: bool = False
     ):
 
         try:
@@ -398,10 +423,13 @@ class CSDReader(_Reader):
             heaviest_component=heaviest_component
         )
         iterable = self._ccdc_generator(refcodes, entry_reader)
-        super().__init__(iterable, converter, show_warnings=show_warnings)
+        super().__init__(iterable, converter, show_warnings, verbose)
 
     @staticmethod
-    def _ccdc_generator(refcodes, entry_reader):
+    def _ccdc_generator(
+            refcodes: Optional[Union[str, List[str]]],
+            entry_reader
+    ) -> Iterator:
         """Generates ccdc Entries from CSD refcodes.
         """
 
@@ -417,7 +445,7 @@ class CSDReader(_Reader):
                     warnings.warn(f'{refcode} not found in database')
 
     @staticmethod
-    def _refcodes_from_families_ccdc(refcode_families):
+    def _refcodes_from_families_ccdc(refcode_families: List[str]) -> List[str]:
         """List of strings --> all CSD refcodes starting with any of the
         strings. Intended to be passed a list of families and return all
         refcodes in them.
@@ -453,8 +481,8 @@ class ParseError(ValueError):
 
 def periodicset_from_ase_cifblock(
         block,
-        remove_hydrogens=False,
-        disorder='skip'
+        remove_hydrogens: bool = False,
+        disorder: str = 'skip'
 ) -> PeriodicSet:
     """:class:`ase.io.cif.CIFBlock` --> 
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
@@ -634,7 +662,7 @@ def periodicset_from_ase_cifblock(
 
 def periodicset_from_ase_atoms(
         atoms,
-        remove_hydrogens=False
+        remove_hydrogens: bool = False
 ) -> PeriodicSet:
     """:class:`ase.atoms.Atoms` -->
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`. Does not have
@@ -706,8 +734,8 @@ def periodicset_from_ase_atoms(
 
 def periodicset_from_pymatgen_cifblock(
         block,
-        remove_hydrogens=False,
-        disorder='skip'
+        remove_hydrogens: bool = False,
+        disorder: str = 'skip'
 ) -> PeriodicSet:
     """:class:`pymatgen.io.cif.CifBlock` -->
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
@@ -880,8 +908,8 @@ def periodicset_from_pymatgen_cifblock(
 
 def periodicset_from_pymatgen_structure(
         structure,
-        remove_hydrogens=False,
-        disorder='skip'
+        remove_hydrogens: bool = False,
+        disorder: str = 'skip'
 ) -> PeriodicSet:
     """:class:`pymatgen.core.structure.Structure` -->
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
@@ -954,10 +982,10 @@ def periodicset_from_pymatgen_structure(
 
 def periodicset_from_ccdc_entry(
         entry,
-        remove_hydrogens=False,
-        disorder='skip',
-        heaviest_component=False,
-        molecular_centres=False
+        remove_hydrogens: bool = False,
+        disorder: str = 'skip',
+        heaviest_component: bool = False,
+        molecular_centres: bool = False
 ) -> PeriodicSet:
     """:class:`ccdc.entry.Entry` -->
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
@@ -1025,10 +1053,10 @@ def periodicset_from_ccdc_entry(
 
 def periodicset_from_ccdc_crystal(
         crystal,
-        remove_hydrogens=False,
-        disorder='skip',
-        heaviest_component=False,
-        molecular_centres=False
+        remove_hydrogens: bool = False,
+        disorder: str = 'skip',
+        heaviest_component: bool = False,
+        molecular_centres: bool = False
 ) -> PeriodicSet:
     """:class:`ccdc.crystal.Crystal` -->
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
@@ -1166,8 +1194,8 @@ def periodicset_from_ccdc_crystal(
 
 def periodicset_from_gemmi_block(
         block,
-        remove_hydrogens=False,
-        disorder='skip'
+        remove_hydrogens: bool = False,
+        disorder: bool = 'skip'
 ) -> PeriodicSet:
     """:class:`gemmi.cif.Block` -->
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
@@ -1333,7 +1361,9 @@ def periodicset_from_gemmi_block(
     )
 
 
-def _parse_sitesyms(symmetries: List[str]) -> Tuple[np.ndarray, np.ndarray]:
+def _parse_sitesyms(
+        symmetries: List[str]
+) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Parses a sequence of symmetries in xyz form and returns rotation
     and translation arrays. Similar to function found in ase.spacegroup.
     """
@@ -1383,19 +1413,19 @@ def _parse_sitesyms(symmetries: List[str]) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def _expand_asym_unit(
-        asym_unit: np.ndarray,
-        rotations: np.ndarray,
-        translations: np.ndarray,
+        asym_unit: npt.NDArray[np.float64],
+        rotations: npt.NDArray[np.float64],
+        translations: npt.NDArray[np.float64],
         tol: float
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.int32]]:
     """Asymmetric unit frac coords, list of rotations & translations -->
     full fractional motif + inverse indices (which motif points come
     from where in the asym unit).
     """
 
-    asym_unit = asym_unit.astype(np.float64)
-    rotations = rotations.astype(np.float64)
-    translations = translations.astype(np.float64)
+    asym_unit = asym_unit.astype(np.float64, copy=False)
+    rotations = rotations.astype(np.float64, copy=False)
+    translations = translations.astype(np.float64, copy=False)
     expanded_sites = _expand_sites(asym_unit, rotations, translations)
     frac_motif, invs = _reduce_expanded_sites(expanded_sites, tol)
 
@@ -1407,10 +1437,10 @@ def _expand_asym_unit(
 
 @numba.njit()
 def _expand_sites(
-        asym_unit: np.ndarray, 
-        rotations: np.ndarray, 
-        translations: np.ndarray
-) -> np.ndarray:
+        asym_unit: npt.NDArray[np.float64],
+        rotations: npt.NDArray[np.float64],
+        translations: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
     """Expand the asymmetric unit by applying rotations and
     translations. Returns a 3D array shape (# points, # syms, dims).
     """
@@ -1427,9 +1457,9 @@ def _expand_sites(
 
 @numba.njit()
 def _reduce_expanded_sites(
-        expanded_sites: np.ndarray,
+        expanded_sites: npt.NDArray[np.float64],
         tol: float
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.int32]]:
     """Reduce the asymmetric unit after being expended by symmetries by
     removing invariant points. This is the fast version which works in
     the case that no two sites in the asymmetric unit are equivalent.
@@ -1460,9 +1490,9 @@ def _reduce_expanded_sites(
 
 
 def _reduce_expanded_equiv_sites(
-        expanded_sites: np.ndarray,
+        expanded_sites: npt.NDArray[np.float64],
         tol: float
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.int32]]:
     """Reduce the asymmetric unit after being expended by symmetries by
     removing invariant points. This is the slower version, called after
     the fast version if we find equivalent motif points which need to be
@@ -1495,11 +1525,13 @@ def _reduce_expanded_equiv_sites(
             inverses.extend(i for _ in range(len(points)))
             frac_motif = np.concatenate((frac_motif, np.array(points)))
 
-    return frac_motif, np.array(inverses)
+    return frac_motif, np.array(inverses, dtype=np.int32)
 
 
 @numba.njit()
-def _unique_sites(asym_unit: np.ndarray, tol: float) -> np.ndarray:
+def _unique_sites(
+        asym_unit: npt.NDArray[np.float64], tol: float
+) -> npt.NDArray[np.bool_]:
     """Uniquify (within tol) a list of fractional coordinates,
     considering all points modulo 1. Returns an array of bools such that
     asym_unit[_unique_sites(asym_unit, tol)] is the uniquified list.
@@ -1519,7 +1551,7 @@ def _unique_sites(asym_unit: np.ndarray, tol: float) -> np.ndarray:
     return where_unique
 
 
-def _has_disorder(label: str, occupancy):
+def _has_disorder(label: str, occupancy) -> bool:
     """Return True if label ends with ?, or occupancy is a number < 1.
     """
     try:
@@ -1529,7 +1561,9 @@ def _has_disorder(label: str, occupancy):
     return (occupancy < 1) or label.endswith('?')
 
 
-def _get_syms_pymatgen(data: dict) -> Tuple[np.ndarray, np.ndarray]:
+def _get_syms_pymatgen(
+        data: dict
+) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Parse symmetry operations given by data = block.data where block
     is a pymatgen CifBlock object. If the symops are not present the
     space group symbol/international number is parsed and symops are
@@ -1610,7 +1644,9 @@ def _get_syms_pymatgen(data: dict) -> Tuple[np.ndarray, np.ndarray]:
     return rotations, translations
 
 
-def _frac_molecular_centres_ccdc(crystal, tol):
+def _frac_molecular_centres_ccdc(
+        crystal, tol: float
+) -> npt.NDArray[np.float64]:
     """Returns the geometric centres of molecules in the unit cell.
     Expects a ccdc Crystal object and returns fractional coordiantes.
     """
@@ -1619,7 +1655,7 @@ def _frac_molecular_centres_ccdc(crystal, tol):
     for comp in crystal.packing(inclusion='CentroidIncluded').components:
         coords = [a.fractional_coordinates for a in comp.atoms]
         frac_centres.append((sum(ax) / len(coords) for ax in zip(*coords)))
-    frac_centres = np.mod(np.array(frac_centres), 1)
+    frac_centres = np.mod(np.array(frac_centres, dtype=np.float64), 1)
     return frac_centres[_unique_sites(frac_centres, tol)]
 
 
@@ -1633,18 +1669,21 @@ def _heaviest_component_ccdc(molecule):
     for component in molecule.components:
         weight = 0
         for a in component.atoms:
-            if isinstance(a.atomic_weight, (float, int)):
-                if isinstance(a.occupancy, (float, int)):
-                    weight += a.occupancy * a.atomic_weight
-                else:
-                    weight += a.atomic_weight
+            try:
+                occ = float(a.occupancy)
+            except ValueError:
+                occ = 1
+            try:
+                weight += float(a.atomic_weight) * occ
+            except ValueError:
+                pass
         component_weights.append(weight)
     largest_component_ind = np.argmax(np.array(component_weights))
     molecule = molecule.components[largest_component_ind]
     return molecule
 
 
-def _loop_to_dict_gemmi(gemmi_loop):
+def _loop_to_dict_gemmi(gemmi_loop) -> dict:
     """gemmi Loop object --> dict, tags: values
     """
 
@@ -1655,7 +1694,9 @@ def _loop_to_dict_gemmi(gemmi_loop):
     return {tag: l for tag, l in zip(gemmi_loop.tags, tablified_loop)}
 
 
-def _snap_small_prec_coords(frac_coords: np.ndarray, tol: float) -> np.ndarray:
+def _snap_small_prec_coords(
+        frac_coords: npt.NDArray[np.float64], tol: float
+) -> npt.NDArray[np.float64]:
     """Find where frac_coords is within 1e-4 of 1/3 or 2/3, change to
     1/3 and 2/3. Recommended by pymatgen's CIF parser.
     """

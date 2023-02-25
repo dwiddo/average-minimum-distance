@@ -11,6 +11,7 @@ passed as the first argument to :func:`amd.AMD() <.calculate.AMD>` or
 from typing import Optional, Union, Tuple
 
 import numpy as np
+import numpy.typing as npt
 
 from .utils import (
     cellpar_to_cell,
@@ -56,12 +57,12 @@ class PeriodicSet:
 
     def __init__(
             self,
-            motif: np.ndarray,
-            cell: np.ndarray,
+            motif: npt.NDArray,
+            cell: npt.NDArray,
             name: Optional[str] = None,
-            asymmetric_unit: Optional[np.ndarray] = None,
-            wyckoff_multiplicities: Optional[np.ndarray] = None,
-            types: Optional[np.ndarray] = None
+            asymmetric_unit: Optional[npt.NDArray] = None,
+            wyckoff_multiplicities: Optional[npt.NDArray] = None,
+            types: Optional[npt.NDArray] = None
     ):
 
         self.motif = motif
@@ -143,15 +144,13 @@ class PeriodicSet:
         return not self.__eq__(other)
 
     @staticmethod
-    def cubic(scale=1, dims=3):
+    def cubic(scale: float = 1.0, dims: int = 3):
         """Returns a :class:`PeriodicSet` representing a cubic lattice.
         """
-
-        cell = np.identity(dims) * scale
-        return PeriodicSet(np.zeros((1, dims)), cell)
+        return PeriodicSet(np.zeros((1, dims)), np.identity(dims) * scale)
 
     @staticmethod
-    def hexagonal(scale=1, dims=3):
+    def hexagonal(scale: float = 1.0, dims: int = 3):
         """Dimensions 2 and 3 only. Return a :class:`PeriodicSet`
         representing a hexagonal lattice.
         """
@@ -170,10 +169,10 @@ class PeriodicSet:
 
     @staticmethod
     def _random(
-        n_points,
-        length_bounds=(1, 2),
-        angle_bounds=(60, 120),
-        dims=3
+        n_points: int,
+        length_bounds: tuple = (1.0, 2.0),
+        angle_bounds: tuple = (60.0, 120.0),
+        dims: int = 3
     ):
         """Dimensions 2 and 3 only. Return a :class:`PeriodicSet` with a
         chosen number of randomly placed points, in random cell with
@@ -189,4 +188,4 @@ class PeriodicSet:
         return PeriodicSet(frac_motif @ cell, cell)
 
 
-PeriodicSetType = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
+PeriodicSetType = Union[PeriodicSet, Tuple[npt.NDArray, npt.NDArray]]

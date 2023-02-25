@@ -42,7 +42,7 @@ df = amd.compare('file1.cif', 'file2.cif', by='PDD', k=100)
 
 The distance matrix is returned as a [pandas DataFrame](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html). ```amd.compare()``` can also accept a folder or list of cifs.
 
-```amd.compare()``` reads crystals, calculates their descriptors and compares them, but these steps can be done separately (e.g. to save the descriptors to a file, see below). ```amd.compare()``` accepts several optional parameters, see [the documentation for a full list](https://average-minimum-distance.readthedocs.io/en/latest/Getting_Started.html#full-list-of-optional-parameters).
+```amd.compare()``` reads crystals, calculates their descriptors and compares them, but these steps can be done separately (e.g. to save the descriptors to a file, see below). ```amd.compare()``` accepts several optional parameters, see [the documentation for a full list](https://average-minimum-distance.readthedocs.io/en/latest/Getting_Started.html#list-of-optional-parameters).
 
 *CSD Python API only:* ```amd.compare()``` accepts one or more CSD refcodes or other file formats instead of cifs (by passing ```reader='ccdc'```).
 

@@ -4,8 +4,10 @@ periodic crystals and finite sets.
 """
 
 import collections
+from typing import Tuple
 
 import numpy as np
+import numpy.typing as npt
 from scipy.spatial.distance import pdist, squareform
 
 from .periodicset import PeriodicSet, PeriodicSetType
@@ -13,8 +15,7 @@ from ._nns import nearest_neighbours, nearest_neighbours_minval
 from .utils import diameter
 
 
-
-def AMD(periodic_set: PeriodicSetType, k: int) -> np.ndarray:
+def AMD(periodic_set: PeriodicSetType, k: int) -> npt.NDArray[np.float64]:
     """The AMD of a periodic set (crystal) up to k.
 
     Parameters
@@ -56,9 +57,9 @@ def AMD(periodic_set: PeriodicSetType, k: int) -> np.ndarray:
         cubic_amd = amd.AMD((motif, cell), 100)
     """
 
-    motif, cell, asymmetric_unit, weights = _extract_motif_cell(periodic_set)
-    pdd, _, _ = nearest_neighbours(motif, cell, asymmetric_unit, k)
-    return np.average(pdd, axis=0, weights=weights)
+    motif, cell, asymmetric_unit, weights = _get_structure(periodic_set)
+    dists, _, _ = nearest_neighbours(motif, cell, asymmetric_unit, k)
+    return np.average(dists, axis=0, weights=weights)
 
 
 def PDD(
@@ -67,8 +68,8 @@ def PDD(
         lexsort: bool = True,
         collapse: bool = True,
         collapse_tol: float = 1e-4,
-        return_row_groups: bool = False,
-) -> np.ndarray:
+        return_row_groups: bool = False
+) -> npt.NDArray[np.float64]:
     """The PDD of a periodic set (crystal) up to k.
 
     Parameters
@@ -131,7 +132,7 @@ def PDD(
         cubic_amd = amd.PDD((motif, cell), 100)
     """
 
-    motif, cell, asymmetric_unit, weights = _extract_motif_cell(periodic_set)
+    motif, cell, asymmetric_unit, weights = _get_structure(periodic_set)
     dists, _, _ = nearest_neighbours(motif, cell, asymmetric_unit, k)
     groups = [[i] for i in range(len(dists))]
 
@@ -139,12 +140,14 @@ def PDD(
         overlapping = pdist(dists, metric='chebyshev') <= collapse_tol
         if overlapping.any():
             groups = _collapse_into_groups(overlapping)
-            weights = np.array([sum(weights[group]) for group in groups])
+            weights = np.array([np.sum(weights[group]) for group in groups])
             dists = np.array([
                 np.average(dists[group], axis=0) for group in groups
             ])
 
-    pdd = np.hstack((weights[:, None], dists))
+    pdd = np.empty(shape=(len(weights), k + 1))
+    pdd[:, 0] = weights
+    pdd[:, 1:] = dists
 
     if lexsort:
         lex_ordering = np.lexsort(np.rot90(dists))
@@ -157,7 +160,7 @@ def PDD(
     return pdd
 
 
-def PDD_to_AMD(pdd: np.ndarray) -> np.ndarray:
+def PDD_to_AMD(pdd: npt.NDArray) -> npt.NDArray:
     """Calculates an AMD from a PDD. Faster than computing both from
     scratch.
 
@@ -175,7 +178,7 @@ def PDD_to_AMD(pdd: np.ndarray) -> np.ndarray:
     return np.average(pdd[:, 1:], weights=pdd[:, 0], axis=0)
 
 
-def AMD_finite(motif: np.ndarray) -> np.ndarray:
+def AMD_finite(motif: npt.NDArray) -> npt.NDArray:
     """The AMD of a finite m-point set up to k = m - 1.
 
     Parameters
@@ -211,8 +214,8 @@ def PDD_finite(
         lexsort: bool = True,
         collapse: bool = True,
         collapse_tol: float = 1e-4,
-        return_row_groups: bool = False,
-) -> np.ndarray:
+        return_row_groups: bool = False
+) -> npt.NDArray[np.float64]:
     """The PDD of a finite m-point set up to k = m - 1.
 
     Parameters
@@ -254,9 +257,8 @@ def PDD_finite(
         dist = amd.EMD(trap_pdd, kite_pdd)
     """
 
-    dm = squareform(pdist(motif))
     m = motif.shape[0]
-    dists = np.sort(dm, axis=-1)[:, 1:]
+    dists = np.sort(squareform(pdist(motif)), axis=-1)[:, 1:]
     weights = np.full((m, ), 1 / m)
     groups = [[i] for i in range(len(dists))]
 
@@ -265,12 +267,14 @@ def PDD_finite(
         overlapping = overlapping <= collapse_tol
         if overlapping.any():
             groups = _collapse_into_groups(overlapping)
-            weights = np.array([sum(weights[group]) for group in groups])
+            weights = np.array([np.sum(weights[group]) for group in groups])
             dists = np.array([
                 np.average(dists[group], axis=0) for group in groups
             ])
 
-    pdd = np.hstack((weights[:, None], dists))
+    pdd = np.empty(shape=(len(weights), m))
+    pdd[:, 0] = weights
+    pdd[:, 1:] = dists
 
     if lexsort:
         lex_ordering = np.lexsort(np.rot90(dists))
@@ -285,7 +289,7 @@ def PDD_finite(
 def PDD_reconstructable(
         periodic_set: PeriodicSetType,
         lexsort: bool = True
-) -> np.ndarray:
+) -> npt.NDArray[np.float64]:
     """The PDD of a periodic set with `k` (number of columns) large
     enough such that the periodic set can be reconstructed from the PDD.
 
@@ -306,7 +310,7 @@ def PDD_reconstructable(
         reconstructable.
     """
 
-    motif, cell, _, _ = _extract_motif_cell(periodic_set)
+    motif, cell, _, _ = _get_structure(periodic_set)
     dims = cell.shape[0]
 
     if dims not in (2, 3):
@@ -355,20 +359,24 @@ def PPC(periodic_set: PeriodicSetType) -> float:
         The PPC of ``periodic_set``.
     """
 
-    motif, cell, _, _ = _extract_motif_cell(periodic_set)
+    motif, cell, _, _ = _get_structure(periodic_set)
     m, n = motif.shape
-    det = np.linalg.det(cell)
+    cell_volume = np.linalg.det(cell)
     t = int((n - n % 2) / 2)
 
     if n % 2 == 0:
-        v = (np.pi ** t) / np.math.factorial(t)
+        unit_sphere_vol = (np.pi ** t) / np.math.factorial(t)
     else:
-        v = (2 * np.math.factorial(t) * (4 * np.pi) ** t) / np.math.factorial(n)
+        num = (2 * np.math.factorial(t) * (4 * np.pi) ** t)
+        unit_sphere_vol = num / np.math.factorial(n)
 
-    return (det / (m * v)) ** (1. / n)
+    return (cell_volume / (m * unit_sphere_vol)) ** (1. / n)
 
 
-def AMD_estimate(periodic_set: PeriodicSetType, k: int) -> np.ndarray:
+def AMD_estimate(
+        periodic_set: PeriodicSetType,
+        k: int
+) -> npt.NDArray[np.float64]:
     r"""Calculates an estimate of AMD based on the PPC.
 
     Parameters
@@ -386,42 +394,42 @@ def AMD_estimate(periodic_set: PeriodicSetType, k: int) -> np.ndarray:
         :math:`= \text{PPC} \sqrt[n]{k}` in n dimensions.
     """
 
-    motif, cell, _, _ = _extract_motif_cell(periodic_set)
+    motif, cell, _, _ = _get_structure(periodic_set)
     n = motif.shape[1]
     return PPC((motif, cell)) * np.power(np.arange(1, k + 1), 1. / n)
 
 
-def _extract_motif_cell(pset: PeriodicSetType):
-    """``pset`` is either a
+def _get_structure(periodic_set: PeriodicSetType) -> Tuple[npt.NDArray]:
+    """``periodic_set`` is either a
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or a tuple of
-    :class:`numpy.ndarray` s (motif, cell). If possible, extracts the
-    asymmetric unit and wyckoff multiplicities.
+    :class:`numpy.ndarray` s (motif, cell). If present, extracts the
+    asymmetric unit and wyckoff multiplicities from periodic_set.
     """
 
-    if isinstance(pset, PeriodicSet):
-        motif, cell = pset.motif, pset.cell
-        asym_unit = pset.asymmetric_unit
-        wyc_muls = pset.wyckoff_multiplicities
-        if asym_unit is None or wyc_muls is None:
+    if isinstance(periodic_set, PeriodicSet):
+        motif = periodic_set.motif
+        cell = periodic_set.cell
+        asym_unit_inds = periodic_set.asymmetric_unit
+        wyc_muls = periodic_set.wyckoff_multiplicities
+        if asym_unit_inds is None or wyc_muls is None:
             asymmetric_unit = motif
             weights = np.full((len(motif), ), 1 / len(motif))
         else:
-            asymmetric_unit = pset.motif[asym_unit]
+            asymmetric_unit = motif[asym_unit_inds]
             weights = wyc_muls / np.sum(wyc_muls)
     else:
-        motif, cell = pset
+        motif, cell = periodic_set
         asymmetric_unit = motif
         weights = np.full((len(motif), ), 1 / len(motif))
 
     return motif, cell, asymmetric_unit, weights
 
 
-def _collapse_into_groups(overlapping: np.ndarray) -> list:
+def _collapse_into_groups(overlapping: npt.NDArray) -> list:
     """The vector ``overlapping`` indicates for each pair of items in a
     set whether or not the items overlap, in the shape of a condensed
     distance matrix. Returns a list of groups of indices where all items
     in the same group overlap.
-    
     TODO: This function is not efficient.
     """
 

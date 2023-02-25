@@ -34,14 +34,16 @@ Reading options
         disorder='skip',            # how to handle disorder
         heaviest_component=False,   # keep only heaviest molecule
         molecular_centres=False,    # take molecular centres as the motif
-        show_warnings=True          # silence warnings
+        show_warnings=True,         # silence warnings
+        verbose=False               # print number of items processed
     )
 
 * :code:`families` (default ``False``) will interpret the list of strings given as refcode families, i.e. all crystals with refcodes starting with any in the list are read.
 * :code:`remove_hydrogens` (default ``False``) removes Hydrogen atoms from the structure.
 * :code:`disorder` (default ``skip``) controls how disordered structures are handled. The default is to ``skip`` any crystal with disorder, since disorder conflicts with the periodic set model. To read disordered structures anyway, choose either :code:`ordered_sites` to remove sites with disorder or :code:`all_sites` include all sites regardless.
-* :code:`heaviest_component` (default ``False``) removes all but the heaviest molecule in the asymmetric unit, intended for removing solvents.
-* :code:`molecular_centres` (default ``False``) uses centres of molecules instead of atoms as the motif of the periodic set.
+* :code:`heaviest_component` (default ``False``) removes all but the heaviest connected molecule in the asymmetric unit, intended for removing solvents.
+* :code:`molecular_centres` (``reader='ccdc'`` only, default ``False``) uses molecular centres of mass instead of atoms as the motif of the periodic set.
 * :code:`show_warnings` (default ``True``) chooses whether to print warnings during reading, e.g. from disordered structures or crystals with missing data.
+* :code:`verbose` (default ``False``) prints a progress bar showing the number of items read so far.
 
 See the references :class:`amd.io.CSDReader` or :class:`amd.periodicset.PeriodicSet` for more.

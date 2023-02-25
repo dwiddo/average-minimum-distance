@@ -10,22 +10,22 @@ from typing import Tuple
 
 import numba
 import numpy as np
+import numpy.typing as npt
 
 
 @numba.njit(cache=True)
 def network_simplex(
-        source_demands: np.ndarray,
-        sink_demands: np.ndarray,
-        network_costs: np.ndarray
-) -> Tuple[float, np.ndarray]:
-    """Given two sets of weights and a cost matrix on two
-    distributions, calculate the Earth mover's distance 
-    (Wasserstien metric).
+        source_demands: npt.NDArray,
+        sink_demands: npt.NDArray,
+        network_costs: npt.NDArray
+) -> Tuple[float, npt.NDArray[np.float64]]:
+    """Given two sets of weights and a cost matrix on two distributions,
+    calculate the Earth mover's distance (Wasserstien metric).
 
     This is a port of the network simplex algorithm implented by Loïc
-    Séguin-C for the networkx package to allow acceleration via the
-    numba package. Copyright (C) 2010 Loïc Séguin-C.
-    loicseguin@gmail.com. All rights reserved. BSD license.
+    Séguin-C for the networkx package to allow acceleration with numba.
+    Copyright (C) 2010 Loïc Séguin-C. loicseguin@gmail.com. All rights
+    reserved. BSD license.
 
     Parameters
     ----------
@@ -81,11 +81,12 @@ def network_simplex(
     tails = np.empty(e + n, dtype=np.int64)
     heads = np.empty(e + n, dtype=np.int64)
 
+    ind = 0
     for i in range(n_sources):
         for j in range(n_sinks):
-            ind = i * n_sinks + j
             tails[ind] = i
-            heads[ind] = j + n_sources
+            heads[ind] = n_sources + j
+            ind += 1
 
     for i, demand in enumerate(demands):
         if demand > 0:
@@ -97,20 +98,21 @@ def network_simplex(
 
     # Create costs and capacities for the arcs between nodes
     network_costs = network_costs * fp_multiplier
+    network_capac = np.empty(shape=(n_sources * n_sinks, ), dtype=np.float64)
+    ind = 0
+    for i in range(n_sources):
+        for j in range(n_sinks):
+            network_capac[ind] = min(source_demands[i], sink_demands[j])
+            ind += 1
+    network_capac *= fp_multiplier
 
-    network_capac = np.array([min(source_demands[i], sink_demands[j])
-                              for i in range(n_sources)
-                              for j in range(n_sinks)],
-                             dtype=np.float64) * fp_multiplier
-
-    faux_inf = 3 * np.max(np.array((
+    faux_inf = 3 * max(
         np.sum(network_capac),
         np.sum(np.abs(network_costs)),
         np.amax(source_d_int),
-        np.amax(sink_d_int)),
-        dtype=np.int64))
+        np.amax(sink_d_int)
+    )
 
-    # allocate arrays
     costs = np.empty(e + n, dtype=np.int64)
     costs[:e] = network_costs
     costs[e:] = faux_inf
@@ -152,14 +154,18 @@ def network_simplex(
     f = 0
     while True:
         i, p, q, f = find_entering_edges(B, e, f, tails, heads, costs, potentials, flows)
-        if p == -1: # If no entering edges then the optimal score is found
+        # If no entering edges then the optimal score is found
+        if p == -1:
             break
 
         cycle_nodes, cycle_edges = find_cycle(i, p, q, size, edge, parent)
         j, s, t = find_leaving_edge(cycle_nodes, cycle_edges, capac, flows, tails, heads)
-        augment_flow(cycle_nodes, cycle_edges, residual_capacity(j, s, capac, flows, tails), tails, flows)
+        res_cap = residual_capacity(j, s, capac, flows, tails)
+        augment_flow(cycle_nodes, cycle_edges, res_cap, tails, flows)
 
-        if i != j:  # Do nothing more if the entering edge is the same as the leaving edge.
+        # Do nothing more if the entering edge is the same as the
+        # leaving edge.
+        if i != j:
             if parent[t] != s:
                 # Ensure that s is the parent of t.
                 s, t = t, s
@@ -255,6 +261,7 @@ def find_apex(p, q, size, parent):
     """Find the lowest common ancestor of nodes p and q in the spanning
     tree.
     """
+
     size_p = size[p]
     size_q = size[q]
 
@@ -280,6 +287,7 @@ def trace_path(p, w, edge, parent):
     """Return the nodes and edges on the path from node p to its
     ancestor w.
     """
+
     cycle_nodes = [p]
     cycle_edges = []
 
@@ -294,8 +302,8 @@ def trace_path(p, w, edge, parent):
 @numba.njit(cache=True)
 def find_cycle(i, p, q, size, edge, parent):
     """Return the nodes and edges on the cycle containing edge 
-    i == (p, q) when the latter is added to the spanning tree.
-    The cycle is oriented in the direction from p to q.
+    i == (p, q) when the latter is added to the spanning tree. The cycle
+    is oriented in the direction from p to q.
     """
 
     w = find_apex(p, q, size, parent)
@@ -306,18 +314,19 @@ def find_cycle(i, p, q, size, edge, parent):
     cycle_nodes_ = np.empty(len(cycle_nodes) + add_to_c_nodes, dtype=np.int64)
 
     for j in range(len(cycle_nodes)):
-        cycle_nodes_[j] = cycle_nodes[-(j+1)]
+        cycle_nodes_[j] = cycle_nodes[-(j + 1)]
     for j in range(add_to_c_nodes):
         cycle_nodes_[len(cycle_nodes) + j] = cycle_nodes_rev[j]
 
+    len_cycle_edges_ = len(cycle_edges) + len(cycle_edges_rev)
     if append_i_to_edges:
-        cycle_edges_ = np.empty(len(cycle_edges) + len(cycle_edges_rev) + 1, dtype=np.int64)
+        cycle_edges_ = np.empty(len_cycle_edges_ + 1, dtype=np.int64)
         cycle_edges_[len(cycle_edges)] = i
     else:
-        cycle_edges_ = np.empty(len(cycle_edges) + len(cycle_edges_rev), dtype=np.int64)
+        cycle_edges_ = np.empty(len_cycle_edges_, dtype=np.int64)
 
     for j in range(len(cycle_edges)):
-        cycle_edges_[j] = cycle_edges[-(j+1)]
+        cycle_edges_[j] = cycle_edges[-(j + 1)]
     for j in range(1, len(cycle_edges_rev) + 1):
         cycle_edges_[-j] = cycle_edges_rev[-j]
 
@@ -336,9 +345,10 @@ def residual_capacity(i, p, capac, flows, tails):
 
 @numba.njit(cache=True)
 def find_leaving_edge(cycle_nodes, cycle_edges, capac, flows, tails, heads):
-    """Return the leaving edge in a cycle represented by cycle_nodes
-    and cycle_edges.
+    """Return the leaving edge in a cycle represented by cycle_nodes and
+    cycle_edges.
     """
+
     j, s = cycle_edges[0], cycle_nodes[0]
     res_caps_min = residual_capacity(j, s, capac, flows, tails)
     for ind in range(1, cycle_edges.shape[0]):
@@ -357,6 +367,7 @@ def augment_flow(cycle_nodes, cycle_edges, f, tails, flows):
     """Augment f units of flow along a cycle representing Wn with
     cycle_edges.
     """
+
     for i, p in zip(cycle_edges, cycle_nodes):
         if tails[i] == p:
             flows[i] += f
@@ -369,6 +380,7 @@ def remove_edge(s, t, size, prev, last, next_node, parent, edge):
     """Remove an edge (s, t) where parent[t] == s from the spanning
     tree.
     """
+
     size_t = size[t]
     prev_t = prev[t]
     last_t = last[t]
@@ -382,7 +394,8 @@ def remove_edge(s, t, size, prev, last, next_node, parent, edge):
     next_node[last_t] = t
     prev[t] = last_t
 
-    # Update the subtree sizes & last descendants of the (old) ancestors of t.
+    # Update the subtree sizes & last descendants of the (old) ancestors
+    # of t.
     while s != -2:
         size[s] -= size_t
         if last[s] == last_t:
@@ -394,6 +407,7 @@ def remove_edge(s, t, size, prev, last, next_node, parent, edge):
 def make_root(q, parent, size, last, prev, next_node, edge):
     """Make a node q the root of its containing subtree.
     """
+
     ancestors = []
     # -2 means node is checked
     while q != -2:
@@ -427,8 +441,8 @@ def make_root(q, parent, size, last, prev, next_node, edge):
             last[p] = prev_q
             last_p = prev_q
 
-        # Add the remaining parts of the subtree rooted at p as a subtree
-        # of q in the depth-first thread.
+        # Add the remaining parts of the subtree rooted at p as a
+        # subtree of q in the depth-first thread.
         prev[p] = last_q
         next_node[last_q] = p
         next_node[last_p] = q
@@ -441,6 +455,7 @@ def add_edge(i, p, q, next_node, prev, last, size, parent, edge):
     """Add an edge (p, q) to the spanning tree where q is the root of a
     subtree.
     """
+
     last_p = last[p]
     next_last_p = next_node[last_p]
     size_q = size[q]
@@ -454,8 +469,8 @@ def add_edge(i, p, q, next_node, prev, last, size, parent, edge):
     prev[next_last_p] = last_q
     next_node[last_q] = next_last_p
 
-    # Update the subtree sizes and last descendants of the (new) ancestors
-    # of q.
+    # Update the subtree sizes and last descendants of the (new)
+    # ancestors of q.
     while p != -2:
         size[p] += size_q
         if last[p] == last_p:
@@ -468,6 +483,7 @@ def update_potentials(i, p, q, heads, potentials, costs, last_node, next_node):
     """Update the potentials of the nodes in the subtree rooted at a
     node q connected to its parent p by an edge i.
     """
+
     if q == heads[i]:
         d = potentials[p] - costs[i] - potentials[q]
     else:

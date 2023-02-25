@@ -5,6 +5,7 @@ PDD. This is possible 'in a general position', see our papers for more.
 import itertools
 
 import numpy as np
+import numpy.typing as npt
 import numba
 from scipy.spatial.distance import cdist
 from scipy.spatial import KDTree
@@ -13,7 +14,10 @@ from ._nns import generate_concentric_cloud
 from .utils import diameter
 
 
-def reconstruct(pdd, cell):
+def reconstruct(
+        pdd: npt.NDArray,
+        cell: npt.NDArray
+) -> npt.NDArray:
     """Reconstruct a motif from a PDD and unit cell. This function will
     only work if pdd has enough columns, such that the last column has
     all values larger than 2 times the diameter of the unit cell. It
@@ -211,22 +215,19 @@ def _neighbour_set(cell, prec):
 
 
 def _four_sphere_pairwise_intersecion(p1, p2, p3, r1, r2, r3, abs_val, prec):
-    # True/False intersection of four spheres, one centered at the origin (radius abs_val)
-    flags = [False] * 6
-    if np.linalg.norm(p1) > abs_val + r1 - prec:
-        flags[0] = True
-    if np.linalg.norm(p2) > abs_val + r2 - prec:
-        flags[1] = True
-    if np.linalg.norm(p3) > abs_val + r3 - prec:
-        flags[2] = True
-    if np.linalg.norm(p1 - p2) > r1 + r2 - prec:
-        flags[3] = True
-    if np.linalg.norm(p1 - p3) > r1 + r3 - prec:
-        flags[4] = True
-    if np.linalg.norm(p2 - p3) > r2 + r3 - prec:
-        flags[5] = True
+    # True/False intersection of four spheres, one centered at the origin
 
-    if any(flags):
+    if np.linalg.norm(p1) > abs_val + r1 - prec:
+        return False
+    if np.linalg.norm(p2) > abs_val + r2 - prec:
+        return False
+    if np.linalg.norm(p3) > abs_val + r3 - prec:
+        return False
+    if np.linalg.norm(p1 - p2) > r1 + r2 - prec:
+        return False
+    if np.linalg.norm(p1 - p3) > r1 + r3 - prec:
+        return False
+    if np.linalg.norm(p2 - p3) > r2 + r3 - prec:
         return False
     return True
 

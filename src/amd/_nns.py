@@ -8,15 +8,16 @@ from itertools import product
 
 import numba
 import numpy as np
+import numpy.typing as npt
 from scipy.spatial import KDTree
 
 
 def nearest_neighbours(
-        motif: np.ndarray,
-        cell: np.ndarray,
-        x: np.ndarray,
+        motif: npt.NDArray,
+        cell: npt.NDArray,
+        x: npt.NDArray,
         k: int
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[npt.NDArray[np.float64]]:
     """
     Given a periodic set represented by (motif, cell) and an integer k,
     find the k nearest neighbours in the periodic set to points in x.
@@ -63,7 +64,7 @@ def nearest_neighbours(
 
     tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
     pdd_, inds = tree.query(x, k=k+1, workers=-1)
-    pdd = np.zeros_like(pdd_)
+    pdd = np.zeros_like(pdd_, dtype=np.float64)
 
     while not np.allclose(pdd, pdd_, atol=1e-10, rtol=0):
         pdd = pdd_
@@ -75,10 +76,10 @@ def nearest_neighbours(
 
 
 def nearest_neighbours_minval(
-        motif: np.ndarray,
-        cell: np.ndarray,
+        motif: npt.NDArray,
+        cell: npt.NDArray,
         min_val: float
-) -> np.ndarray:
+) -> npt.NDArray[np.float64]:
     """The same as nearest_neighbours except a value is given instead of
     an integer k and the result has at least enough columns so all
     values in the last column are at least the given value.
@@ -89,32 +90,30 @@ def nearest_neighbours_minval(
     cloud = []
     for _ in range(3):
         cloud.append(next(cloud_generator))
-
     cloud = np.concatenate(cloud)
+
     tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
     pdd_, _ = tree.query(motif, k=cloud.shape[0], workers=-1)
     pdd = np.zeros_like(pdd_)
 
     while True:
         if np.all(pdd[:, -1] >= min_val):
-            col_where = np.argwhere(np.all(pdd >= min_val, axis=0))[0][0]
-            if np.array_equal(pdd[:, :col_where+1], pdd_[:, :col_where+1]):
+            col_where = np.argwhere(np.all(pdd >= min_val, axis=0))[0][0] + 1
+            if np.array_equal(pdd[:, :col_where], pdd_[:, :col_where]):
                 break
-
         pdd = pdd_
         cloud = np.vstack((cloud, next(cloud_generator)))
         tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
         pdd_, _ = tree.query(motif, k=cloud.shape[0], workers=-1)
 
     k = np.argwhere(np.all(pdd >= min_val, axis=0))[0][0]
-
     return pdd[:, 1:k+1]
 
 
 def generate_concentric_cloud(
-        motif: np.ndarray,
-        cell: np.ndarray
-) -> Iterable[np.ndarray]:
+        motif: npt.NDArray,
+        cell: npt.NDArray
+) -> Iterable[npt.NDArray[np.float64]]:
     """
     Generates batches of points from a periodic set given by (motif,
     cell) which get successively further away from the origin.
@@ -141,8 +140,7 @@ def generate_concentric_cloud(
     for int_lattice in generate_integer_lattice(cell.shape[0]):
 
         lattice = int_lattice @ cell
-        layer = np.empty((m * len(lattice), cell.shape[0]))
-
+        layer = np.empty((m * len(lattice), cell.shape[0]), dtype=np.float64)
         i1 = 0
         for translation in lattice:
             i2 = i1 + m
@@ -152,7 +150,7 @@ def generate_concentric_cloud(
         yield layer
 
 
-def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
+def generate_integer_lattice(dims: int) -> Iterable[npt.NDArray[np.float64]]:
     """Generates batches of integer lattice points. Each yield gives all
     points (that have not already been yielded) inside a sphere centered
     at the origin with radius d. d starts at 0 and increments by 1 on
@@ -189,7 +187,7 @@ def generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
                     ymax[xy] += 1
             if not batch:
                 break
-            positive_int_lattice += batch
+            positive_int_lattice.extend(batch)
 
         yield _reflect_positive_lattice(np.array(positive_int_lattice))
         d += 1
@@ -204,13 +202,14 @@ def _dist(xy: Tuple[float, float], z: float) -> float:
 
 
 @numba.njit()
-def _reflect_positive_lattice(positive_int_lattice: np.ndarray) -> np.ndarray:
+def _reflect_positive_lattice(
+        positive_int_lattice: npt.NDArray
+) -> npt.NDArray[np.float64]:
     """Reflect a set of points in the +ve quadrant in all axes. Does not
     duplicate points lying on the axes themselves.
     """
 
     dims = positive_int_lattice.shape[-1]
-    
     batches = []
     batches.extend(positive_int_lattice)
 
@@ -233,7 +232,7 @@ def _reflect_positive_lattice(positive_int_lattice: np.ndarray) -> np.ndarray:
 
             batches.extend(_reflect_batch(positive_int_lattice, indices))
 
-    int_lattice = np.empty(shape=(len(batches), dims))
+    int_lattice = np.empty(shape=(len(batches), dims), dtype=np.float64)
     for i in range(len(batches)):
         int_lattice[i] = batches[i]
 
@@ -242,9 +241,9 @@ def _reflect_positive_lattice(positive_int_lattice: np.ndarray) -> np.ndarray:
 
 @numba.njit()
 def _reflect_batch(
-        positive_int_lattice: np.ndarray, 
-        indices: np.ndarray
-) -> np.ndarray:
+        positive_int_lattice: npt.NDArray,
+        indices: npt.NDArray
+) -> npt.NDArray:
     """Takes a collection of points in any dimension and the indices of
     axes to reflect in, returning a batch of reflected points not
     including any points which are invariant under the reflections.

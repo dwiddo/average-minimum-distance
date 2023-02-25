@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.6] - 25/02/2023
+
+- `verbose` parameter added to `amd.CifReader()` and `amd.CSDReader()`.
+
 ## [1.3.5] - 21/02/2023
 
 ### Added
@@ -14,7 +18,7 @@ All notable changes to this project will be documented in this file.
 
 - Changes to converter functions in the `io` module have decoupled them from depending on other packages, e.g. `periodicset_from_pymatgen_cifblock()` now has no dependency on `ase`, just `pymatgen`.
 
-- Cleaned/added more documentation, docstrings, PEP8 compliance, type hints. Moved be pyproject.toml only and use a src layout instead of flat.
+- Cleaned/added more documentation, docstrings, PEP8, type hints. Moved be pyproject.toml only and use a src layout instead of flat.
 
 ### Changed
 

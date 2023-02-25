@@ -62,20 +62,21 @@ List of optional parameters
 
 :func:`amd.compare() <amd.compare.compare>` reads crystals, computes their
 invariants and compares them in one function for convinience. It accepts
-most of optional parameters from any of these steps, all are listed below.
+most of the optional parameters from these steps, all are listed below.
 
-Reader options
-^^^^^^^^^^^^^^
+Reading options
+^^^^^^^^^^^^^^^
 
 Parameters of :class:`amd.CifReader <amd.io.CifReader>` or :class:`amd.CSDReader <amd.io.CSDReader>`.
 
-* :code:`reader` (default ``ase``) controls the backend package used to parse the file. Accepts ``ase``, ``pycodcif``, ``pymatgen``, ``gemmi`` and ``ccdc`` (if these packages are installed). The ccdc reader can read formats accepted by :class:`ccdc.io.EntryReader`.
+* :code:`reader` (default ``ase``) controls the backend package used to parse the file. Accepts ``ase``, ``pycodcif``, ``pymatgen``, ``gemmi`` and ``ccdc`` (if installed). The ccdc reader can read formats accepted by :class:`ccdc.io.EntryReader`.
 * :code:`remove_hydrogens` (default ``False``) removes Hydrogen atoms from the structure.
-* :code:`disorder` (default ``skip``) controls how disordered structures are handled. The default skips any crystal with disorder, since disorder conflicts somewhat with the periodic set model. Alternatively, :code:`ordered_sites` removes atoms with disorder and :code:`all_sites` includes all atoms regardless.
+* :code:`disorder` (default ``skip``) controls how disordered structures are handled. The default skips any crystal with disorder, since disorder conflicts with the model of a periodic set. Alternatively, :code:`ordered_sites` removes atoms with disorder and :code:`all_sites` includes all atoms regardless of disorder.
 * :code:`show_warnings` (default ``True``) chooses whether to print warnings during reading, e.g. from disordered structures or crystals with missing data.
-* :code:`heaviest_component` (default ``False``, CSD Python API only) removes all but the heaviest molecule in the asymmetric unit, intended for removing solvents.
-* :code:`molecular_centres` (default ``False``, CSD Python API only) uses centres of molecules instead of atoms as the motif of the periodic set.
-* :code:`families` (default ``False``, CSD Python API only) interprets the list of strings given as CSD refcode families and reads all crystals in those families.
+* :code:`heaviest_component` (``reader='ccdc'`` only, default ``False``) removes all but the heaviest connected molecule in the asymmetric unit, intended for removing solvents.
+* :code:`molecular_centres` (``reader='ccdc'`` only, default ``False``) uses molecular centres of mass instead of atoms as the motif of the periodic set.
+* :code:`families` (``reader='ccdc'`` only, default ``False``) interprets the list of strings given as CSD refcode families and reads all crystals in those families. Only applies if the inputs are CSD refcodes.
+* :code:`verbose` (default ``False``) prints a progress bar showing the number of items read so far.
 
 PDD options
 ^^^^^^^^^^^
@@ -88,12 +89,10 @@ Parameters of :func:`amd.PDD() <amd.calculate.PDD>`. :func:`amd.AMD() <amd.calcu
 Comparison options
 ^^^^^^^^^^^^^^^^^^
 
-The first parameter ``metric`` below is available to :func:`amd.PDD_pdist() <amd.compare.PDD_pdist>`, 
-:func:`amd.PDD_cdist() <amd.compare.PDD_cdist>`, :func:`amd.AMD_pdist() <amd.compare.AMD_pdist>` and
-:func:`amd.AMD_cdist() <amd.compare.AMD_cdist>`. ``n_jobs`` and ``verbose`` only apply to PDD comparisons and
-``low_memory`` only applies to AMD comparisons.
+The parameters ``n_jobs`` and ``verbose`` below only apply to PDD comparisons, and ``low_memory`` only applies to AMD comparisons.
 
-* :code:`metric` (default ``chebyshev``) chooses the metric used to compare AMDs or PDD rows. See SciPy's cdist/pdist for a list of accepted metrics.
+* :code:`metric` (default ``chebyshev``) chooses the metric used to compare AMDs or PDD rows (the metric used for PDDs is always Earth Mover's distance, which requires a chosen 'base' metric to compare rows). See `SciPy's cdist/pdist <https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.pdist.html#scipy-spatial-distance-pdist>`_ for a list of accepted metrics.
 * :code:`n_jobs` (requires ``by='PDD'``, default ``None``) is the number of cores to use for multiprocessing (passed to :class:`joblib.Parallel`). Pass -1 to use the maximum.
-* :code:`verbose` (requires ``by='PDD'``, default 0) controls the verbosity level, increasing with larger numbers. This is passed to :class:`joblib.Parallel`, see its documentation for details.
+* :code:`backend` (requires ``by='PDD'``, default ``multiprocessing``) is the parallelization backend implementation for PDD comparisons.
+* :code:`verbose` (requires ``by='PDD'``, default ``False``) controls the verbosity level. With parallel processing the verbose argument of :class:`joblib.Parallel` is used, otherwise ``tqdm`` is used.
 * :code:`low_memory` (requires ``by='AMD'`` and ``metric='chebyshev'``, default ``False``) uses a slower algorithm with a smaller memory footprint, better for large input sizes.
