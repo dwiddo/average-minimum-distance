@@ -60,7 +60,7 @@ def main():
         help='(flag) (csd-python-api only) Uses the centres of molecules ' \
              'for comparisons instead of atoms.')
     parser.add_argument('--families', default=False, action='store_true',
-        help='(flag) (csd-python-api only) Interpret path_or_refcodes as ' \
+        help='(flag) (csd-python-api only) Interpret paths_or_refcodes as ' \
              'refcode families.')
 
     # PDD args
@@ -69,19 +69,24 @@ def main():
 
     # compare args
     parser.add_argument('--metric', type=str, default='chebyshev',
-        help='(str) Metric used to compare AMDs/rows of PDDs, default chebyshev.')
+        help='(str) Metric used to compare AMDs/rows of PDDs, default ' \
+             'chebyshev.')
     parser.add_argument('--n_jobs', type=int, default=1,
-        help='(int) Number of cores to use for multiprocessing when comparing PDDs.')
+        help='(int) Number of cores to use for multiprocessing when ' \
+             'comparing PDDs.')
     parser.add_argument('--backend', type=str, default='multiprocessing',
-        help='(str) The parallelization backend implementation for PDD comparisons.')
-    parser.add_argument('--verbose', type=int, default=1,
-        help='(int) Print an ETA to the terminal when comparing PDDs. Passed to joblib.Parallel if using multiprocessing.')
+        help='(str) The parallelization backend implementation for PDD ' \
+             'comparisons.')
+    parser.add_argument('--verbose', default=False, action='store_true',
+        help='(int) Print an ETA to the terminal when comparing PDDs. ' \
+             'Passed to joblib.Parallel if using multiprocessing.')
     parser.add_argument('--low_memory', default=False, action='store_true',
-        help='(flag) Use an more memory efficient (but slower) method for AMD comparisons.')
+        help='(flag) Use an more memory efficient (but slower) method for ' \
+             'AMD comparisons.')
 
     # Remove some arguments before passing others to amd.compare
     kwargs = vars(parser.parse_args())
-    path_or_refcodes = kwargs.pop('path_or_refcodes')
+    paths_or_refcodes = kwargs.pop('paths_or_refcodes')
     outpath = kwargs.pop('outpath', None)
     if outpath is None:
         outpath = f"{kwargs['by']}_k={kwargs['k']}_dist_matrix"
@@ -91,18 +96,19 @@ def main():
     kwargs['show_warnings'] = not kwargs['supress_warnings']
     kwargs.pop('supress_warnings', None)
 
-    crystals = path_or_refcodes[0]
+    crystals = paths_or_refcodes[0]
     crystals_ = None
-    if len(path_or_refcodes) == 2:
-        crystals_ = path_or_refcodes[1]
-    elif len(path_or_refcodes) > 2:
-        msg = 'amd.compare accepts one or two collections of crystals for comparison.'
+    if len(paths_or_refcodes) == 2:
+        crystals_ = paths_or_refcodes[1]
+    elif len(paths_or_refcodes) > 2:
+        msg = 'amd.compare accepts one or two collections of crystals for ' \
+              'comparison.'
         raise ValueError(msg)
 
     df = compare(crystals, crystals_, **kwargs)
 
     if kwargs['verbose']:
-        sys.stdout.write(df)
+        sys.stdout.write(str(df))
 
     if not outpath.endswith('.' + ext):
         outpath += '.' + ext

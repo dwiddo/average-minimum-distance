@@ -10,7 +10,7 @@ import numba
 from scipy.spatial.distance import cdist
 from scipy.spatial import KDTree
 
-from ._nns import generate_concentric_cloud
+from ._nearest_neighbours import generate_concentric_cloud
 from .utils import diameter
 
 

@@ -11,7 +11,7 @@ import numpy.typing as npt
 from scipy.spatial.distance import pdist, squareform
 
 from .periodicset import PeriodicSet, PeriodicSetType
-from ._nns import nearest_neighbours, nearest_neighbours_minval
+from ._nearest_neighbours import nearest_neighbours, nearest_neighbours_minval
 from .utils import diameter
 
 

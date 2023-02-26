@@ -91,7 +91,12 @@ class _Reader:
         self._iterator = iter(iterable)
         self._converter = converter
         self.show_warnings = show_warnings
-        self._progress_bar = tqdm.tqdm() if verbose else None
+        if verbose:
+            self._progress_bar = tqdm.tqdm(
+                desc='Reading', unit=' crystals', delay=5
+            )
+        else:
+            self._progress_bar = None
 
     def __iter__(self):
         return self

@@ -448,7 +448,7 @@ def PDD_cdist(
         n, m = len(pdds), len(pdds_)
         dm = np.empty((n, m))
         if verbose:
-            desc = f'Comparing {len(pdds)}x{len(pdds_)} items by PDD (k={k})'
+            desc = f'Comparing {len(pdds)}x{len(pdds_)} PDDs (k={k})'
             progress_bar = tqdm.tqdm(desc=desc, total=n*m)
         for i in range(n):
             for j in range(m):
@@ -523,7 +523,7 @@ def PDD_pdist(
         cdm = np.empty(cdm_len, dtype=np.float64)
         inds = ((i, j) for i in range(0, m - 1) for j in range(i + 1, m))
         if verbose:
-            desc = f'Comparing {len(pdds)} items pairwise by PDD (k={k})'
+            desc = f'Comparing {len(pdds)} PDDs pairwise (k={k})'
             progress_bar = tqdm.tqdm(desc=desc, total=cdm_len)
         for r, (i, j) in enumerate(inds):
             cdm[r] = EMD(pdds[i], pdds[j], metric=metric, **kwargs)
