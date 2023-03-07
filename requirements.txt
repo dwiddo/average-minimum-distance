@@ -3,5 +3,5 @@ numba>=0.55.2
 scipy>=1.6.1
 joblib>=1.1.0
 pandas>=1.2.5
-ase>=3.22.0
+gemmi>=0.5.8
 tqdm>=4.1.0

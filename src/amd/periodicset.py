@@ -2,7 +2,7 @@
 set, defined by a motif and unit cell. This models a crystal with a
 point at the center of each atom.
 
-This is the type yielded by :class:`amd.CifReader <.io.CifReader>` and 
+This is the type yielded by :class:`amd.CifReader <.io.CifReader>` and
 :class:`amd.CSDReader <.io.CSDReader>`. A :class:`PeriodicSet` can be
 passed as the first argument to :func:`amd.AMD() <.calculate.AMD>` or
 :func:`amd.PDD() <.calculate.PDD>` to calculate its invariants.
@@ -29,7 +29,7 @@ class PeriodicSet:
 
     :class:`PeriodicSet` s are returned by the readers in the
     :mod:`.io` module. They can be passed to
-    :func:`amd.AMD() <.calculate.AMD>` or 
+    :func:`amd.AMD() <.calculate.AMD>` or
     :func:`amd.PDD() <.calculate.PDD>` to calculate their invariants.
 
     Parameters
@@ -88,33 +88,31 @@ class PeriodicSet:
 
         cellpar_str = None
         if self.ndim == 1:
-            cellpar_str = f', cell={self.cell[0][0]}'
+            cellpar_str = f', cell={self.cell[0][0]})'
         if self.ndim == 2:
             cellpar = np.round(cell_to_cellpar_2D(self.cell), 2)
             cellpar_str = ','.join(str(round(p, 2)) for p in cellpar)
-            cellpar_str = f', abα={cellpar_str}'
+            cellpar_str = f', abα={cellpar_str})'
         elif self.ndim == 3:
             cellpar = np.round(cell_to_cellpar(self.cell), 2)
             cellpar_str = ','.join(str(round(p, 2)) for p in cellpar)
-            cellpar_str = f', abcαβγ={cellpar_str}'
+            cellpar_str = f', abcαβγ={cellpar_str})'
         else:
-            cellpar_str = f''
+            cellpar_str = ')'
 
-        s = f'PeriodicSet(name={self.name}, ' \
-            f'motif shape {self.motif.shape} ({n_asym_sites} asym sites)' \
-            f'{cellpar_str})'
-
-        return s
+        return (
+            f'PeriodicSet(name={self.name}, motif shape {self.motif.shape} '
+            f'({n_asym_sites} asym sites){cellpar_str}'
+        )
 
     def __repr__(self):
-
-        s = f'PeriodicSet(name={self.name}, ' \
-            f'motif={self.motif}, cell={self.cell}, ' \
-            f'asymmetric_unit={self.asymmetric_unit}, ' \
-            f'wyckoff_multiplicities={self.wyckoff_multiplicities}, ' \
+        return (
+            f'PeriodicSet(name={self.name}, '
+            f'motif={self.motif}, cell={self.cell}, '
+            f'asymmetric_unit={self.asymmetric_unit}, '
+            f'wyckoff_multiplicities={self.wyckoff_multiplicities}, '
             f'types={self.types})'
-
-        return s
+        )
 
     def __eq__(self, other):
         """Used for debugging/tests. True if both 1. the unit cells are
@@ -123,6 +121,7 @@ class PeriodicSet:
         somewhere in the other, accounting for pbc.
         """
 
+        tol = 1e-8
         if self.cell.shape != other.cell.shape or \
            self.motif.shape != other.motif.shape or \
            not np.allclose(self.cell, other.cell):
@@ -134,8 +133,9 @@ class PeriodicSet:
         d2 = np.abs(d1 - 1)
         diffs = np.amax(np.minimum(d1, d2), axis=-1)
 
-        if not np.all((np.amin(diffs, axis=0) <= 1e-8) | 
-                      (np.amin(diffs, axis=-1) <= 1e-8)):
+        if not np.all(
+            (np.amin(diffs, axis=0) <= tol) | (np.amin(diffs, axis=-1) <= tol)
+        ):
             return False
 
         return True
@@ -161,10 +161,10 @@ class PeriodicSet:
         elif dims == 2:
             cell = cellpar_to_cell_2D(np.array([scale, scale, 60.]))
         else:
-            msg = 'PeriodicSet.hexagonal() only implemented for dimensions ' \
-                  f'2 and 3 (passed {dims})'
-            raise NotImplementedError(msg)
-
+            raise NotImplementedError(
+                'amd.PeriodicSet.hexagonal() only implemented for dimensions '
+                f'2 and 3, passed {dims}'
+            )
         return PeriodicSet(np.zeros((1, dims)), cell)
 
     @staticmethod
@@ -180,8 +180,8 @@ class PeriodicSet:
         """
 
         cell = random_cell(
-            length_bounds=length_bounds, 
-            angle_bounds=angle_bounds, 
+            length_bounds=length_bounds,
+            angle_bounds=angle_bounds,
             dims=dims
         )
         frac_motif = np.random.uniform(size=(n_points, dims))

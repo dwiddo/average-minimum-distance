@@ -11,9 +11,10 @@ def test_AMD(reference_data):
                 n = s['PeriodicSet'].name
                 ref_amd = str(s['AMD100'])
                 pytest.fail(
-                    f'AMD of structure {n} disagrees with reference. ' \
+                    f'AMD of structure {n} disagrees with reference. '
                     f'reference: {ref_amd}, calculated: {calc_amd}'
                 )
+
 
 def test_PDD(reference_data):
     for name in reference_data:
@@ -25,8 +26,8 @@ def test_PDD(reference_data):
                 n = s['PeriodicSet'].name
                 ref_pdd = str(s['PDD100'])
                 pytest.fail(
-                    f'PDD of structure {n} disagrees with reference. ' \
-                    f'reference: {ref_pdd}, calculated: {calc_pdd}. ' \
+                    f'PDD of structure {n} disagrees with reference. '
+                    f'reference: {ref_pdd}, calculated: {calc_pdd}. '
                     f'Largest elementwise diffs between PDDs: {diffs}'
                 )
 
@@ -40,7 +41,7 @@ def test_PDD_to_AMD(reference_data):
             if not np.allclose(calc_amd, amd_from_pdd):
                 n = s["PeriodicSet"].name
                 pytest.fail(
-                    f'Directly calculated AMD of structure {n} disagrees ' \
+                    f'Directly calculated AMD of structure {n} disagrees '
                     'with AMD calculated from PDD.'
                 )
 
@@ -53,7 +54,7 @@ def test_AMD_finite():
     dist = np.linalg.norm(trap_amd - kite_amd)
     if not abs(dist - 0.6180339887498952) < 1e-16:
         pytest.fail(
-            f'AMDs of finite sets trapezium and kite are different than ' \
+            'AMDs of finite sets trapezium and kite are different than '
             'expected.'
         )
 
@@ -66,6 +67,6 @@ def test_PDD_finite():
     dist = amd.EMD(trap_pdd, kite_pdd)
     if not abs(dist - 0.874032) < 1e-8:
         pytest.fail(
-            f'PDDs of finite sets trapezium and kite are different than ' \
+            'PDDs of finite sets trapezium and kite are different than '
             'expected.'
         )

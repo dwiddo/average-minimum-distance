@@ -5,15 +5,17 @@ import pytest
 
 @pytest.fixture(scope='session', autouse=True)
 def root_dir():
-    return r'tests/data'      
+    return r'tests/data'
+
 
 @pytest.fixture(scope='session', autouse=True)
 def ccdc_enabled():
     try:
         import ccdc
         return True
-    except (ImportError, RuntimeError) as _:
+    except Exception:
         return False
+
 
 @pytest.fixture(scope='session', autouse=True)
 def reference_data(root_dir):

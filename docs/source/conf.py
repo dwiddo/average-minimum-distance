@@ -13,9 +13,8 @@
 import os
 import re
 import sys
-sys.path.insert(0, os.path.abspath(r'../../src'))
-
 import mock
+sys.path.insert(0, os.path.abspath(r'../../src'))
 
 # -- Project information -----------------------------------------------------
 
@@ -41,8 +40,8 @@ for mod_name in MOCK_MODULES:
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autodoc', 
-    'sphinx.ext.coverage', 
+    'sphinx.ext.autodoc',
+    'sphinx.ext.coverage',
     'sphinx.ext.napoleon',
     'sphinx.ext.intersphinx',
     'sphinx_rtd_theme',
@@ -55,12 +54,12 @@ intersphinx_mapping = {
     # 'numba':    ('https://numba.pydata.org/numba-doc/latest/', None),
     'scipy':    ('https://docs.scipy.org/doc/scipy/', None),
     'pandas':   ('https://pandas.pydata.org/docs/', None),
+    'gemmi':    ('https://gemmi.readthedocs.io/en/latest/', None),
+    'pymatgen': ('https://pymatgen.org/', None),
     'ase':      ('https://wiki.fysik.dtu.dk/ase/', None),
     'joblib':   ('https://joblib.readthedocs.io/en/latest/', None),
     # 'tqdm':     ('https://tqdm.github.io/', None),
     'ccdc':     ('https://downloads.ccdc.cam.ac.uk/documentation/API/', None),
-    'pymatgen': ('https://pymatgen.org/', None),
-    'gemmi':    ('https://gemmi.readthedocs.io/en/latest/', None),
 }
 
 # autodoc_typehints = "description"
@@ -87,13 +86,13 @@ exclude_patterns = []
 html_theme = 'sphinx_rtd_theme'
 default_dark_mode = True
 
-html_sidebars = { 
+html_sidebars = {
     '**': [
-        'globaltoc.html', 
-        'relations.html', 
-        'sourcelink.html', 
+        'globaltoc.html',
+        'relations.html',
+        'sourcelink.html',
         'searchbox.html'
-    ] 
+    ]
 }
 
 # # Add any paths that contain custom static files (such as style sheets) here,

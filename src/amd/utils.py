@@ -10,7 +10,7 @@ from scipy.spatial.distance import squareform
 
 
 def diameter(cell: npt.NDArray) -> float:
-    """Diameter of a unit cell (given as a square matrix in orthogonal 
+    """Diameter of a unit cell (given as a square matrix in orthogonal
     coordinates) in 3 or fewer dimensions. The diameter is the maxiumum
     distance between any two points in the unit cell.
 
@@ -30,7 +30,7 @@ def diameter(cell: npt.NDArray) -> float:
         return cell[0][0]
     if dims == 2:
         diagonals = np.array([
-            cell[0] + cell[1], 
+            cell[0] + cell[1],
             cell[0] - cell[1]
         ])
     elif dims == 3:
@@ -41,10 +41,10 @@ def diameter(cell: npt.NDArray) -> float:
             - cell[0] + cell[1] + cell[2]
         ])
     else:
-        msg = 'diameter() not implemented for dimensions > 3 (passed cell ' \
-              f'shape {cell.shape}).'
-        raise NotImplementedError(msg)
-
+        raise NotImplementedError(
+            'amd.diameter() only implemented for dimensions <= 3, passed '
+            f'{dims}'
+        )
     return np.amax(np.linalg.norm(diagonals, axis=-1))
 
 
@@ -68,7 +68,7 @@ def cellpar_to_cell(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
     """
 
     a, b, c, alpha, beta, gamma = cellpar
-    eps = 2 * np.spacing(90) # ~1.4e-14
+    eps = 2 * np.spacing(90)
 
     if abs(abs(alpha) - 90.0) < eps:
         cos_alpha = 0.0
@@ -137,7 +137,7 @@ def cellpar_to_cell_2D(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
 @numba.njit()
 def cell_to_cellpar(cell: npt.NDArray) -> npt.NDArray[np.float64]:
     """Converts a 3x3 :class:`numpy.ndarray` representing a unit cell in
-    orthogonal coordinates (as returned by 
+    orthogonal coordinates (as returned by
     :func:`cellpar_to_cell() <.utils.cellpar_to_cell>`) into a list of 3
     lengths and 3 angles representing the unit cell.
 
@@ -172,7 +172,7 @@ def cell_to_cellpar(cell: npt.NDArray) -> npt.NDArray[np.float64]:
 @numba.njit()
 def cell_to_cellpar_2D(cell: npt.NDArray) -> npt.NDArray[np.float64]:
     """Converts a 2x2 :class:`numpy.ndarray` representing a unit cell in
-    orthogonal coordinates (as returned by 
+    orthogonal coordinates (as returned by
     :func:`cellpar_to_cell_2D() <.utils.cellpar_to_cell_2D>`) into a
     list of 2 lengths and 1 angle representing the unit cell.
 
@@ -221,11 +221,11 @@ def neighbours_from_distance_matrix(
 
     inds = None
 
-    if len(dm.shape) == 2: # 2D distance matrix
+    if len(dm.shape) == 2:
         inds = np.array([
             np.argpartition(row, n)[:n] for row in dm
         ], dtype=np.int32)
-    elif len(dm.shape) == 1: # 1D condensed distance vector
+    elif len(dm.shape) == 1:
         dm = squareform(dm)
         inds = []
         for i, row in enumerate(dm):
@@ -234,9 +234,11 @@ def neighbours_from_distance_matrix(
             inds.append(inds_row)
         inds = np.array(inds, dtype=np.int32)
     else:
-        msg = "Input must be a NumPy ndarray, either a 2D distance matrix " \
-              "or a condensed distance matrix (as returned by SciPy's pdist)."
-        ValueError(msg)
+        ValueError(
+            'amd.neighbours_from_distance_matrix() accepts a distance matrix, '
+            'either a 2D distance matrix or a condensed distance matrix as '
+            'returned by scipy.spatial.distance.pdist()'
+        )
 
     # inds are the indexes of nns: inds[i,j] is the j-th nn to point i
     nn_dm = np.take_along_axis(dm, inds, axis=-1)
@@ -268,15 +270,13 @@ def random_cell(
                 break
             except RuntimeError:
                 continue
-
     elif dims == 2:
         cellpar = [np.random.uniform(low=ll, high=lu) for _ in range(2)]
         cellpar.append(np.random.uniform(low=al, high=au))
         cell = cellpar_to_cell_2D(np.array(cellpar))
-
     else:
-        msg = 'random_cell only implimented for dimensions 2 and 3 (passed ' \
-              f'{dims})'
-        raise NotImplementedError(msg)
-
+        raise NotImplementedError(
+            'amd.random_cell() only implemented for dimensions 2 and 3, '
+            f'passed {dims}'
+        )
     return cell

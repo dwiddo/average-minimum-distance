@@ -1,7 +1,6 @@
 """Functions for comparing AMDs and PDDs of crystals.
 """
 
-import warnings
 from typing import List, Optional, Union, Tuple
 from functools import partial
 from itertools import combinations
@@ -27,7 +26,7 @@ def compare(
         by: str = 'AMD',
         k: int = 100,
         nearest: Optional[int] = None,
-        reader: str = 'ase',
+        reader: str = 'gemmi',
         remove_hydrogens: bool = False,
         disorder: str = 'skip',
         heaviest_component: bool = False,
@@ -64,9 +63,9 @@ def compare(
         Find a number of nearest neighbours instead of a full distance
         matrix between crystals.
     reader : str, optional
-        The backend package used to parse the CIF. The default is 
-        :code:`ase`, :code:`pymatgen` and :code:`gemmi` are also
-        accepted, as well as :code:`ccdc` if csd-python-api is 
+        The backend package used to parse the CIF. The default is
+        :code:`gemmi`, :code:`pymatgen` and :code:`ase` are also
+        accepted, as well as :code:`ccdc` if csd-python-api is
         installed. The ccdc reader should be able to read any format
         accepted by :class:`ccdc.io.EntryReader`, though only CIFs have
         been tested.
@@ -155,8 +154,10 @@ def compare(
 
     by = by.upper()
     if by not in ('AMD', 'PDD'):
-        msg = f"parameter 'by' accepts 'AMD' or 'PDD', passed {by}"
-        raise ValueError(msg)
+        raise ValueError(
+            '"by" parameter of amd.compare() must be one of '
+            "('AMD', 'PDD'), passed " + f'"{by}"'
+        )
 
     reader_kwargs = {
         'reader': reader,
@@ -174,7 +175,7 @@ def compare(
         'collapse_tol': collapse_tol,
         'lexsort': False,
     }
-    
+
     compare_kwargs = {
         'metric': metric,
         'n_jobs': n_jobs,
@@ -197,7 +198,11 @@ def compare(
         names_ = [s.name for s in crystals_]
 
     if by == 'AMD':
-        invs = [AMD(s, k) for s in crystals]
+        desc = 'Calculating AMDs'
+
+        invs = []
+        for s in tqdm.tqdm(crystals, desc=desc, delay=3):
+            invs.append(AMD(s, k))
         compare_kwargs.pop('n_jobs', None)
         compare_kwargs.pop('backend', None)
         compare_kwargs.pop('verbose', None)
@@ -205,17 +210,24 @@ def compare(
         if crystals_ is None:
             dm = AMD_pdist(invs, **compare_kwargs)
         else:
-            invs_ = [AMD(s, k) for s in crystals_]
+            invs_ = []
+            for s in tqdm.tqdm(crystals_, desc=desc, delay=3):
+                invs_.append(AMD(s, k))
             dm = AMD_cdist(invs, invs_, **compare_kwargs)
 
     elif by == 'PDD':
-        invs = [PDD(s, k, **pdd_kwargs) for s in crystals]
+        desc = 'Calculating PDDs'
+        invs = []
+        for s in tqdm.tqdm(crystals, desc=desc, delay=3):
+            invs.append(PDD(s, k, **pdd_kwargs))
         compare_kwargs.pop('low_memory', None)
 
         if crystals_ is None:
             dm = PDD_pdist(invs, **compare_kwargs)
         else:
-            invs_ = [PDD(s, k, **pdd_kwargs) for s in crystals_]
+            invs_ = []
+            for s in tqdm.tqdm(crystals_, desc=desc, delay=3):
+                invs_.append(PDD(s, k, **pdd_kwargs))
             dm = PDD_cdist(invs, invs_, **compare_kwargs)
 
     if nearest:
@@ -320,9 +332,10 @@ def AMD_cdist(
 
     if low_memory:
         if metric != 'chebyshev':
-            msg = "Using only allowed metric 'chebyshev' for low_memory"
-            warnings.warn(msg, UserWarning)
-
+            raise ValueError(
+                '"low_memory" parameter of amd.AMD_cdist() only implemented '
+                'with metric="chebyshev".'
+            )
         dm = np.empty((len(amds), len(amds_)))
         for i, amd_vec in enumerate(amds):
             dm[i] = np.amax(np.abs(amds_ - amd_vec), axis=-1)
@@ -372,8 +385,10 @@ def AMD_pdist(
     if low_memory:
         m = len(amds)
         if metric != 'chebyshev':
-            msg = 'Using only implemented metric "chebyshev" for low_memory'
-            warnings.warn(msg, UserWarning)
+            raise ValueError(
+                '"low_memory" parameter of amd.AMD_pdist() only implemented '
+                'with metric="chebyshev".'
+            )
         cdm = np.empty((m * (m - 1)) // 2, dtype=np.float64)
         ind = 0
         for i in range(m):
@@ -553,8 +568,8 @@ def _unwrap_periodicset_list(psets_or_str, **reader_kwargs):
             return [item]
         if isinstance(psets_or_str, Tuple):
             return [PeriodicSet(psets_or_str[0], psets_or_str[1])]
-        if isinstance(item, str) and not os.path.isfile(item) \
-                                 and not os.path.isdir(item):
+        not_path = (not os.path.isfile(item) and not os.path.isdir(item))
+        if isinstance(item, str) and not_path:
             reader_kwargs.pop('reader', None)
             return list(CSDReader(item, **reader_kwargs))
         reader_kwargs.pop('families', None)

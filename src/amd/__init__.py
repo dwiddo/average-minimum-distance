@@ -11,15 +11,15 @@ List of modules
 ===================    ===================================
 Module                 Description
 ===================    ===================================
-:mod:`.calculate`      Calculate descriptors
+:mod:`.calculate`      Calculate descriptors (AMD, PDD)
 :mod:`.compare`        Compare descriptors
 :mod:`.io`             Read crystals from files or the CSD
 :mod:`.periodicset`    Implements the PeriodicSet object
-:mod:`.utils`          Utility functions
+:mod:`.utils`          General utility functions
 ===================    ===================================
 """
 
-__version__ = '1.3.6'
+__version__ = '1.4.0'
 __author__ = 'Daniel Widdowson'
 __maintainer__ = 'Daniel Widdowson'
 __email__ = 'D.E.Widdowson@liverpool.ac.uk'

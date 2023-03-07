@@ -69,7 +69,7 @@ Reading options
 
 Parameters of :class:`amd.CifReader <amd.io.CifReader>` or :class:`amd.CSDReader <amd.io.CSDReader>`.
 
-* :code:`reader` (default ``ase``) controls the backend package used to parse the file. Accepts ``ase``, ``pycodcif``, ``pymatgen``, ``gemmi`` and ``ccdc`` (if installed). The ccdc reader can read formats accepted by :class:`ccdc.io.EntryReader`.
+* :code:`reader` (default ``gemmi``) controls the backend package used to parse the file. Accepts ``gemmi``, ``pycodcif``, ``pymatgen``, ``ase`` and ``ccdc`` (if installed). The ccdc reader can read formats accepted by :class:`ccdc.io.EntryReader`.
 * :code:`remove_hydrogens` (default ``False``) removes Hydrogen atoms from the structure.
 * :code:`disorder` (default ``skip``) controls how disordered structures are handled. The default skips any crystal with disorder, since disorder conflicts with the model of a periodic set. Alternatively, :code:`ordered_sites` removes atoms with disorder and :code:`all_sites` includes all atoms regardless of disorder.
 * :code:`show_warnings` (default ``True``) chooses whether to print warnings during reading, e.g. from disordered structures or crystals with missing data.

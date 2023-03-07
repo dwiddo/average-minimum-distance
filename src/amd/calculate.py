@@ -21,7 +21,7 @@ def AMD(periodic_set: PeriodicSetType, k: int) -> npt.NDArray[np.float64]:
     Parameters
     ----------
     periodic_set :
-        A periodic set represented by a 
+        A periodic set represented by a
         :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or by a
         tuple of :class:`numpy.ndarray` s (motif, cell) with coordinates
         in Cartesian form and a square unit cell.
@@ -58,8 +58,8 @@ def AMD(periodic_set: PeriodicSetType, k: int) -> npt.NDArray[np.float64]:
     """
 
     motif, cell, asymmetric_unit, weights = _get_structure(periodic_set)
-    dists, _, _ = nearest_neighbours(motif, cell, asymmetric_unit, k)
-    return np.average(dists, axis=0, weights=weights)
+    dists, _, _ = nearest_neighbours(motif, cell, asymmetric_unit, k + 1)
+    return np.average(dists[:, 1:], axis=0, weights=weights)
 
 
 def PDD(
@@ -133,7 +133,8 @@ def PDD(
     """
 
     motif, cell, asymmetric_unit, weights = _get_structure(periodic_set)
-    dists, _, _ = nearest_neighbours(motif, cell, asymmetric_unit, k)
+    dists, _, _ = nearest_neighbours(motif, cell, asymmetric_unit, k + 1)
+    dists = dists[:, 1:]
     groups = [[i] for i in range(len(dists))]
 
     if collapse:
@@ -314,14 +315,16 @@ def PDD_reconstructable(
     dims = cell.shape[0]
 
     if dims not in (2, 3):
-        msg = 'Reconstructing from PDD is only possible for 2 and 3 dimensions'
-        raise ValueError(msg)
+        raise ValueError(
+            'Reconstructing from PDD is only possible for 2 and 3 dimensions.'
+        )
 
     min_val = diameter(cell) * 2
-    pdd = nearest_neighbours_minval(motif, cell, min_val)
+    pdd, _, _ = nearest_neighbours_minval(motif, cell, min_val)
 
     if lexsort:
-        pdd = pdd[np.lexsort(np.rot90(pdd))]
+        lex_ordering = np.lexsort(np.rot90(pdd))
+        pdd = pdd[lex_ordering]
 
     return pdd
 
@@ -330,7 +333,7 @@ def PPC(periodic_set: PeriodicSetType) -> float:
     r"""The point packing coefficient (PPC) of ``periodic_set``.
 
     The PPC is a constant of any periodic set determining the
-    asymptotic behaviour of its AMD and PDD. As 
+    asymptotic behaviour of its AMD and PDD. As
     :math:`k \rightarrow \infty`, the ratio
     :math:`\text{AMD}_k / \sqrt[n]{k}` converges to the PPC, as does any
     row of its PDD.
@@ -434,7 +437,7 @@ def _collapse_into_groups(overlapping: npt.NDArray) -> list:
     """
 
     overlapping = squareform(overlapping)
-    group_nums = {} # row_ind: group number
+    group_nums = {}
     group = 0
     for i, row in enumerate(overlapping):
         if i not in group_nums:
