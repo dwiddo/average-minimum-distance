@@ -39,11 +39,16 @@ def compare(
         backend: str = 'multiprocessing',
         verbose: bool = False,
         low_memory: bool = False,
+        **kwargs
 ) -> pd.DataFrame:
-    r"""Given one or two paths to cifs/folders, lists of CSD refcodes or
-    periodic sets, compare them and return a DataFrame of the distance
-    matrix. Default is to comapre by AMD with k = 100. Accepts most
-    keyword arguments accepted by :class:`CifReader <.io.CifReader>`,
+    """Given one or two sets of crystals, compare by AMD or PDD and
+    return a pandas DataFrame of the distance matrix.
+
+    Given one or two paths to cifs/folders, lists of CSD refcodes or
+    periodic sets, compare by AMD or PDD and return a DataFrame of the
+    distance matrix with names in the columns and index. Default is to
+    comapre by AMD with k = 100. Accepts most keyword arguments accepted
+    by :class:`CifReader <.io.CifReader>`,
     :class:`CSDReader <.io.CSDReader>` and functions from
     :mod:`.compare`.
 
@@ -110,9 +115,10 @@ def compare(
         For a list of supported backends, see the backend argument of
         :class:`joblib.Parallel`.
     verbose : bool, default False
-        Prints a progress bar when reading crystals and comparing PDDs.
-        If using parallel processing (n_jobs > 1), the verbose argument
-        of :class:`joblib.Parallel` is used, otherwise uses tqdm.
+        Prints a progress bar when reading crystals, calculating
+        AMDs/PDDs and comparing PDDs. If using parallel processing
+        (n_jobs > 1), the verbose argument of :class:`joblib.Parallel`
+        is used, otherwise uses ``tqdm``.
     low_memory : bool, default False, ``by='AMD'`` only
         Use a slower but more memory efficient
         method for large collections of AMDs (metric 'chebyshev' only).
@@ -155,8 +161,8 @@ def compare(
     by = by.upper()
     if by not in ('AMD', 'PDD'):
         raise ValueError(
-            '"by" parameter of amd.compare() must be one of '
-            "('AMD', 'PDD'), passed " + f'"{by}"'
+            "'by' parameter of amd.compare() must be one of 'AMD' or 'PDD' "
+            f"(passed '{by}')"
         )
 
     reader_kwargs = {
@@ -170,39 +176,47 @@ def compare(
         'verbose': verbose,
     }
 
-    pdd_kwargs = {
-        'collapse': True,
-        'collapse_tol': collapse_tol,
-        'lexsort': False,
-    }
-
     compare_kwargs = {
         'metric': metric,
         'n_jobs': n_jobs,
         'backend': backend,
         'verbose': verbose,
         'low_memory': low_memory,
+        **kwargs
     }
 
     crystals = _unwrap_periodicset_list(crystals, **reader_kwargs)
     if not crystals:
-        raise ValueError('No valid crystals to compare in first set.')
+        raise ValueError(
+            'First set passed to amd.compare() contains no valid '
+            'crystals/periodic sets'
+        )
     names = [s.name for s in crystals]
+    if verbose:
+        container = tqdm.tqdm(crystals, desc='Calculating', delay=1)
+    else:
+        container = crystals
 
     if crystals_ is None:
         names_ = names
+        container_ = None
     else:
         crystals_ = _unwrap_periodicset_list(crystals_, **reader_kwargs)
         if not crystals_:
-            raise ValueError('No valid crystals to compare in second set.')
+            raise ValueError(
+                'Second set passed to amd.compare() contains no valid '
+                'crystals/periodic sets'
+            )
         names_ = [s.name for s in crystals_]
+        if verbose:
+            container_ = tqdm.tqdm(crystals_, desc='Calculating', delay=1)
+        else:
+            container_ = crystals_
 
     if by == 'AMD':
-        desc = 'Calculating AMDs'
-
-        invs = []
-        for s in tqdm.tqdm(crystals, desc=desc, delay=3):
-            invs.append(AMD(s, k))
+        invs = [AMD(s, k) for s in container]
+        if verbose:
+            container.close()
         compare_kwargs.pop('n_jobs', None)
         compare_kwargs.pop('backend', None)
         compare_kwargs.pop('verbose', None)
@@ -210,24 +224,17 @@ def compare(
         if crystals_ is None:
             dm = AMD_pdist(invs, **compare_kwargs)
         else:
-            invs_ = []
-            for s in tqdm.tqdm(crystals_, desc=desc, delay=3):
-                invs_.append(AMD(s, k))
+            invs_ = [AMD(s, k) for s in container_]
             dm = AMD_cdist(invs, invs_, **compare_kwargs)
 
     elif by == 'PDD':
-        desc = 'Calculating PDDs'
-        invs = []
-        for s in tqdm.tqdm(crystals, desc=desc, delay=3):
-            invs.append(PDD(s, k, **pdd_kwargs))
+        invs = [PDD(s, k, collapse_tol=collapse_tol) for s in container]
         compare_kwargs.pop('low_memory', None)
 
         if crystals_ is None:
             dm = PDD_pdist(invs, **compare_kwargs)
         else:
-            invs_ = []
-            for s in tqdm.tqdm(crystals_, desc=desc, delay=3):
-                invs_.append(PDD(s, k, **pdd_kwargs))
+            invs_ = [PDD(s, k, collapse_tol=collapse_tol) for s in container_]
             dm = PDD_cdist(invs, invs_, **compare_kwargs)
 
     if nearest:
@@ -252,8 +259,8 @@ def EMD(
         return_transport: Optional[bool] = False,
         **kwargs
 ) -> float:
-    r"""Earth mover's distance (EMD) between two PDDs, aka the
-    Wasserstein metric.
+    """Calculate the Earth mover's distance (EMD) between two PDDs, aka
+    the Wasserstein metric.
 
     Parameters
     ----------
@@ -298,7 +305,7 @@ def AMD_cdist(
         low_memory: bool = False,
         **kwargs
 ) -> npt.NDArray:
-    r"""Compare two sets of AMDs with each other, returning a distance
+    """Compare two sets of AMDs with each other, returning a distance
     matrix. This function is essentially
     :func:`scipy.spatial.distance.cdist` with the default metric
     ``chebyshev`` and a low memory option.
@@ -333,8 +340,8 @@ def AMD_cdist(
     if low_memory:
         if metric != 'chebyshev':
             raise ValueError(
-                '"low_memory" parameter of amd.AMD_cdist() only implemented '
-                'with metric="chebyshev".'
+                "'low_memory' parameter of amd.AMD_cdist() only implemented "
+                "with metric='chebyshev'."
             )
         dm = np.empty((len(amds), len(amds_)))
         for i, amd_vec in enumerate(amds):
@@ -386,8 +393,8 @@ def AMD_pdist(
         m = len(amds)
         if metric != 'chebyshev':
             raise ValueError(
-                '"low_memory" parameter of amd.AMD_pdist() only implemented '
-                'with metric="chebyshev".'
+                "'low_memory' parameter of amd.AMD_pdist() only implemented "
+                "with metric='chebyshev'."
             )
         cdm = np.empty((m * (m - 1)) // 2, dtype=np.float64)
         ind = 0
@@ -410,9 +417,9 @@ def PDD_cdist(
         verbose: bool = False,
         **kwargs
 ) -> npt.NDArray:
-    r"""Compare two sets of PDDs with each other, returning a distance
+    """Compare two sets of PDDs with each other, returning a distance
     matrix. Supports parallel processing via joblib. If using
-    parallelisation, make sure to include a if __name__ == '__main__'
+    parallelisation, make sure to include an if __name__ == '__main__'
     guard around this function.
 
     Parameters
@@ -555,26 +562,23 @@ def emd(pdd: npt.NDArray, pdd_: npt.NDArray, **kwargs) -> float:
 
 
 def _unwrap_periodicset_list(psets_or_str, **reader_kwargs):
-    """Valid input for amd.compare() (``PeriodicSet``, path, refcode,
-    lists of such) --> list of PeriodicSets.
-    """
+    """Given a valid input for amd.compare(), return a list of
+    PeriodicSets. Accepts PeriodicSets, paths (to files or folders),
+    refcodes or lists of those."""
 
     def _extract_periodicsets(item, **reader_kwargs):
-        """str (path/refcode), file or ``PeriodicSet`` --> list of
-        ``PeriodicSets``.
-        """
-
+        """Given a path, PeriodicSet, tuple or CSD refcodes, return a
+        list of the PeriodicSet(s)."""
         if isinstance(item, PeriodicSet):
             return [item]
-        if isinstance(psets_or_str, Tuple):
-            return [PeriodicSet(psets_or_str[0], psets_or_str[1])]
-        not_path = (not os.path.isfile(item) and not os.path.isdir(item))
-        if isinstance(item, str) and not_path:
-            reader_kwargs.pop('reader', None)
-            return list(CSDReader(item, **reader_kwargs))
-        reader_kwargs.pop('families', None)
-        reader_kwargs.pop('refcodes', None)
-        return list(CifReader(item, **reader_kwargs))
+        if isinstance(item, Tuple):
+            return [PeriodicSet(item[0], item[1])]
+        if os.path.isfile(item) or os.path.isdir(item):
+            reader_kwargs.pop('families', None)
+            reader_kwargs.pop('refcodes', None)
+            return list(CifReader(item, **reader_kwargs))
+        reader_kwargs.pop('reader', None)
+        return list(CSDReader(item, **reader_kwargs))
 
     if isinstance(psets_or_str, list):
         return [s for item in psets_or_str

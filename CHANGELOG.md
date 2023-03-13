@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 06/03/2023
+
+- ``nearest_neighbours()`` has been changed/fixed to not exclude the first nearest neighbours of points in the query set ``x``. This was because when ``x`` is the motif (as in all uses in ``amd``) the nearest neighbours of ``x`` are themselves, which are thrown away for AMD/PDD but should not be in the general case.
+
+- Improvements made to core function ``nearest_neighbours()``. The two main changes are 1. turning off multiprocessing in ``scipy.spatial.KDTree`` (multiprocessing appeared to improve speed initially but this is not the case now), and 2. a trick to delete many unneeded lattice points generated during the algorithm.
+
+- Default backend reader changed to `gemmi` for faster CIF reads; removed `ase` as a dependency and added `gemmi`.
+
 ## [1.3.6] - 25/02/2023
 
 - `verbose` parameter added to `amd.CifReader()` and `amd.CSDReader()`.

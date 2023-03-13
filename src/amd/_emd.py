@@ -19,8 +19,9 @@ def network_simplex(
         sink_demands: npt.NDArray,
         network_costs: npt.NDArray
 ) -> Tuple[float, npt.NDArray[np.float64]]:
-    """Given two sets of weights and a cost matrix on two distributions,
-    calculate the Earth mover's distance (Wasserstien metric).
+    """Calculate the Earth mover's distance (Wasserstien metric) between
+    two weighted distributions given by two sets of weights and a cost
+    matrix.
 
     This is a port of the network simplex algorithm implented by Loïc
     Séguin-C for the networkx package to allow acceleration with numba.
@@ -202,8 +203,7 @@ def network_simplex(
 
 @numba.njit(cache=True)
 def reduced_cost(i, costs, potentials, tails, heads, flows):
-    """Return the reduced cost of an edge i.
-    """
+    """Return the reduced cost of an edge i."""
     c = costs[i] - potentials[tails[i]] + potentials[heads[i]]
     if flows[i] == 0:
         return c
@@ -391,8 +391,7 @@ def remove_edge(s, t, size, prev, last, next_node, parent, edge):
 
 @numba.njit(cache=True)
 def make_root(q, parent, size, last, prev, next_node, edge):
-    """Make a node q the root of its containing subtree.
-    """
+    """Make a node q the root of its containing subtree."""
 
     ancestors = []
     # -2 means node is checked

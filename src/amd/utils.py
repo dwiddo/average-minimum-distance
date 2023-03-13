@@ -10,9 +10,9 @@ from scipy.spatial.distance import squareform
 
 
 def diameter(cell: npt.NDArray) -> float:
-    """Diameter of a unit cell (given as a square matrix in orthogonal
-    coordinates) in 3 or fewer dimensions. The diameter is the maxiumum
-    distance between any two points in the unit cell.
+    """Return the diameter of a unit cell (given as a square matrix in
+    orthogonal coordinates) in 3 or fewer dimensions. The diameter is
+    the maxiumum distance between any two points in the unit cell.
 
     Parameters
     ----------
@@ -50,10 +50,10 @@ def diameter(cell: npt.NDArray) -> float:
 
 @numba.njit()
 def cellpar_to_cell(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
-    """Numba-accelerated version of function from :mod:`ase.geometry` of
-    the same name. Converts canonical 3D unit cell parameters
-    a,b,c,α,β,γ into a 3x3 :class:`numpy.ndarray` representing the unit
-    cell (in orthogonal coordinates).
+    """Convert canonical 3D unit cell parameters a,b,c,α,β,γ into a 3x3
+    :class:`numpy.ndarray` representing the unit cell in orthogonal
+    coordinates. Numba-accelerated version of function from
+    :mod:`ase.geometry` of the same name.
 
     Parameters
     ----------
@@ -109,7 +109,7 @@ def cellpar_to_cell(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
 
 @numba.njit()
 def cellpar_to_cell_2D(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
-    """Converts 3 parameters defining a 2D unit cell a,b,α into a 2x2
+    """Convert 3 parameters defining a 2D unit cell a,b,α into a 2x2
     :class:`numpy.ndarray` representing the unit cell in orthogonal
     coordinates.
 
@@ -136,7 +136,7 @@ def cellpar_to_cell_2D(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
 
 @numba.njit()
 def cell_to_cellpar(cell: npt.NDArray) -> npt.NDArray[np.float64]:
-    """Converts a 3x3 :class:`numpy.ndarray` representing a unit cell in
+    """Convert a 3x3 :class:`numpy.ndarray` representing a unit cell in
     orthogonal coordinates (as returned by
     :func:`cellpar_to_cell() <.utils.cellpar_to_cell>`) into a list of 3
     lengths and 3 angles representing the unit cell.
@@ -171,7 +171,7 @@ def cell_to_cellpar(cell: npt.NDArray) -> npt.NDArray[np.float64]:
 
 @numba.njit()
 def cell_to_cellpar_2D(cell: npt.NDArray) -> npt.NDArray[np.float64]:
-    """Converts a 2x2 :class:`numpy.ndarray` representing a unit cell in
+    """Convert a 2x2 :class:`numpy.ndarray` representing a unit cell in
     orthogonal coordinates (as returned by
     :func:`cellpar_to_cell_2D() <.utils.cellpar_to_cell_2D>`) into a
     list of 2 lengths and 1 angle representing the unit cell.
@@ -253,8 +253,8 @@ def random_cell(
         angle_bounds: Tuple = (60.0, 120.0),
         dims: int = 3
 ) -> npt.NDArray[np.float64]:
-    """Dimensions 2 and 3 only. Random unit cell with uniformally chosen
-    length and angle parameters between bounds.
+    """Return a random unit cell with uniformally chosen length and
+    angle parameters between bounds. Dimensions 2 and 3 only.
     """
 
     ll, lu = length_bounds

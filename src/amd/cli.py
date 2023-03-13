@@ -12,12 +12,13 @@ def main():
     :func:`amd.compare() <.compare.compare>.
     """
 
-    desc = "Compare crystals by PDD or AMD from the command line. Given one " \
-           "or two paths to cifs/folders, lists of CSD refcodes or periodic " \
-           "sets, compare them and return a DataFrame of the distance " \
-           "matrix. Default is to comapre by AMD with k = 100. Accepts most " \
-           "keyword arguments accepted by amd's CIF/CSD readers and " \
-           "comparison functions."
+    desc = (
+        "Compare crystals by PDD or AMD from the command line. Given one or "
+        "two paths to cifs/folders, lists of CSD refcodes or periodic sets, "
+        "compare them and return a DataFrame of the distance matrix. By "
+        "default, uses AMD with k = 100. Accepts most keyword arguments "
+        "accepted by amd's CIF/CSD readers and comparison functions."
+    )
 
     parser = argparse.ArgumentParser(description=desc)
 
@@ -152,5 +153,4 @@ def main():
         output_func = getattr(df, 'to_' + ext)
         output_func(outpath)
     except AttributeError:
-        sys.stdout.write(f'Unknown format {ext}, using csv.')
-        df.to_csv(outpath + '.csv')
+        raise ValueError(f'Unknown format {ext}.')

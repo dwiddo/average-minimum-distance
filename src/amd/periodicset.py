@@ -55,6 +55,13 @@ class PeriodicSet:
         Array of atomic numbers of motif points.
     """
 
+    motif: npt.NDArray
+    cell: npt.NDArray
+    name: Optional[str]
+    asymmetric_unit: Optional[npt.NDArray]
+    wyckoff_multiplicities: Optional[npt.NDArray]
+    types: Optional[npt.NDArray]
+
     def __init__(
             self,
             motif: npt.NDArray,
@@ -77,9 +84,6 @@ class PeriodicSet:
         return self.cell.shape[0]
 
     def __str__(self):
-        """Returns a string representation of the PeriodicSet:
-        PeriodicSet(name, motif (m, d), t asym sites, abcαβγ=cellpar).
-        """
 
         if self.asymmetric_unit is None:
             n_asym_sites = len(self.motif)
@@ -151,8 +155,8 @@ class PeriodicSet:
 
     @staticmethod
     def hexagonal(scale: float = 1.0, dims: int = 3):
-        """Dimensions 2 and 3 only. Return a :class:`PeriodicSet`
-        representing a hexagonal lattice.
+        """ Return a :class:`PeriodicSet` representing a hexagonal
+        lattice. Dimensions 2 and 3 only.
         """
 
         if dims == 3:
@@ -174,9 +178,10 @@ class PeriodicSet:
         angle_bounds: tuple = (60.0, 120.0),
         dims: int = 3
     ):
-        """Dimensions 2 and 3 only. Return a :class:`PeriodicSet` with a
-        chosen number of randomly placed points, in random cell with
-        edges between length_bounds and angles between angle_bounds.
+        """Return a :class:`PeriodicSet` with a chosen number of
+        randomly placed points, in random cell with edges between
+        ``length_bounds`` and angles between ``angle_bounds``.
+        Dimensions 2 and 3 only.
         """
 
         cell = random_cell(

@@ -16,7 +16,7 @@ from .utils import diameter
 
 
 def AMD(periodic_set: PeriodicSetType, k: int) -> npt.NDArray[np.float64]:
-    """The AMD of a periodic set (crystal) up to k.
+    """Return the AMD of a periodic set (crystal) up to k.
 
     Parameters
     ----------
@@ -70,7 +70,7 @@ def PDD(
         collapse_tol: float = 1e-4,
         return_row_groups: bool = False
 ) -> npt.NDArray[np.float64]:
-    """The PDD of a periodic set (crystal) up to k.
+    """Return the PDD of a periodic set (crystal) up to k.
 
     Parameters
     ----------
@@ -162,7 +162,7 @@ def PDD(
 
 
 def PDD_to_AMD(pdd: npt.NDArray) -> npt.NDArray:
-    """Calculates an AMD from a PDD. Faster than computing both from
+    """Calculate an AMD from a PDD. Faster than computing both from
     scratch.
 
     Parameters
@@ -180,7 +180,7 @@ def PDD_to_AMD(pdd: npt.NDArray) -> npt.NDArray:
 
 
 def AMD_finite(motif: npt.NDArray) -> npt.NDArray:
-    """The AMD of a finite m-point set up to k = m - 1.
+    """Return the AMD of a finite m-point set up to k = m - 1.
 
     Parameters
     ----------
@@ -217,7 +217,7 @@ def PDD_finite(
         collapse_tol: float = 1e-4,
         return_row_groups: bool = False
 ) -> npt.NDArray[np.float64]:
-    """The PDD of a finite m-point set up to k = m - 1.
+    """Return the PDD of a finite m-point set up to k = m - 1.
 
     Parameters
     ----------
@@ -291,8 +291,9 @@ def PDD_reconstructable(
         periodic_set: PeriodicSetType,
         lexsort: bool = True
 ) -> npt.NDArray[np.float64]:
-    """The PDD of a periodic set with `k` (number of columns) large
-    enough such that the periodic set can be reconstructed from the PDD.
+    """Return the PDD of a periodic set with `k` (number of columns)
+    large enough such that the periodic set can be reconstructed from
+    the PDD.
 
     Parameters
     ----------
@@ -330,7 +331,7 @@ def PDD_reconstructable(
 
 
 def PPC(periodic_set: PeriodicSetType) -> float:
-    r"""The point packing coefficient (PPC) of ``periodic_set``.
+    r"""Return the point packing coefficient (PPC) of ``periodic_set``.
 
     The PPC is a constant of any periodic set determining the
     asymptotic behaviour of its AMD and PDD. As
@@ -380,7 +381,7 @@ def AMD_estimate(
         periodic_set: PeriodicSetType,
         k: int
 ) -> npt.NDArray[np.float64]:
-    r"""Calculates an estimate of AMD based on the PPC.
+    r"""Calculate an estimate of AMD based on the PPC.
 
     Parameters
     ----------
@@ -403,10 +404,10 @@ def AMD_estimate(
 
 
 def _get_structure(periodic_set: PeriodicSetType) -> Tuple[npt.NDArray]:
-    """``periodic_set`` is either a
-    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or a tuple of
-    :class:`numpy.ndarray` s (motif, cell). If present, extracts the
-    asymmetric unit and wyckoff multiplicities from periodic_set.
+    """Extract the motif and cell, and if present the asymmetric unit
+    and Wyckoff multiplicities, from a periodic set. ``periodic_set``
+    can be a :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`, or a
+    tuple of :class:`numpy.ndarray` s (motif, cell).
     """
 
     if isinstance(periodic_set, PeriodicSet):
@@ -429,10 +430,10 @@ def _get_structure(periodic_set: PeriodicSetType) -> Tuple[npt.NDArray]:
 
 
 def _collapse_into_groups(overlapping: npt.NDArray) -> list:
-    """The vector ``overlapping`` indicates for each pair of items in a
+    """Return a list of groups of indices where all indices in the same
+    group overlap. ``overlapping`` indicates for each pair of items in a
     set whether or not the items overlap, in the shape of a condensed
-    distance matrix. Returns a list of groups of indices where all items
-    in the same group overlap.
+    distance matrix.
     TODO: This function is not efficient.
     """
 

@@ -19,13 +19,13 @@ def reconstruct(
         cell: npt.NDArray
 ) -> npt.NDArray:
     """Reconstruct a motif from a PDD and unit cell. This function will
-    only work if pdd has enough columns, such that the last column has
-    all values larger than 2 times the diameter of the unit cell. It
+    only work if ``pdd`` has enough columns, such that the last column
+    has all values larger than 2 times the diameter of the unit cell. It
     also expects an uncollapsed PDD with no weights column. Do not use
-    amd.PDD to compute the PDD for this function, instead use
-    amd.PDD_reconstructable which returns a version of the PDD which is
-    passable to this function. Currently quite slow and run time varys a
-    lot depending on input.
+    ``amd.PDD`` to compute the PDD for this function, instead use
+    ``amd.PDD_reconstructable`` which returns a version of the PDD which
+    is passable to this function. This function is quite slow and run
+    time may vary a lot arbitrarily depending on input.
 
     Parameters
     ----------
@@ -177,8 +177,7 @@ def _find_further_point(shared_dists1, shared_dists2, bases, cloud, q, prec):
 
 
 def _neighbour_set(cell, prec):
-    """(superset of) the neighbour set of origin for a lattice.
-    """
+    """(A superset of) the neighbour set of origin for a lattice."""
 
     k_ = 5
     coeffs = np.array(list(product((-1, 0, 1), repeat=cell.shape[0])))
@@ -229,7 +228,7 @@ def _neighbour_set(cell, prec):
 
 
 def _four_sphere_pairwise_intersecion(p1, p2, p3, r1, r2, r3, abs_val, prec):
-    # True/False intersection of four spheres, one centered at the origin
+    """Return True if four spheres intersect at a point."""
 
     if np.linalg.norm(p1) > abs_val + r1 - prec:
         return False
@@ -248,7 +247,8 @@ def _four_sphere_pairwise_intersecion(p1, p2, p3, r1, r2, r3, abs_val, prec):
 
 @numba.njit()
 def _bilaterate(p1, p2, r1, r2, abs_val, prec):
-    # Intersection of 3 circles, one centered at the origin (radius abs_val)
+    """Return True if three circles intersect at a point."""
+
     d = np.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2)
     v = (p2 - p1) / d
 
@@ -279,16 +279,17 @@ def _bilaterate(p1, p2, r1, r2, abs_val, prec):
 
 @numba.njit()
 def _trilaterate(p1, p2, p3, r1, r2, r3, abs_val, prec):
-    # Intersection of four spheres, one centered at the origin (radius abs_val)
+    """Return the intersection of four spheres."""
+
     temp1 = p2 - p1
     d = np.linalg.norm(temp1)
     e_x = temp1 / d
     temp2 = p3 - p1
-    i = np.core.dot(e_x, temp2)
+    i = np.dot(e_x, temp2)
     temp3 = temp2 - i * e_x
     e_y = temp3 / np.linalg.norm(temp3)
 
-    j = np.core.dot(e_y, temp2)
+    j = np.dot(e_y, temp2)
     x = (r1 * r1 - r2 * r2 + d * d) / (2 * d)
     y = (r1 * r1 - r3 * r3 - 2 * i * x + i * i + j * j) / (2 * j)
     temp4 = r1 * r1 - x * x - y * y
@@ -309,15 +310,15 @@ def _trilaterate(p1, p2, p3, r1, r2, r3, abs_val, prec):
 
 
 def _unique_within_tol(arr, prec):
-    # get only unique values in a vector within a tolerance
+    """Return only unique values in a vector within ``prec``."""
     return arr[~np.any(np.triu(np.abs(arr[:, None] - arr) < prec, 1), axis=0)]
 
 
 def _remove_vals(vec, vals_to_remove, prec):
-    # remove specified values in vec, within tol
+    """Remove specified values in vec, within ``prec``."""
     return vec[~np.any(np.abs(vec[:, None] - vals_to_remove) < prec, axis=-1)]
 
 
 def _shared_vals(v1, v2, prec):
-    # get values shared between v1, v2 within tol
+    """Return values shared between v1, v2 within ``prec``."""
     return v1[np.argwhere(np.abs(v1[:, None] - v2) < prec)[:, 0]]
