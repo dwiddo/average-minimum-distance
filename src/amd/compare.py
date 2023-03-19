@@ -5,6 +5,7 @@ from typing import List, Optional, Union, Tuple
 from functools import partial
 from itertools import combinations
 import os
+from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
@@ -21,8 +22,8 @@ from .utils import neighbours_from_distance_matrix
 
 
 def compare(
-        crystals: Union[str, PeriodicSetType, List],
-        crystals_: Optional[Union[str, PeriodicSetType, List]] = None,
+        crystals,
+        crystals_=None,
         by: str = 'AMD',
         k: int = 100,
         nearest: Optional[int] = None,
@@ -185,6 +186,7 @@ def compare(
         **kwargs
     }
 
+    # Get list(s) of periodic sets from first input
     crystals = _unwrap_periodicset_list(crystals, **reader_kwargs)
     if not crystals:
         raise ValueError(
@@ -197,6 +199,7 @@ def compare(
     else:
         container = crystals
 
+    # Get list(s) of periodic sets from second input if given
     if crystals_ is None:
         names_ = names
         container_ = None
@@ -566,21 +569,50 @@ def _unwrap_periodicset_list(psets_or_str, **reader_kwargs):
     PeriodicSets. Accepts PeriodicSets, paths (to files or folders),
     refcodes or lists of those."""
 
-    def _extract_periodicsets(item, **reader_kwargs):
-        """Given a path, PeriodicSet, tuple or CSD refcodes, return a
-        list of the PeriodicSet(s)."""
-        if isinstance(item, PeriodicSet):
-            return [item]
-        if isinstance(item, Tuple):
-            return [PeriodicSet(item[0], item[1])]
-        if os.path.isfile(item) or os.path.isdir(item):
-            reader_kwargs.pop('families', None)
-            reader_kwargs.pop('refcodes', None)
-            return list(CifReader(item, **reader_kwargs))
-        reader_kwargs.pop('reader', None)
-        return list(CSDReader(item, **reader_kwargs))
-
     if isinstance(psets_or_str, list):
         return [s for item in psets_or_str
                 for s in _extract_periodicsets(item, **reader_kwargs)]
     return _extract_periodicsets(psets_or_str, **reader_kwargs)
+
+
+def _extract_periodicsets(item, **reader_kwargs):
+    """Given a path, PeriodicSet, tuple or list of CSD refcodes, return
+    a list of the PeriodicSet(s)."""
+
+    if isinstance(item, PeriodicSet):
+        return [item]
+    if isinstance(item, Tuple):
+        return [PeriodicSet(item[0], item[1])]
+
+    try:
+        path = Path(item)
+    except TypeError:
+        raise ValueError(
+            'amd.compare() expected a str, os.PathLike or amd.PeriodicSet, '
+            f"but was given type '{item.__class__.__name__}'"
+        )
+
+    if path.is_file() or path.is_dir():
+        reader_kwargs.pop('families', None)
+        reader_kwargs.pop('refcodes', None)
+        return list(CifReader(path, **reader_kwargs))
+    elif isinstance(item, str):
+        reader_kwargs.pop('reader', None)
+        try:
+            return list(CSDReader(item.upper(), **reader_kwargs))
+        except ImportError:
+            raise ValueError(
+                'amd.compare() expected a path, os.PathLike or '
+                f"amd.PeriodicSet, but was given '{item}'; to "
+                'interpret as a CSD refcode, install csd-python-api'
+            )
+        except:
+            raise ValueError(
+                f'amd.compare() expected a path, os.PathLike, amd.PeriodicSet '
+                f"or CSD refcode, but was given '{item}'"
+            )
+    else:
+        raise ValueError(
+            'amd.compare() expected a path, os.PathLike, amd.PeriodicSet or '
+            f"CSD refcode, but was given type '{item.__class__.__name__}'"
+        )

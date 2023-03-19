@@ -18,24 +18,22 @@ def nearest_neighbours(
         x: npt.NDArray,
         k: int
 ) -> Tuple[npt.NDArray[np.float64], ...]:
-    """Find the ``k`` nearest neighbours in a periodic set to points in
+    """Find the ``k`` nearest neighbours in a periodic set for points in
     ``x``.
 
-    Given a periodic set described by ``motif`` and ``cell``, a 'query'
-    set of points ``x`` and an integer ``k``, find the first ``k``
-    nearest neighbours in the periodic set for every point in ``x``.
-    Return the distances to neighbours, the point cloud generated during
-    the search and the indices of which points in the cloud were the
+    Given a periodic set described by ``motif`` and ``cell``, a query
+    set of points ``x`` and an integer ``k``, find the ``k`` nearest
+    neighbours in the periodic set for all points in ``x``. Return
+    distances to neighbours in order, the point cloud generated during
+    the search and the indices of which points in the cloud are the
     neighbours of points in ``x``.
 
     Parameters
     ----------
     motif : :class:`numpy.ndarray`
-        Orthogonal (Cartesian) coordinates of the motif, shape
-        (no points, dims).
+        Cartesian coordinates of the motif, shape (no points, dims).
     cell : :class:`numpy.ndarray`
-        Orthogonal (Cartesian) coordinates of the unit cell, shape
-        (dims, dims).
+        The unit cell as a square array, shape (dims, dims).
     x : :class:`numpy.ndarray`
         Array of points to query for neighbours. For AMD/PDD invariants
         this is the motif, or more commonly an asymmetric unit of it.
@@ -58,33 +56,44 @@ def nearest_neighbours(
         to ``x[m]`` is ``cloud[inds[m][n]]``.
     """
 
-    max_cdist = np.amax(cdist(x, motif))
-    # generate initial cloud of points, at least k + two more layers
-    int_lattice_gen = _generate_integer_lattice(cell.shape[0])
+    # Generate an initial cloud of enough points, at least k
+    int_lat_generator = _generate_integer_lattice(cell.shape[0])
     n_points = 0
     cloud = []
     while n_points <= k:
-        layer = _int_lattice_to_cloud(motif, cell, next(int_lattice_gen))
-        n_points += layer.shape[0]
+        layer = next(int_lat_generator)
+        n_points += layer.shape[0] * len(motif)
         cloud.append(layer)
-    for _ in range(2):
-        cloud.append(_int_lattice_to_cloud(motif, cell, next(int_lattice_gen)))
-    cloud = np.concatenate(cloud)
 
-    # find k nearest neighbours in cloud of points in x
+    # Add one layer from the lattice generator, on average this is faster
+    cloud.append(next(int_lat_generator))
+    cloud = _int_lattice_to_cloud(motif, cell, np.concatenate(cloud))
+
+    # Find k neighbours for points in x
     dists_, inds = KDTree(
         cloud, leafsize=30, compact_nodes=False, balanced_tree=False
     ).query(x, k=k)
-    dists = np.zeros_like(dists_, dtype=np.float64)
 
-    # add layers & find k nearest neighbours until they don't change
-    while not np.allclose(dists, dists_, atol=1e-10, rtol=0):
-        dists = dists_
-        bound = np.amax(dists[:, -1]) + max_cdist
-        lattice = _close_lattice_points(next(int_lattice_gen), cell, bound)
+    # Generate more layers of lattice points until they are too large to
+    # contain nearer neighbours than have already been found. For a lattice
+    # point l, points in l + motif further away from x than |l| - max|p-p'|
+    # (p in x, p' in motif), this is used to check if l is too far away.
+    max_cdist = np.amax(cdist(x, motif))
+
+    lattice_layers = []
+    while True:
+        lattice = _close_lattice_points(
+            next(int_lat_generator), cell, dists_[:, -1], max_cdist
+        )
         if lattice.size == 0:
             break
-        cloud = np.vstack((cloud, _lattice_to_cloud(motif, lattice)))
+        lattice_layers.append(lattice)
+
+    if lattice_layers:
+        lattice_layers = np.concatenate(lattice_layers)
+        cloud = np.vstack((
+            cloud[np.unique(inds)], _lattice_to_cloud(motif, lattice_layers)
+        ))
         dists_, inds = KDTree(
             cloud, leafsize=30, compact_nodes=False, balanced_tree=False
         ).query(x, k=k)
@@ -133,12 +142,12 @@ def _generate_integer_lattice(dims: int) -> Iterable[npt.NDArray[np.float64]]:
                 break
             positive_int_lattice.extend(batch)
 
-        yield _reflect_positive_lattice(np.array(positive_int_lattice))
+        yield _reflect_positive_integer_lattice(np.array(positive_int_lattice))
         d += 1
 
 
 @numba.njit(cache=True)
-def _reflect_positive_lattice(
+def _reflect_positive_integer_lattice(
         positive_int_lattice: npt.NDArray
 ) -> npt.NDArray[np.float64]:
     """Reflect points in the positive quadrant across all combinations
@@ -152,22 +161,21 @@ def _reflect_positive_lattice(
 
     for n_reflections in range(1, dims + 1):
 
-        indices = np.arange(n_reflections)
-        batches.extend(_reflect_points(positive_int_lattice, indices))
+        axes = np.arange(n_reflections)
+        batches.extend(_reflect_in_axes(positive_int_lattice, axes))
 
         while True:
             i = n_reflections - 1
             for _ in range(n_reflections):
-                if indices[i] != i + dims - n_reflections:
+                if axes[i] != i + dims - n_reflections:
                     break
                 i -= 1
             else:
                 break
-            indices[i] += 1
+            axes[i] += 1
             for j in range(i + 1, n_reflections):
-                indices[j] = indices[j-1] + 1
-
-            batches.extend(_reflect_points(positive_int_lattice, indices))
+                axes[j] = axes[j-1] + 1
+            batches.extend(_reflect_in_axes(positive_int_lattice, axes))
 
     int_lattice = np.empty(shape=(len(batches), dims), dtype=np.float64)
     for i in range(len(batches)):
@@ -177,25 +185,26 @@ def _reflect_positive_lattice(
 
 
 @numba.njit(cache=True)
-def _reflect_points(
+def _reflect_in_axes(
         positive_int_lattice: npt.NDArray,
-        indices: npt.NDArray
+        axes: npt.NDArray
 ) -> npt.NDArray:
     """Reflect points in `positive_int_lattice` in the axes described by
-    `indices`. Does not duplicate invariant points.
+    `axes`, without including invariant points.
     """
 
-    not_on_axes = (positive_int_lattice[:, indices] == 0).sum(axis=-1) == 0
+    not_on_axes = (positive_int_lattice[:, axes] == 0).sum(axis=-1) == 0
     int_lattice = positive_int_lattice[not_on_axes]
-    int_lattice[:, indices] *= -1
+    int_lattice[:, axes] *= -1
     return int_lattice
 
 
 @numba.njit(cache=True)
 def _close_lattice_points(
-    int_lattice: npt.NDArray,
-    cell: npt.NDArray,
-    lattice_norm_bound: float
+        int_lattice: npt.NDArray,
+        cell: npt.NDArray,
+        max_nn_dists: npt.NDArray,
+        max_cdist: float
 ) -> npt.NDArray[np.float64]:
     """Given integer lattice points, a unit cell, ``max_cdist`` (max of
     cdist(x, motif)) and ``max_nn_dist`` (max of the dists to k-th
@@ -205,13 +214,14 @@ def _close_lattice_points(
     """
 
     lattice = int_lattice @ cell
-    return lattice[np.sqrt(np.sum(lattice ** 2, axis=-1)) < lattice_norm_bound]
+    bound = np.amax(max_nn_dists) + max_cdist
+    return lattice[np.sqrt(np.sum(lattice ** 2, axis=-1)) < bound]
 
 
 @numba.njit(cache=True)
 def _lattice_to_cloud(
-    motif: npt.NDArray,
-    lattice: npt.NDArray
+        motif: npt.NDArray,
+        lattice: npt.NDArray
 ) -> npt.NDArray[np.float64]:
     """Transform a batch of non-integer lattice points (generated by
     _generate_integer_lattice then mutliplied by the cell) into a cloud
@@ -234,20 +244,11 @@ def _int_lattice_to_cloud(
         cell: npt.NDArray,
         int_lattice: npt.NDArray
 ) -> npt.NDArray[np.float64]:
-    """Transform a batch of integer lattice points (given by
-    _generate_integer_lattice) into a cloud of points from a periodic
-    set described by motif and cell.
+    """Transform a batch of non-integer lattice points (generated by
+    _generate_integer_lattice then mutliplied by the cell) into a cloud
+    of points from a periodic set with the motif and cell.
     """
-
-    m = len(motif)
-    lattice = int_lattice @ cell
-    layer = np.empty((m * len(lattice), cell.shape[0]), dtype=np.float64)
-    i1 = 0
-    for translation in lattice:
-        i2 = i1 + m
-        layer[i1:i2] = motif + translation
-        i1 = i2
-    return layer
+    return _lattice_to_cloud(motif, int_lattice @ cell)
 
 
 @numba.njit(cache=True)
@@ -274,10 +275,11 @@ def nearest_neighbours_minval(
     
     max_cdist = np.amax(cdist(motif, motif))
     # generate initial cloud of points, at least k + two more layers
-    int_lattice_gen = _generate_integer_lattice(cell.shape[0])
+    int_lat_generator = _generate_integer_lattice(cell.shape[0])
+    
     cloud = []
     for _ in range(3):
-        cloud.append(_int_lattice_to_cloud(motif, cell, next(int_lattice_gen)))
+        cloud.append(_lattice_to_cloud(motif, next(int_lat_generator) @ cell))
     cloud = np.concatenate(cloud)
 
     dists_, inds = KDTree(
@@ -292,7 +294,7 @@ def nearest_neighbours_minval(
             if np.array_equal(dists[:, :col], dists_[:, :col]):
                 break
         dists = dists_
-        lattice = next(int_lattice_gen) @ cell
+        lattice = next(int_lat_generator) @ cell
         closest_dist_bound = np.linalg.norm(lattice, axis=-1) - max_cdist
         is_close = closest_dist_bound <= np.amax(dists_[:, -1])
         if not np.any(is_close):

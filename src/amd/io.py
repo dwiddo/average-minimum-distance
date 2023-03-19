@@ -5,12 +5,14 @@ the crystal which can be passed to :func:`amd.AMD() <.calculate.AMD>`
 and :func:`amd.PDD() <.calculate.PDD>`.
 """
 
+import warnings
 import os
 import re
 import functools
-import warnings
 import errno
 import math
+import json
+from pathlib import Path
 from typing import Iterable, Iterator, Optional, Union, Callable, Tuple, List
 
 import numpy as np
@@ -25,51 +27,22 @@ from .periodicset import PeriodicSet
 def _custom_warning(message, category, filename, lineno, *args, **kwargs):
     return f'{category.__name__}: {message}\n'
 
-
 warnings.formatwarning = _custom_warning
 
+_pkg_path = Path(__file__).absolute().parent
+
+with open(str(_pkg_path / 'atomic_numbers.json')) as f:
+    _ATOMIC_NUMBERS = json.load(f)
+
+with open(str(_pkg_path / 'cif_tags.json')) as f:
+    _CIF_TAGS = json.load(f)
 
 _EQ_SITE_TOL = 1e-3
-_CIF_TAGS = {
-    'cellpar': [
-        '_cell_length_a', '_cell_length_b', '_cell_length_c',
-        '_cell_angle_alpha', '_cell_angle_beta', '_cell_angle_gamma',
-    ],
-    'atom_site_fract': [
-        '_atom_site_fract_x', '_atom_site_fract_y', '_atom_site_fract_z',
-    ],
-    'atom_site_cartn': [
-        '_atom_site_cartn_x', '_atom_site_cartn_y', '_atom_site_cartn_z',
-    ],
-    'atom_symbol': [
-        '_atom_site_type_symbol', '_atom_site_label',
-    ],
-    'symop': [
-        '_symmetry_equiv_pos_as_xyz', '_space_group_symop_operation_xyz',
-        '_space_group_symop.operation_xyz', '_symmetry_equiv_pos_as_xyz_',
-        '_space_group_symop_operation_xyz_',
-    ],
-    'spacegroup_name': [
-        '_space_group_name_H-M_alt', '_symmetry_space_group_name_H-M',
-        '_symmetry_space_group_name_H_M', '_symmetry_space_group_name_h-m',
-        # does not work with gemmi?
-        # '_space_group_name_Hall', '_symmetry_space_group_name_hall',
-    ],
-    'spacegroup_number': [
-        '_space_group_IT_number', '_symmetry_Int_Tables_number',
-        '_space_group_IT_number_', '_symmetry_Int_Tables_number_',
-    ]
-}
 
 
 class _Reader:
     """Base reader class.
     """
-
-    _iterator: Iterator
-    _converter: Callable[..., PeriodicSet]
-    show_warnings: bool
-    _progress_bar: Optional[tqdm.tqdm]
 
     def __init__(
             self,
@@ -210,7 +183,7 @@ class CifReader(_Reader):
 
     def __init__(
             self,
-            path: str,
+            path: Union[str, os.PathLike],
             reader: str = 'gemmi',
             remove_hydrogens: bool = False,
             disorder: str = 'skip',
@@ -299,9 +272,11 @@ class CifReader(_Reader):
                 f"(passed '{reader}')"
             )
 
-        if os.path.isfile(path):
-            iterable = file_parser(path)
-        elif os.path.isdir(path):
+        path = Path(path)
+
+        if path.is_file():
+            iterable = file_parser(str(path))
+        elif path.is_dir():
             iterable = CifReader._dir_generator(path, file_parser, extensions)
         else:
             raise FileNotFoundError(
@@ -312,20 +287,21 @@ class CifReader(_Reader):
 
     @staticmethod
     def _dir_generator(
-            path: str,
+            path: os.PathLike,
             file_parser: Callable,
             extensions: Iterable
     ) -> Iterator:
-        for file in os.listdir(path):
-            suff = os.path.splitext(file)[1][1:]
-            if suff.lower() in extensions:
-                try:
-                    iterable = file_parser(os.path.join(path, file))
-                    yield from iterable
-                except Exception as e:
-                    warnings.warn(
-                        f'Error parsing "{file}", skipping file: {str(e)}'
-                    )
+        for file_path in path.iterdir():
+            if not file_path.is_file():
+                continue
+            if file_path.suffix.lower() not in extensions:
+                continue
+            try:
+                yield from file_parser(str(file_path))
+            except Exception as e:
+                warnings.warn(
+                    f'Error parsing "{str(file_path)}", skipping: {str(e)}'
+                )
 
 
 class CSDReader(_Reader):
@@ -452,11 +428,8 @@ class CSDReader(_Reader):
             yield from entry_reader
         else:
             for refcode in refcodes:
-                try:
-                    entry = entry_reader.entry(refcode)
-                    yield entry
-                except RuntimeError:
-                    warnings.warn(f'{refcode} not found in database')
+                entry = entry_reader.entry(refcode)
+                yield entry
 
     @staticmethod
     def _refcodes_from_families_ccdc(refcode_families: List[str]) -> List[str]:
@@ -578,9 +551,7 @@ def periodicset_from_gemmi_block(
     # Atomic types
     if '_atom_site_type_symbol' in loop_dict:
         asym_syms = [as_string(s) for s in loop_dict['_atom_site_type_symbol']]
-        asym_types = []
-        for s in asym_syms:
-            asym_types.append(gemmi.Element(s).atomic_number if s else 0)
+        asym_types = [_ATOMIC_NUMBERS[s] if s else 0 for s in asym_syms]
     else:
         warnings.warn('missing atomic types will be labelled 0')
         asym_types = [0] * len(asym_unit)
@@ -758,9 +729,7 @@ def periodicset_from_ase_cifblock(
                 num = 0
             else:
                 sym = re.search(r'([A-Z][a-z]?)', label).group(0)
-                if sym == 'D':
-                    sym = 'H'
-                num = ase.data.atomic_numbers[sym]
+                num = _ATOMIC_NUMBERS[sym]
             asym_types.append(num)
 
     # Find where sites have disorder if necassary
@@ -981,7 +950,6 @@ def periodicset_from_pymatgen_cifblock(
     """
 
     from pymatgen.io.cif import str2float
-    import pymatgen.core.periodic_table as periodic_table
 
     odict = block.data
 
@@ -1015,9 +983,7 @@ def periodicset_from_pymatgen_cifblock(
                     num = 0
                 else:
                     sym = re.search(r'([A-Z][a-z]?)', label).group(0)
-                    if sym == 'D':
-                        sym = 'H'
-                    num = periodic_table.Element[sym].number
+                    num = _ATOMIC_NUMBERS[sym]
                 asym_types.append(num)
             break
     else:
@@ -1619,10 +1585,7 @@ def _get_syms_pymatgen(
     """
 
     from pymatgen.symmetry.groups import SpaceGroup
-    from pymatgen.core.operations import SymmOp
     import pymatgen.io.cif
-
-    symops = []
 
     # Try xyz symmetry operations
     for symmetry_label in _CIF_TAGS['symop']:
@@ -1631,40 +1594,31 @@ def _get_syms_pymatgen(
             continue
         if isinstance(xyz, str):
             xyz = [xyz]
+        return _parse_sitesyms(xyz)
+
+    symops = []
+    # Try spacegroup symbol
+    for symmetry_label in _CIF_TAGS['spacegroup_name']:
+        sg = data.get(symmetry_label)
+        if not sg:
+            continue
+        sg = re.sub(r'[\s_]', '', sg)
         try:
-            symops = [SymmOp.from_xyz_string(s) for s in xyz]
+            spg = pymatgen.io.cif.space_groups.get(sg)
+            if not spg:
+                continue
+            symops = SpaceGroup(spg).symmetry_ops
             break
         except ValueError:
+            pass
+        try:
+            for d in pymatgen.io.cif._get_cod_data():
+                if sg == re.sub(r'\s+', '', d['hermann_mauguin']):
+                    return _parse_sitesyms(d['symops'])
+        except Exception:
             continue
-
-    # Try spacegroup symbol
-    if not symops:
-        for symmetry_label in _CIF_TAGS['spacegroup_name']:
-            sg = data.get(symmetry_label)
-            if not sg:
-                continue
-            sg = re.sub(r'[\s_]', '', sg)
-
-            try:
-                spg = pymatgen.io.cif.space_groups.get(sg)
-                if not spg:
-                    continue
-                symops = SpaceGroup(spg).symmetry_ops
-                break
-            except ValueError:
-                pass
-
-            try:
-                for d in pymatgen.io.cif._get_cod_data():
-                    if sg == re.sub(r'\s+', '', d['hermann_mauguin']):
-                        symops = [SymmOp.from_xyz_string(s)
-                                  for s in d['symops']]
-                        break
-            except Exception:
-                continue
-
-            if symops:
-                break
+        if symops:
+            break
 
     # Try international number
     if not symops:
@@ -1672,7 +1626,6 @@ def _get_syms_pymatgen(
             num = data.get(symmetry_label)
             if not num:
                 continue
-
             try:
                 i = int(pymatgen.io.cif.str2float(num))
                 symops = SpaceGroup.from_int_number(i).symmetry_ops
@@ -1682,7 +1635,7 @@ def _get_syms_pymatgen(
 
     if not symops:
         warnings.warn('no symmetry data found, defaulting to P1')
-        symops = [SymmOp.from_xyz_string('x,y,z')]
+        return _parse_sitesyms(['x,y,z'])
 
     rotations = [op.rotation_matrix for op in symops]
     translations = [op.translation_vector for op in symops]

@@ -232,7 +232,7 @@ def find_entering_edges(B, e, f, tails, heads, costs, potentials, flows):
             for i, v in enumerate(range(f, e)):
                 edge_inds[i] = v
             for i in range(l):
-                edge_inds[e - f + i] = i
+                edge_inds[e-f+i] = i
 
         # Find the first edge with the lowest reduced cost.
         f = l
@@ -324,7 +324,7 @@ def find_cycle(i, p, q, size, edge, parent):
     for j in range(len_cycle_nodes):
         cycle_nodes_[j] = cycle_nodes[-(j+1)]
     for j in range(add_to_c_nodes):
-        cycle_nodes_[len_cycle_nodes + j] = cycle_nodes_rev[j]
+        cycle_nodes_[len_cycle_nodes+j] = cycle_nodes_rev[j]
 
     len_cycle_edges = len(cycle_edges)
     len_cycle_edges_ = len_cycle_edges + len(cycle_edges_rev)
@@ -401,7 +401,7 @@ def make_root(q, parent, size, last, prev, next_node, edge):
 
     for i in range(len(ancestors) - 1):
         p = ancestors[i]
-        q = ancestors[i + 1]
+        q = ancestors[i+1]
         size_p = size[p]
         last_p = last[p]
         prev_q = prev[q]

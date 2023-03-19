@@ -55,13 +55,6 @@ class PeriodicSet:
         Array of atomic numbers of motif points.
     """
 
-    motif: npt.NDArray
-    cell: npt.NDArray
-    name: Optional[str]
-    asymmetric_unit: Optional[npt.NDArray]
-    wyckoff_multiplicities: Optional[npt.NDArray]
-    types: Optional[npt.NDArray]
-
     def __init__(
             self,
             motif: npt.NDArray,
@@ -94,19 +87,19 @@ class PeriodicSet:
         if self.ndim == 1:
             cellpar_str = f', cell={self.cell[0][0]})'
         if self.ndim == 2:
-            cellpar = np.round(cell_to_cellpar_2D(self.cell), 2)
+            cellpar = cell_to_cellpar_2D(self.cell)
             cellpar_str = ','.join(str(round(p, 2)) for p in cellpar)
             cellpar_str = f', abα={cellpar_str})'
         elif self.ndim == 3:
-            cellpar = np.round(cell_to_cellpar(self.cell), 2)
+            cellpar = cell_to_cellpar(self.cell)
             cellpar_str = ','.join(str(round(p, 2)) for p in cellpar)
             cellpar_str = f', abcαβγ={cellpar_str})'
         else:
             cellpar_str = ')'
 
         return (
-            f'PeriodicSet(name={self.name}, motif shape {self.motif.shape} '
-            f'({n_asym_sites} asym sites){cellpar_str}'
+            f'PeriodicSet(name={self.name}, motif shape {self.motif.shape}; '
+            f'{n_asym_sites} asym sites{cellpar_str}'
         )
 
     def __repr__(self):
@@ -179,7 +172,7 @@ class PeriodicSet:
         dims: int = 3
     ):
         """Return a :class:`PeriodicSet` with a chosen number of
-        randomly placed points, in random cell with edges between
+        randomly placed points, in a random cell with edges between
         ``length_bounds`` and angles between ``angle_bounds``.
         Dimensions 2 and 3 only.
         """
