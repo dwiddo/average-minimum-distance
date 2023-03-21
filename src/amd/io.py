@@ -90,6 +90,9 @@ class _Reader:
                 except ParseError as err:
                     msg = str(err)
 
+            if self._progress_bar is not None:
+                self._progress_bar.update(1)
+
             if msg:
                 warnings.warn(msg)
                 continue
@@ -97,9 +100,6 @@ class _Reader:
             for warning in warning_msgs:
                 msg = f'(name={periodic_set.name}) {warning.message}'
                 warnings.warn(msg, category=warning.category)
-
-            if self._progress_bar is not None:
-                self._progress_bar.update(1)
 
             return periodic_set
 
@@ -110,9 +110,7 @@ class _Reader:
         be parsed, return None.
         """
         items = list(self)
-        if not items:
-            return None
-        elif len(items) == 1:
+        if len(items) == 1:
             return items[0]
         return items
 
@@ -273,7 +271,6 @@ class CifReader(_Reader):
             )
 
         path = Path(path)
-
         if path.is_file():
             iterable = file_parser(str(path))
         elif path.is_dir():
@@ -548,26 +545,26 @@ def periodicset_from_gemmi_block(
     # recommended by pymatgen
     # asym_unit = _snap_small_prec_coords(asym_unit, 1e-4) 
 
-    # Atomic types
-    if '_atom_site_type_symbol' in loop_dict:
-        asym_syms = [as_string(s) for s in loop_dict['_atom_site_type_symbol']]
-        asym_types = [_ATOMIC_NUMBERS[s] if s else 0 for s in asym_syms]
-    else:
-        warnings.warn('missing atomic types will be labelled 0')
-        asym_types = [0] * len(asym_unit)
-
-    # Labels 
+    # Labels
     if '_atom_site_label' in loop_dict:
         labels = [as_string(label) for label in loop_dict['_atom_site_label']]
     else:
         labels = [''] * xyz_loop.length()
 
+    # Atomic types
+    if '_atom_site_type_symbol' in loop_dict:
+        asym_syms = [as_string(s) for s in loop_dict['_atom_site_type_symbol']]
+    else:
+        asym_syms = []
+        for l in labels:
+            sym = re.search(r'([A-Z][a-z]?)', l).group() if l else ''
+            asym_syms.append(sym)
+    asym_types = [_ATOMIC_NUMBERS[s] for s in asym_syms]
+
     # Occupancies
     if '_atom_site_occupancy' in loop_dict:
         occs = [as_number(occ) for occ in loop_dict['_atom_site_occupancy']]
-        occupancies = []
-        for occ in occs:
-            occupancies.append(1 if math.isnan(occ) else occ)
+        occupancies = [occ if not math.isnan(occ) else 1 for occ in occs]
     else:
         occupancies = [1] * xyz_loop.length()
 
