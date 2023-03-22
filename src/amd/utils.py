@@ -9,6 +9,7 @@ import numba
 from scipy.spatial.distance import squareform
 
 
+@numba.njit()
 def diameter(cell: npt.NDArray) -> float:
     """Return the diameter of a unit cell (given as a square matrix in
     orthogonal coordinates) in 3 or fewer dimensions. The diameter is
@@ -29,23 +30,19 @@ def diameter(cell: npt.NDArray) -> float:
     if dims == 1:
         return cell[0][0]
     if dims == 2:
-        diagonals = np.array([
-            cell[0] + cell[1],
-            cell[0] - cell[1]
-        ])
+        diagonals = np.empty((2, 2))
+        diagonals[0] = (cell[0] + cell[1]) ** 2
+        diagonals[1] = (cell[0] - cell[1]) ** 2
     elif dims == 3:
-        diagonals = np.array([
-            cell[0] + cell[1] + cell[2],
-            cell[0] + cell[1] - cell[2],
-            cell[0] - cell[1] + cell[2],
-            - cell[0] + cell[1] + cell[2]
-        ])
+        diagonals = np.empty((4, 3))
+        diagonals[0] = ( cell[0] + cell[1] + cell[2]) ** 2
+        diagonals[1] = ( cell[0] + cell[1] - cell[2]) ** 2
+        diagonals[2] = ( cell[0] - cell[1] + cell[2]) ** 2
+        diagonals[3] = (-cell[0] + cell[1] + cell[2]) ** 2
     else:
-        raise NotImplementedError(
-            'amd.diameter() only implemented for dimensions <= 3, passed '
-            f'{dims}'
-        )
-    return np.amax(np.linalg.norm(diagonals, axis=-1))
+        raise ValueError('amd.diameter() only implemented for dimensions <= 3')
+
+    return np.sqrt(np.amax(np.sum(diagonals, axis=-1)))
 
 
 @numba.njit()
@@ -240,7 +237,7 @@ def neighbours_from_distance_matrix(
             'returned by scipy.spatial.distance.pdist()'
         )
 
-    # inds are the indexes of nns: inds[i,j] is the j-th nn to point i
+    # inds are the indexes of nns: inds[i, j] is the j-th nn to point i
     nn_dm = np.take_along_axis(dm, inds, axis=-1)
     sorted_inds = np.argsort(nn_dm, axis=-1)
     inds = np.take_along_axis(inds, sorted_inds, axis=-1)
