@@ -29,15 +29,27 @@ def _custom_warning(message, category, filename, lineno, *args, **kwargs):
 
 warnings.formatwarning = _custom_warning
 
-_pkg_path = Path(__file__).absolute().parent
-
-with open(str(_pkg_path / 'atomic_numbers.json')) as f:
+with open(str(Path(__file__).absolute().parent / 'atomic_numbers.json')) as f:
     _ATOMIC_NUMBERS = json.load(f)
 
-with open(str(_pkg_path / 'cif_tags.json')) as f:
-    _CIF_TAGS = json.load(f)
-
 _EQ_SITE_TOL = 1e-3
+
+_CIF_TAGS = {
+    'cellpar': [
+        '_cell_length_a', '_cell_length_b', '_cell_length_c',
+        '_cell_angle_alpha', '_cell_angle_beta', '_cell_angle_gamma'],
+    'atom_site_fract': [
+        '_atom_site_fract_x', '_atom_site_fract_y', '_atom_site_fract_z'],
+    'atom_site_cartn': [
+        '_atom_site_Cartn_x', '_atom_site_Cartn_y', '_atom_site_Cartn_z'],
+    'symop': [
+        '_space_group_symop_operation_xyz', '_space_group_symop.operation_xyz',
+        '_symmetry_equiv_pos_as_xyz'],
+    'spacegroup_name': [
+        '_space_group_name_H-M_alt', '_symmetry_space_group_name_H-M'],
+    'spacegroup_number': [
+        '_space_group_IT_number', '_symmetry_Int_Tables_number']
+}
 
 
 class _Reader:
@@ -291,7 +303,7 @@ class CifReader(_Reader):
         for file_path in path.iterdir():
             if not file_path.is_file():
                 continue
-            if file_path.suffix.lower() not in extensions:
+            if file_path.suffix[1:].lower() not in extensions:
                 continue
             try:
                 yield from file_parser(str(file_path))
@@ -459,8 +471,7 @@ class CSDReader(_Reader):
 
 
 class ParseError(ValueError):
-    """Raised when an item cannot be parsed into a periodic set.
-    """
+    """Raised when an item cannot be parsed into a periodic set."""
     pass
 
 
@@ -509,14 +520,6 @@ def periodicset_from_gemmi_block(
     import gemmi
     from gemmi.cif import as_number, as_string, as_int
 
-    def _gemmi_loop_to_dict(gemmi_loop) -> dict:
-        """Convert a gemmi Loop object to a dict."""
-        tablified_loop = [[] for _ in range(len(gemmi_loop.tags))]
-        n_cols = gemmi_loop.width()
-        for i, item in enumerate(gemmi_loop.values):
-            tablified_loop[i % n_cols].append(item)
-        return {tag: l for tag, l in zip(gemmi_loop.tags, tablified_loop)}
-
     # Unit cell
     cellpar = [block.find_value(t) for t in _CIF_TAGS['cellpar']]
     if not all(isinstance(par, str) for par in cellpar):
@@ -527,20 +530,26 @@ def periodicset_from_gemmi_block(
     cell = cellpar_to_cell(cellpar)
 
     # Asymmetric unit coordinates
-    cartesian = False
     xyz_loop = block.find(_CIF_TAGS['atom_site_fract']).loop
     if xyz_loop is None:
         xyz_loop = block.find(_CIF_TAGS['atom_site_cartn']).loop
         if xyz_loop is None:
             raise ParseError(f'{block.name} has missing coordinate data')
-        cartesian = True
-    loop_dict = _gemmi_loop_to_dict(xyz_loop)
+        else:
+            raise ParseError(
+                f'{block.name} uses _atom_site_Cartn_ tags for coordinates, '
+                'only _atom_site_fract_ is supported'
+            )
+
+    tablified_loop = [[] for _ in range(len(xyz_loop.tags))]
+    n_cols = xyz_loop.width()
+    for i, item in enumerate(xyz_loop.values):
+        tablified_loop[i % n_cols].append(item)
+    loop_dict = {tag: l for tag, l in zip(xyz_loop.tags, tablified_loop)}
     xyz_str = [loop_dict[t] for t in _CIF_TAGS['atom_site_fract']]
     asym_unit = np.transpose(np.array(
         [[as_number(c) for c in coords] for coords in xyz_str]
     ))
-    if cartesian:
-        asym_unit = asym_unit @ np.linalg.inv(cell)
     asym_unit = np.mod(asym_unit, 1)
     # recommended by pymatgen
     # asym_unit = _snap_small_prec_coords(asym_unit, 1e-4) 
@@ -553,13 +562,13 @@ def periodicset_from_gemmi_block(
 
     # Atomic types
     if '_atom_site_type_symbol' in loop_dict:
-        asym_syms = [as_string(s) for s in loop_dict['_atom_site_type_symbol']]
+        symbols = [as_string(s) for s in loop_dict['_atom_site_type_symbol']]
     else:
-        asym_syms = []
+        symbols = []
         for l in labels:
             sym = re.search(r'([A-Z][a-z]?)', l).group() if l else ''
-            asym_syms.append(sym)
-    asym_types = [_ATOMIC_NUMBERS[s] for s in asym_syms]
+            symbols.append(sym)
+    asym_types = [_ATOMIC_NUMBERS[s] for s in symbols]
 
     # Occupancies
     if '_atom_site_occupancy' in loop_dict:
@@ -604,35 +613,40 @@ def periodicset_from_gemmi_block(
         asym_unit = asym_unit[keep_sites]
         asym_types = [sym for sym, keep in zip(asym_types, keep_sites) if keep]
 
-    # Symmetry operations
-    sitesym = []
+    # Symmetry operations, try xyz strings first
     for tag in _CIF_TAGS['symop']:
-        symop_loop = block.find_loop(tag).get_loop()
-        if symop_loop is not None:
-            sitesym = _gemmi_loop_to_dict(symop_loop)[tag]
+        sitesym = [v.str(0) for v in block.find([tag])]
+        if sitesym:
+            rot, trans = _parse_sitesyms(sitesym)
             break
-
-    if not sitesym:
-        # TODO: what can gemmi accept here? 
-        for tag in _CIF_TAGS['spacegroup_name']:
-            label_or_num = block.find_value(tag)
-            if label_or_num is not None:
-                label_or_num = as_string(label_or_num)
-                break
-        if label_or_num is None:
-            for tag in _CIF_TAGS['spacegroup_number']:
-                label_or_num = block.find_value(tag)
-                if label_or_num is not None:
-                    label_or_num = as_int(label_or_num)
-                    break
-        if label_or_num is None:
-            warnings.warn('no symmetry data found, defaulting to P1')
-            label_or_num = 1
-        ops = list(gemmi.SpaceGroup(label_or_num).operations())
-        rot = np.array([np.array(o.rot) / o.DEN for o in ops])
-        trans = np.array([np.array(o.tran) / o.DEN for o in ops])
     else:
-        rot, trans = _parse_sitesyms(sitesym)
+        # Try spacegroup name; can be a pair or in a loop
+        spg = None
+        for tag in _CIF_TAGS['spacegroup_name']:
+            for value in block.find([tag]):
+                try:
+                    # Some names cannot be parsed by gemmi.SpaceGroup
+                    spg = gemmi.SpaceGroup(value.str(0))
+                    break
+                except ValueError:
+                    continue
+            if spg is not None:
+                break
+
+        if spg is None:
+            # Try international number
+            for tag in _CIF_TAGS['spacegroup_number']:
+                spg_num = block.find_value(tag)
+                if spg_num is not None:
+                    spg_num = as_int(spg_num)
+                    break
+            else:
+                warnings.warn('no symmetry data found, defaulting to P1')
+                spg_num = 1
+            spg = gemmi.SpaceGroup(spg_num)
+
+        rot = np.array([np.array(o.rot) / o.DEN for o in spg.operations()])
+        trans = np.array([np.array(o.tran) / o.DEN for o in spg.operations()])
 
     frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
     _, wyc_muls = np.unique(invs, return_counts=True)
@@ -704,30 +718,37 @@ def periodicset_from_ase_cifblock(
     cell = cellpar_to_cell(np.array(cellpar))
 
     # Asymmetric unit coordinates. ase removes uncertainty brackets
-    cartesian = False
-    asym_unit = [block.get(name) for name in _CIF_TAGS['atom_site_fract']]
+    asym_unit = [block.get(tag) for tag in _CIF_TAGS['atom_site_fract']]
     if None in asym_unit:
-        asym_unit = [block.get(name) for name in _CIF_TAGS['atom_site_cartn']]
+        asym_unit = [
+            block.get(tag.lower()) for tag in _CIF_TAGS['atom_site_cartn']
+        ]
         if None in asym_unit:
             raise ParseError(f'{block.name} has missing coordinates')
-        cartesian = True
+        else:
+            raise ParseError(
+                f'{block.name} uses _atom_site_Cartn_ tags for coordinates, '
+                'only _atom_site_fract_ is supported'
+            )
     asym_unit = list(zip(*asym_unit))
 
+    # Labels
+    asym_labels = block.get('_atom_site_label')
+    if asym_labels is None:
+        asym_labels = [''] * len(asym_unit)
+
     # Atomic types
-    asym_symbols = block._get_any(_CIF_TAGS['atom_symbol'])
-    if asym_symbols is None:
-        warnings.warn('missing atomic types will be labelled 0')
-        asym_types = [0] * len(asym_unit)
-    else:
-        asym_types = []
+    asym_symbols = block.get('_atom_site_type_symbol')
+    if asym_symbols is not None:
+        asym_syms = []
         for label in asym_symbols:
-            if label in ('.', '?'):
-                warnings.warn('missing atomic types will be labelled 0')
-                num = 0
+            if label not in ('.', '?'):
+                asym_syms.append(re.search(r'([A-Z][a-z]?)', label).group())
             else:
-                sym = re.search(r'([A-Z][a-z]?)', label).group(0)
-                num = _ATOMIC_NUMBERS[sym]
-            asym_types.append(num)
+                asym_syms.append('')
+    else:
+        asym_syms = [''] * len(asym_unit)
+    asym_types = [_ATOMIC_NUMBERS[s] for s in asym_syms]
 
     # Find where sites have disorder if necassary
     has_disorder = []
@@ -735,10 +756,7 @@ def periodicset_from_ase_cifblock(
         occupancies = block.get('_atom_site_occupancy')
         if occupancies is None:
             occupancies = [1] * len(asym_unit)
-        labels = block.get('_atom_site_label')
-        if labels is None:
-            labels = [''] * len(asym_unit)
-        for lab, occ in zip(labels, occupancies):
+        for lab, occ in zip(asym_labels, occupancies):
             has_disorder.append(_has_disorder(lab, occ))
 
     # Remove sites with ?, . or other invalid string for coordinates
@@ -779,12 +797,7 @@ def periodicset_from_ase_cifblock(
     asym_types = [t for i, t in enumerate(asym_types) if i not in remove_sites]
     if len(asym_unit) == 0:
         raise ParseError(f'{block.name} has no valid sites')
-    asym_unit = np.array(asym_unit)
-
-    # If Cartesian coords were given, convert to scaled
-    if cartesian:
-        asym_unit = asym_unit @ np.linalg.inv(cell)
-    asym_unit = np.mod(asym_unit, 1)
+    asym_unit = np.mod(np.array(asym_unit), 1)
 
     # recommended by pymatgen
     # asym_unit = _snap_small_prec_coords(asym_unit, 1e-4)
@@ -802,9 +815,13 @@ def periodicset_from_ase_cifblock(
     # Get symmetry operations
     sitesym = block._get_any(_CIF_TAGS['symop'])
     if sitesym is None:
-        label_or_num = block._get_any(_CIF_TAGS['spacegroup_name'])
+        label_or_num = block._get_any(
+            [s.lower() for s in _CIF_TAGS['spacegroup_name']]
+        )
         if label_or_num is None:
-            label_or_num = block._get_any(_CIF_TAGS['spacegroup_number'])
+            label_or_num = block._get_any(
+                [s.lower() for s in _CIF_TAGS['spacegroup_number']]
+            )
         if label_or_num is None:
             warnings.warn('no symmetry data found, defaulting to P1')
             label_or_num = 1
@@ -826,6 +843,179 @@ def periodicset_from_ase_cifblock(
         motif=motif,
         cell=cell,
         name=block.name,
+        asymmetric_unit=asym_inds,
+        wyckoff_multiplicities=wyc_muls,
+        types=types
+    )
+
+
+def periodicset_from_pymatgen_cifblock(
+        block,
+        remove_hydrogens: bool = False,
+        disorder: str = 'skip'
+) -> PeriodicSet:
+    """Convert a :class:`pymatgen.io.cif.CifBlock` object to a
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
+    :class:`pymatgen.io.cif.CifBlock` is the type returned by
+    :class:`pymatgen.io.cif.CifFile`.
+
+    Parameters
+    ----------
+    block : :class:`pymatgen.io.cif.CifBlock`
+        A pymatgen CifBlock object representing a crystal.
+    remove_hydrogens : bool, optional
+        Remove Hydrogens from the crystal.
+    disorder : str, optional
+        Controls how disordered structures are handled. Default is
+        ``skip`` which skips any crystal with disorder, since disorder
+        conflicts with the periodic set model. To read disordered
+        structures anyway, choose either :code:`ordered_sites` to remove
+        atoms with disorder or :code:`all_sites` include all atoms
+        regardless of disorder.
+
+    Returns
+    -------
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
+        Represents the crystal as a periodic set, consisting of a finite
+        set of points (motif) and lattice (unit cell). Contains other
+        useful data, e.g. the crystal's name and information about the
+        asymmetric unit for calculation.
+
+    Raises
+    ------
+    ParseError
+        Raised if the structure can/should not be parsed for the
+        following reasons: 1. No sites found or motif is empty after
+        removing Hydrogens & disorder, 2. A site has missing
+        coordinates, 3. :code:``disorder == 'skip'`` and disorder is
+        found on any atom.
+    """
+
+    from pymatgen.io.cif import str2float
+
+    odict = block.data
+
+    # Unit cell
+    cellpar = [odict.get(tag) for tag in _CIF_TAGS['cellpar']]
+    if any(par in (None, '?', '.') for par in cellpar):
+        raise ParseError(f'{block.header} has missing cell data')
+    cell = cellpar_to_cell(np.array([str2float(v) for v in cellpar]))
+
+    # Asymmetric unit coordinates
+    asym_unit = [odict.get(tag) for tag in _CIF_TAGS['atom_site_fract']]
+    # check for . and ?
+    if None in asym_unit:
+        asym_unit = [odict.get(tag) for tag in _CIF_TAGS['atom_site_cartn']]
+        if None in asym_unit:
+            raise ParseError(f'{block.header} has missing coordinates')
+        else:
+            raise ParseError(
+                f'{block.header} uses _atom_site_Cartn_ tags for coordinates, '
+                'only _atom_site_fract_ is supported'
+            )
+    asym_unit = list(zip(*asym_unit))
+    asym_unit = [[str2float(coord) for coord in xyz] for xyz in asym_unit]
+
+    # Labels
+    asym_labels = odict.get('_atom_site_label')
+    if asym_labels is None:
+        asym_labels = [''] * len(asym_unit)
+
+    # Atomic types
+    asym_symbols = odict.get('_atom_site_type_symbol')
+    if asym_symbols is not None:
+        symbols_ = []
+        for label in asym_symbols:
+            if label not in ('.', '?'):
+                symbols_.append(re.search(r'([A-Z][a-z]?)', label).group())
+            else:
+                symbols_.append('')
+    else:
+        symbols_ = [''] * len(asym_unit)
+    asym_types = [_ATOMIC_NUMBERS[s] for s in symbols_]
+
+    # Find where sites have disorder if necassary
+    has_disorder = []
+    if disorder != 'all_sites':
+        occupancies = odict.get('_atom_site_occupancy')
+        if occupancies is None:
+            occupancies = np.ones((len(asym_unit), ))
+        else:
+            occupancies = np.array([str2float(occ) for occ in occupancies])
+        labels = odict.get('_atom_site_label')
+        if labels is None:
+            labels = [''] * len(asym_unit)
+        for lab, occ in zip(labels, occupancies):
+            has_disorder.append(_has_disorder(lab, occ))
+
+    # Remove sites with ?, . or other invalid string for coordinates
+    invalid = []
+    for i, xyz in enumerate(asym_unit):
+        if not all(isinstance(coord, (int, float)) for coord in xyz):
+            invalid.append(i)
+
+    if invalid:
+        warnings.warn('atoms without sites or missing data will be removed')
+        asym_unit = [c for i, c in enumerate(asym_unit) if i not in invalid]
+        asym_types = [c for i, c in enumerate(asym_types) if i not in invalid]
+        if disorder != 'all_sites':
+            has_disorder = [
+                d for i, d in enumerate(has_disorder) if i not in invalid
+            ]
+
+    remove_sites = []
+
+    if remove_hydrogens:
+        remove_sites.extend((i for i, n in enumerate(asym_types) if n == 1))
+
+    # Remove atoms with fractional occupancy or raise ParseError
+    if disorder != 'all_sites':
+        for i, dis in enumerate(has_disorder):
+            if i in remove_sites:
+                continue
+            if dis:
+                if disorder == 'skip':
+                    raise ParseError(
+                        f'{block.header} has disorder, pass '
+                        "disorder='ordered_sites' or 'all_sites' to "
+                        'remove/ignore disorder'
+                    )
+                elif disorder == 'ordered_sites':
+                    remove_sites.append(i)
+
+    # Asymmetric unit
+    asym_unit = [c for i, c in enumerate(asym_unit) if i not in remove_sites]
+    asym_types = [t for i, t in enumerate(asym_types) if i not in remove_sites]
+    if len(asym_unit) == 0:
+        raise ParseError(f'{block.header} has no valid sites')
+    asym_unit = np.mod(np.array(asym_unit), 1)
+
+    # recommended by pymatgen
+    # asym_unit = _snap_small_prec_coords(asym_unit, 1e-4)
+
+    # Remove overlapping sites unless disorder == 'all_sites'
+    if disorder != 'all_sites':
+        keep_sites = _unique_sites(asym_unit, _EQ_SITE_TOL)
+        if not np.all(keep_sites):
+            warnings.warn(
+                'may have overlapping sites; duplicates will be removed'
+            )
+        asym_unit = asym_unit[keep_sites]
+        asym_types = [sym for sym, keep in zip(asym_types, keep_sites) if keep]
+
+    # Apply symmetries to asymmetric unit
+    rot, trans = _get_syms_pymatgen(odict)
+    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
+    _, wyc_muls = np.unique(invs, return_counts=True)
+    asym_inds = np.zeros_like(wyc_muls)
+    asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
+    types = np.array([asym_types[i] for i in invs])
+    motif = frac_motif @ cell
+
+    return PeriodicSet(
+        motif=motif,
+        cell=cell,
+        name=block.header,
         asymmetric_unit=asym_inds,
         wyckoff_multiplicities=wyc_muls,
         types=types
@@ -901,182 +1091,6 @@ def periodicset_from_ase_atoms(
         asymmetric_unit=asym_inds,
         wyckoff_multiplicities=wyc_muls,
         types=atoms.get_atomic_numbers()
-    )
-
-
-def periodicset_from_pymatgen_cifblock(
-        block,
-        remove_hydrogens: bool = False,
-        disorder: str = 'skip'
-) -> PeriodicSet:
-    """Convert a :class:`pymatgen.io.cif.CifBlock` object to a
-    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
-    :class:`pymatgen.io.cif.CifBlock` is the type returned by
-    :class:`pymatgen.io.cif.CifFile`.
-
-    Parameters
-    ----------
-    block : :class:`pymatgen.io.cif.CifBlock`
-        A pymatgen CifBlock object representing a crystal.
-    remove_hydrogens : bool, optional
-        Remove Hydrogens from the crystal.
-    disorder : str, optional
-        Controls how disordered structures are handled. Default is
-        ``skip`` which skips any crystal with disorder, since disorder
-        conflicts with the periodic set model. To read disordered
-        structures anyway, choose either :code:`ordered_sites` to remove
-        atoms with disorder or :code:`all_sites` include all atoms
-        regardless of disorder.
-
-    Returns
-    -------
-    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
-        Represents the crystal as a periodic set, consisting of a finite
-        set of points (motif) and lattice (unit cell). Contains other
-        useful data, e.g. the crystal's name and information about the
-        asymmetric unit for calculation.
-
-    Raises
-    ------
-    ParseError
-        Raised if the structure can/should not be parsed for the
-        following reasons: 1. No sites found or motif is empty after
-        removing Hydrogens & disorder, 2. A site has missing
-        coordinates, 3. :code:``disorder == 'skip'`` and disorder is
-        found on any atom.
-    """
-
-    from pymatgen.io.cif import str2float
-
-    odict = block.data
-
-    # Unit cell
-    cellpar = [odict.get(tag) for tag in _CIF_TAGS['cellpar']]
-    if any(par in (None, '?', '.') for par in cellpar):
-        raise ParseError(f'{block.header} has missing cell data')
-    cell = cellpar_to_cell(np.array([str2float(v) for v in cellpar]))
-
-    # Asymmetric unit coordinates
-    cartesian = False
-    asym_unit = [odict.get(tag) for tag in _CIF_TAGS['atom_site_fract']]
-    # check for . and ?
-    if None in asym_unit:
-        asym_unit = [odict.get(tag) for tag in _CIF_TAGS['atom_site_cartn']]
-        if None in asym_unit:
-            raise ParseError(f'{block.header} has no coordinates')
-        cartesian = True
-
-    asym_unit = list(zip(*asym_unit))
-    asym_unit = [[str2float(coord) for coord in xyz] for xyz in asym_unit]
-
-    # Atomic types
-    for tag in _CIF_TAGS['atom_symbol']:
-        asym_symbols = odict.get(tag)
-        if asym_symbols is not None:
-            asym_types = []
-            for label in asym_symbols:
-                if label in ('.', '?'):
-                    warnings.warn('missing atomic types will be labelled 0')
-                    num = 0
-                else:
-                    sym = re.search(r'([A-Z][a-z]?)', label).group(0)
-                    num = _ATOMIC_NUMBERS[sym]
-                asym_types.append(num)
-            break
-    else:
-        warnings.warn('missing atomic types will be labelled 0')
-        asym_types = [0] * len(asym_unit)
-
-    # Find where sites have disorder if necassary
-    has_disorder = []
-    if disorder != 'all_sites':
-        occupancies = odict.get('_atom_site_occupancy')
-        if occupancies is None:
-            occupancies = np.ones((len(asym_unit), ))
-        else:
-            occupancies = np.array([str2float(occ) for occ in occupancies])
-        labels = odict.get('_atom_site_label')
-        if labels is None:
-            labels = [''] * len(asym_unit)
-        for lab, occ in zip(labels, occupancies):
-            has_disorder.append(_has_disorder(lab, occ))
-
-    # Remove sites with ?, . or other invalid string for coordinates
-    invalid = []
-    for i, xyz in enumerate(asym_unit):
-        if not all(isinstance(coord, (int, float)) for coord in xyz):
-            invalid.append(i)
-
-    if invalid:
-        warnings.warn('atoms without sites or missing data will be removed')
-        asym_unit = [c for i, c in enumerate(asym_unit) if i not in invalid]
-        asym_types = [c for i, c in enumerate(asym_types) if i not in invalid]
-        if disorder != 'all_sites':
-            has_disorder = [
-                d for i, d in enumerate(has_disorder) if i not in invalid
-            ]
-
-    remove_sites = []
-
-    if remove_hydrogens:
-        remove_sites.extend((i for i, n in enumerate(asym_types) if n == 1))
-
-    # Remove atoms with fractional occupancy or raise ParseError
-    if disorder != 'all_sites':
-        for i, dis in enumerate(has_disorder):
-            if i in remove_sites:
-                continue
-            if dis:
-                if disorder == 'skip':
-                    raise ParseError(
-                        f'{block.header} has disorder, pass '
-                        "disorder='ordered_sites' or 'all_sites' to "
-                        'remove/ignore disorder'
-                    )
-                elif disorder == 'ordered_sites':
-                    remove_sites.append(i)
-
-    # Asymmetric unit
-    asym_unit = [c for i, c in enumerate(asym_unit) if i not in remove_sites]
-    asym_types = [t for i, t in enumerate(asym_types) if i not in remove_sites]
-    if len(asym_unit) == 0:
-        raise ParseError(f'{block.header} has no valid sites')
-    asym_unit = np.array(asym_unit)
-
-    # If Cartesian coords were given, convert to scaled
-    if cartesian:
-        asym_unit = asym_unit @ np.linalg.inv(cell)
-    asym_unit = np.mod(asym_unit, 1)
-
-    # recommended by pymatgen
-    # asym_unit = _snap_small_prec_coords(asym_unit, 1e-4)
-
-    # Remove overlapping sites unless disorder == 'all_sites'
-    if disorder != 'all_sites':
-        keep_sites = _unique_sites(asym_unit, _EQ_SITE_TOL)
-        if not np.all(keep_sites):
-            warnings.warn(
-                'may have overlapping sites; duplicates will be removed'
-            )
-        asym_unit = asym_unit[keep_sites]
-        asym_types = [sym for sym, keep in zip(asym_types, keep_sites) if keep]
-
-    # Apply symmetries to asymmetric unit
-    rot, trans = _get_syms_pymatgen(odict)
-    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
-    _, wyc_muls = np.unique(invs, return_counts=True)
-    asym_inds = np.zeros_like(wyc_muls)
-    asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
-    types = np.array([asym_types[i] for i in invs])
-    motif = frac_motif @ cell
-
-    return PeriodicSet(
-        motif=motif,
-        cell=cell,
-        name=block.header,
-        asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=wyc_muls,
-        types=types
     )
 
 

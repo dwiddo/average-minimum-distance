@@ -39,7 +39,7 @@ def test_PDD_to_AMD(reference_data):
             calc_amd = amd.AMD(s['PeriodicSet'], 100)
             amd_from_pdd = amd.PDD_to_AMD(calc_pdd)
             if not np.allclose(calc_amd, amd_from_pdd):
-                n = s["PeriodicSet"].name
+                n = s['PeriodicSet'].name
                 pytest.fail(
                     f'Directly calculated AMD of structure {n} disagrees '
                     'with AMD calculated from PDD.'

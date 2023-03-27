@@ -25,13 +25,7 @@ author = 'Daniel Widdowson'
 with open(r'../../src/amd/__init__.py') as f:
     version = re.search("__version__ = '(.*)'", f.read()).group(1)
 
-MOCK_MODULES = [
-    'ccdc',
-    'ccdc.io',
-    'ccdc.search'
-]
-
-for mod_name in MOCK_MODULES:
+for mod_name in ['ccdc', 'ccdc.io', 'ccdc.search']:
     sys.modules[mod_name] = mock.Mock()
 
 # -- General configuration ---------------------------------------------------

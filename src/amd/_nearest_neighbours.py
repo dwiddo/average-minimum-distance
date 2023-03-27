@@ -56,7 +56,7 @@ def nearest_neighbours(
         to ``x[m]`` is ``cloud[inds[m][n]]``.
     """
 
-    # Generate an initial cloud of enough points, at least k
+    # Generate a cloud of lattice points such that lattice + motif has k points
     int_lat_generator = _generate_integer_lattice(cell.shape[0])
     n_points = 0
     int_lat_cloud = []
@@ -65,24 +65,24 @@ def nearest_neighbours(
         n_points += layer.shape[0] * len(motif)
         int_lat_cloud.append(layer)
 
-    # Add one layer from the lattice generator, on average this is faster
+    # Add one layer to the lattice, on average this is faster
     int_lat_cloud.append(next(int_lat_generator))
     cloud = _int_lattice_to_cloud(motif, cell, np.concatenate(int_lat_cloud))
 
-    # Find k neighbours for points in x
+    # Find k neighbours in the point cloud for points in x
     dists_, inds = KDTree(
         cloud, leafsize=30, compact_nodes=False, balanced_tree=False
     ).query(x, k=k)
 
-    # Generate more layers of lattice points until they are too large to
-    # contain nearer neighbours than have already been found. For a lattice
-    # point l, points in l + motif further away from x than |l| - max|p-p'|
-    # (p in x, p' in motif), this is used to check if l is too far away.
-    max_cdist = np.amax(cdist(x, motif))
+    # Generate layers of lattice points until they are too far away to give
+    # nearer neighbours than have already been found. For a lattice point l,
+    # points in l + motif are further away from x than |l| - max|p-p'| (where
+    # p in x, p' in motif), used to check if l is too far away.
+    motif_diameter = np.amax(cdist(x, motif))
     lattice_layers = []
     while True:
         lattice = _close_lattice_points(
-            next(int_lat_generator), cell, dists_[:, -1], max_cdist
+            next(int_lat_generator), cell, dists_[:, -1], motif_diameter
         )
         if lattice.size == 0:
             break
@@ -100,13 +100,10 @@ def nearest_neighbours(
     return dists_, cloud, inds
 
 
-
-
-
 def _generate_integer_lattice(dims: int) -> Iterable[npt.NDArray[np.float64]]:
     """Generate batches of integer lattice points. Each yield gives all
     points (that have not already been yielded) inside a sphere centered
-    at the origin with radius d. d starts at 0 and increments by 1 on
+    at the origin with radius d; d starts at 0 and increments by 1 on
     each loop.
 
     Parameters
@@ -192,7 +189,7 @@ def _reflect_in_axes(
         axes: npt.NDArray
 ) -> npt.NDArray:
     """Reflect points in `positive_int_lattice` in the axes described by
-    `axes`, without including invariant points.
+    `axes`, without duplicating invariant points.
     """
 
     not_on_axes = (positive_int_lattice[:, axes] == 0).sum(axis=-1) == 0
@@ -255,7 +252,8 @@ def _int_lattice_to_cloud(
 
 @numba.njit(cache=True)
 def _in_sphere(xy: Tuple[float, float], z: float, d: float) -> bool:
-    """Return True if sum(i^2 for i in xy) + z^2 <= d^2."""
+    """True if sum(i^2 for i in xy) + z^2 <= d^2."""
+
     s = z ** 2
     for val in xy:
         s += val ** 2
@@ -275,21 +273,23 @@ def nearest_neighbours_minval(
     neighbours. Used in ``PDD_reconstructable``.
     """
     
-    max_cdist = np.amax(cdist(motif, motif))
-    # generate initial cloud of points, at least k + two more layers
-    int_lat_generator = _generate_integer_lattice(cell.shape[0])
     
+    # Generate initial cloud of points from the periodic set
+    int_lat_generator = _generate_integer_lattice(cell.shape[0])
     cloud = []
     for _ in range(3):
         cloud.append(_lattice_to_cloud(motif, next(int_lat_generator) @ cell))
     cloud = np.concatenate(cloud)
 
+    # Find k neighbours in the point cloud for points in motif
     dists_, inds = KDTree(
         cloud, leafsize=30, compact_nodes=False, balanced_tree=False
     ).query(motif, k=cloud.shape[0])
     dists = np.zeros_like(dists_, dtype=np.float64)
 
-    # add layers & find k nearest neighbours until they don't change
+    # Add layers & find k nearest neighbours until all distances smaller than
+    # min_val don't change
+    max_cdist = np.amax(cdist(motif, motif))
     while True:
         if np.all(dists_[:, -1] >= min_val):
             col = np.argwhere(np.all(dists_ >= min_val, axis=0))[0][0] + 1
@@ -311,8 +311,7 @@ def nearest_neighbours_minval(
 
 
 def generate_concentric_cloud(motif, cell):
-    """
-    Generates batches of points from a periodic set given by (motif,
+    """Generates batches of points from a periodic set given by (motif,
     cell) which get successively further away from the origin.
 
     Each yield gives all points (that have not already been yielded)

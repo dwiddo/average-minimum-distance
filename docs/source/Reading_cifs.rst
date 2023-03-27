@@ -26,7 +26,7 @@ Reading options
 
     amd.CifReader(
         'file.cif',                # path to file/folder
-        reader='ase',              # backend cif parser
+        reader='gemmi',            # backend cif parser
         remove_hydrogens=False,    # remove Hydrogens
         disorder='skip',           # how to handle disorder
         heaviest_component=False,  # keep only heaviest molecule (CSD Python API only)

@@ -70,24 +70,24 @@ def cellpar_to_cell(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
     if abs(abs(alpha) - 90.0) < eps:
         cos_alpha = 0.0
     else:
-        cos_alpha = np.cos(alpha * np.pi / 180.0)
+        cos_alpha = np.cos(np.deg2rad(alpha))
 
     if abs(abs(beta) - 90.0) < eps:
         cos_beta = 0.0
     else:
-        cos_beta = np.cos(beta * np.pi / 180.0)
+        cos_beta = np.cos(np.deg2rad(beta))
 
     if abs(abs(gamma) - 90.0) < eps:
         cos_gamma = 0.0
     else:
-        cos_gamma = np.cos(gamma * np.pi / 180.0)
+        cos_gamma = np.cos(np.deg2rad(gamma))
 
     if abs(gamma - 90.0) < eps:
         sin_gamma = 1.0
     elif abs(gamma + 90.0) < eps:
         sin_gamma = -1.0
     else:
-        sin_gamma = np.sin(gamma * np.pi / 180.0)
+        sin_gamma = np.sin(np.deg2rad(gamma))
 
     cy = (cos_alpha - cos_beta * cos_gamma) / sin_gamma
     cz_sqr = 1.0 - cos_beta ** 2 - cy ** 2
@@ -124,10 +124,10 @@ def cellpar_to_cell_2D(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
 
     a, b, alpha = cellpar
     cell = np.zeros((2, 2), dtype=np.float64)
-    ang = alpha * np.pi / 180.0
+    alpha_radians = np.deg2rad(alpha)
     cell[0, 0] = a
-    cell[1, 0] = b * np.cos(ang)
-    cell[1, 1] = b * np.sin(ang)
+    cell[1, 0] = b * np.cos(alpha_radians)
+    cell[1, 1] = b * np.sin(alpha_radians)
     return cell
 
 

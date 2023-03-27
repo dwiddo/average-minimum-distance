@@ -1,6 +1,6 @@
 include *.md *.txt *.yaml *.yml LICENSE
+recursive-include src *.py *.json
 recursive-include docs *
 prune docs/build
 recursive-include examples *
-recursive-include src *.py *.json
 recursive-include tests *.cif *.npz *.pkl *.py

@@ -1,11 +1,12 @@
 import os
 import pickle
 import pytest
+import pathlib
 
 
 @pytest.fixture(scope='session', autouse=True)
-def root_dir():
-    return r'tests/data'
+def data_dir():
+    return pathlib.Path(__file__).absolute().parent / 'data'
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -18,22 +19,16 @@ def ccdc_enabled():
 
 
 @pytest.fixture(scope='session', autouse=True)
-def reference_data(root_dir):
+def reference_data(data_dir):
+    """Data fixture of amd.PeriodicSet objects to use in tests."""
 
-    # root_dir contains .pkl files with PeriodicSets
-    filenames = {
-        'cubic':           'cubic',
-        'T2_experimental': 'T2_experimental',
-        'CSD_families':    'CSD_families',
-    }
-
+    filenames = ['cubic', 'T2_experimental', 'CSD_families']
     refs = {}
     for name in filenames:
-        path = os.path.join(root_dir, filenames[name] + '.pkl')
+        path = str(data_dir / f'{name}.pkl')
         with open(path, 'rb') as f:
             data = pickle.load(f)
             if not data:
                 raise ValueError(f'Data not found in path {path}')
             refs[name] = data
-
     return refs

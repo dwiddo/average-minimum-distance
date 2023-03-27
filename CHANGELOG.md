@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - ``nearest_neighbours()`` has been changed/fixed to not exclude the first nearest neighbours of points in the query set ``x``. This was because when ``x`` is the motif (as in all uses in ``amd``) the nearest neighbours of ``x`` are themselves, which are thrown away for AMD/PDD but should not be in the general case.
 
-- Several improvements made to core function ``nearest_neighbours()``. The two main changes are 1. turning off multiprocessing in ``scipy.spatial.KDTree`` (multiprocessing appeared to improve speed initially but this is not the case now), and 2. deleting unneeded points generated during the algorithm. **The output of ``nearest_neighbours()`` will change, specifically ``cloud`` and ``inds``. It is no longer true that the point ``cloud[i]`` corresponds to the motif point ``motif[i % len(motif)]``.**
+- Several improvements made to core function ``nearest_neighbours()``. The two main changes are 1. turning off multiprocessing in ``scipy.spatial.KDTree`` (while improved speed initially but this is not the case now) and 2. pruning unneeded points generated during the algorithm. **The output of ``nearest_neighbours()`` will change, specifically ``cloud`` and ``inds``. It is no longer true that the point ``cloud[i]`` corresponds to the motif point ``motif[i % len(motif)]``.**
 
 - Default backend reader changed to `gemmi` for faster CIF reads; removed `ase` as a dependency and added `gemmi`. Reads should be identical to before, but this may turn out to be false. The only known difference is that the `gemmi` parser cannot handle some characters (e.g. �).
 

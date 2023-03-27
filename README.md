@@ -29,7 +29,7 @@ pip install average-minimum-distance
 
 Then import average-minimum-distance with ```import amd```.
 
-```amd.compare()``` compares crystals in cif files by AMD or PDD:
+```amd.compare()``` compares crystals in cif files by AMD or PDD descriptors:
 
 ```py
 import amd
@@ -48,7 +48,7 @@ The distance matrix returned is a [pandas DataFrame](https://pandas.pydata.org/p
 
 #### Choosing a value of k
 
-The parameter k is the number of neighbouring atoms considered for each atom in a unit cell. Two crystals with the same unit molecule will have a small AMD/PDD distance for small enough k (e.g. k = 5), and a larger k means the geometry must be similar up to a larger radius for the distance to be small. The default for ```amd.compare()``` is k = 100, but if this is significantly smaller than the number of atoms in the unit molecule, it may be better to choose a larger value e.g. k = 300. It is usually not useful to choose k too large (many times larger than the number of atoms in the unit molecule).
+The parameter k is the number of neighbouring atoms considered for each atom in a unit cell. Two crystals with the same unit molecule will have a small AMD/PDD distance for small enough k (e.g. k = 5), and a larger k means the geometry must be similar up to a larger radius for the distance to be small. The default for ```amd.compare()``` is k = 100, but if this is significantly less than the number of atoms in the unit molecule, it may be better to choose a larger value. It is usually not useful to choose k too large (many times larger than the number of atoms in a unit cell).
 
 ### Reading crystals, calculating AMDs/PDDs
 
@@ -63,9 +63,9 @@ amds = [amd.AMD(crystal, 100) for crystal in reader]
 # pdds = [amd.PDD(crystal, 100) for crystal in reader]
 ```
 
-CifReader accepts some optional parameters, e.g. for removing Hydrogen or handling disorder, [see here for a full list](https://average-minimum-distance.readthedocs.io/en/latest/Reading_cifs.html).
+CifReader accepts some optional parameters, e.g. for removing Hydrogen and handling disorder, [see here for a full list](https://average-minimum-distance.readthedocs.io/en/latest/Reading_cifs.html).
 
-*CSD Python API only:* CSD crystals can be read via the CSD Python API with ```amd.CSDReader```, [see the documentation for details](https://average-minimum-distance.readthedocs.io/en/latest/Reading_from_the_CSD.html). CifReader can accept file formats other than .cif by passing ```reader='ccdc'```.
+*CSD Python API only:* CSD entries can be accessed via the CSD Python API with ```amd.CSDReader```, [see the documentation for details](https://average-minimum-distance.readthedocs.io/en/latest/Reading_from_the_CSD.html). CifReader can accept file formats other than .cif by passing ```reader='ccdc'```.
 
 ### Comparing by AMD or PDD
 
