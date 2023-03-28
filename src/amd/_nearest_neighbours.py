@@ -57,7 +57,11 @@ def nearest_neighbours(
     """
 
     # Generate a cloud of lattice points such that lattice + motif has k points
-    int_lat_generator = _generate_integer_lattice(cell.shape[0])
+    if cell.shape[0] == 3:
+        int_lat_generator = _generate_integer_lattice_3D()
+    else:
+        int_lat_generator = _generate_integer_lattice(cell.shape[0])
+
     n_points = 0
     int_lat_cloud = []
     while n_points <= k:
@@ -68,6 +72,7 @@ def nearest_neighbours(
     # Add one layer to the lattice, on average this is faster
     int_lat_cloud.append(next(int_lat_generator))
     cloud = _int_lattice_to_cloud(motif, cell, np.concatenate(int_lat_cloud))
+    # cloud = _lattice_to_cloud(motif, np.concatenate(int_lat_cloud) @ cell)
 
     # Find k neighbours in the point cloud for points in x
     dists_, inds = KDTree(
@@ -114,7 +119,7 @@ def _generate_integer_lattice(dims: int) -> Iterable[npt.NDArray[np.float64]]:
     Yields
     -------
     :class:`numpy.ndarray`
-        Yields arrays of integer points in dims dimensional Euclidean
+        Yields arrays of integer points in `dims`-dimensional Euclidean
         space.
     """
 
@@ -130,17 +135,50 @@ def _generate_integer_lattice(dims: int) -> Iterable[npt.NDArray[np.float64]]:
     while True:
         positive_int_lattice = []
         while True:
-            batch = []
+            batch = False
             for xy in product(range(d + 1), repeat=dims-1):
                 if xy not in ymax:
                     ymax[xy] = 0
                 if _in_sphere(xy, ymax[xy], d):
-                    batch.append((*xy, ymax[xy]))
+                    positive_int_lattice.append((*xy, ymax[xy]))
+                    batch = True
                     ymax[xy] += 1
             if not batch:
                 break
-            positive_int_lattice.extend(batch)
+        yield _reflect_positive_integer_lattice(np.array(positive_int_lattice))
+        d += 1
 
+
+@numba.njit(cache=True)
+def _generate_integer_lattice_3D() -> Iterable[npt.NDArray[np.float64]]:
+    """3D specific version of _generate_integer_lattice() which is
+    accelerated by numba. 3D is the most common case and the function is
+    difficult to generalise to any dimension with numba.
+
+    Yields
+    -------
+    :class:`numpy.ndarray`
+        Yields arrays of integer points in 3-dimensional Euclidean
+        space.
+    """
+
+    d = 0
+    ymax = {}
+    while True:
+        positive_int_lattice = []
+        while True:
+            batch = False
+            for x in range(d + 1):
+                for y in range(d + 1):
+                    xy = (x, y)
+                    if xy not in ymax:
+                        ymax[xy] = 0
+                    if x ** 2 + y ** 2 + ymax[xy] ** 2 <= d ** 2:
+                        positive_int_lattice.append((x, y, ymax[xy]))
+                        batch = True
+                        ymax[xy] += 1
+            if not batch:
+                break
         yield _reflect_positive_integer_lattice(np.array(positive_int_lattice))
         d += 1
 
@@ -333,4 +371,4 @@ def generate_concentric_cloud(motif, cell):
 
     int_lat_generator = _generate_integer_lattice(cell.shape[0])
     for layer in int_lat_generator:
-        yield _int_lattice_to_cloud(motif, cell, layer)
+        yield _lattice_to_cloud(motif, layer @ cell)

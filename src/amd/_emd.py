@@ -146,15 +146,15 @@ def network_simplex(
 
     f = 0
     while True:
-        i, p, q, f = find_entering_edges(
+        i, p, q, f = _find_entering_edges(
             B, e, f, tails, heads, costs, potentials, flows
         )
         # If no entering edges then the optimal score is found
         if p == -1:
             break
 
-        cycle_nodes, cycle_edges = find_cycle(i, p, q, size, edge, parent)
-        j, s, t = find_leaving_edge(
+        cycle_nodes, cycle_edges = _find_cycle(i, p, q, size, edge, parent)
+        j, s, t = _find_leaving_edge(
             cycle_nodes, cycle_edges, capac, flows, tails, heads
         )
         res_cap = capac[j] - flows[j] if tails[j] == s else flows[j]
@@ -181,16 +181,16 @@ def network_simplex(
                 if val == i:
                     break
 
-            remove_edge(
+            _remove_edge(
                 s, t, size, prev_node, last_node, next_node, parent, edge
             )
-            make_root(
+            _make_root(
                 q, parent, size, last_node, prev_node, next_node, edge
             )
-            add_edge(
+            _add_edge(
                 i, p, q, next_node, prev_node, last_node, size, parent, edge
             )
-            update_potentials(
+            _update_potentials(
                 i, p, q, heads, potentials, costs, last_node, next_node
             )
 
@@ -202,7 +202,7 @@ def network_simplex(
 
 
 @numba.njit(cache=True)
-def reduced_cost(i, costs, potentials, tails, heads, flows):
+def _reduced_cost(i, costs, potentials, tails, heads, flows):
     """Return the reduced cost of an edge i."""
     c = costs[i] - potentials[tails[i]] + potentials[heads[i]]
     if flows[i] == 0:
@@ -211,7 +211,7 @@ def reduced_cost(i, costs, potentials, tails, heads, flows):
 
 
 @numba.njit(cache=True)
-def find_entering_edges(B, e, f, tails, heads, costs, potentials, flows):
+def _find_entering_edges(B, e, f, tails, heads, costs, potentials, flows):
     """Yield entering edges until none can be found. Entering edges are
     found by combining Dantzig's rule and Bland's rule. The edges are
     cyclically grouped into blocks of size B. Within each block,
@@ -237,10 +237,10 @@ def find_entering_edges(B, e, f, tails, heads, costs, potentials, flows):
         # Find the first edge with the lowest reduced cost.
         f = l
         i = edge_inds[0]
-        c = reduced_cost(i, costs, potentials, tails, heads, flows)
+        c = _reduced_cost(i, costs, potentials, tails, heads, flows)
 
         for j in edge_inds[1:]:
-            cost = reduced_cost(j, costs, potentials, tails, heads, flows)
+            cost = _reduced_cost(j, costs, potentials, tails, heads, flows)
             if cost < c:
                 c = cost
                 i = j
@@ -265,7 +265,7 @@ def find_entering_edges(B, e, f, tails, heads, costs, potentials, flows):
 
 
 @numba.njit(cache=True)
-def find_apex(p, q, size, parent):
+def _find_apex(p, q, size, parent):
     """Find the lowest common ancestor of nodes p and q in the spanning
     tree.
     """
@@ -291,7 +291,7 @@ def find_apex(p, q, size, parent):
 
 
 @numba.njit(cache=True)
-def trace_path(p, w, edge, parent):
+def _trace_path(p, w, edge, parent):
     """Return the nodes and edges on the path from node p to its
     ancestor w.
     """
@@ -308,15 +308,15 @@ def trace_path(p, w, edge, parent):
 
 
 @numba.njit(cache=True)
-def find_cycle(i, p, q, size, edge, parent):
+def _find_cycle(i, p, q, size, edge, parent):
     """Return the nodes and edges on the cycle containing edge
     i == (p, q) when the latter is added to the spanning tree. The cycle
     is oriented in the direction from p to q.
     """
 
-    w = find_apex(p, q, size, parent)
-    cycle_nodes, cycle_edges = trace_path(p, w, edge, parent)
-    cycle_nodes_rev, cycle_edges_rev = trace_path(q, w, edge, parent)
+    w = _find_apex(p, q, size, parent)
+    cycle_nodes, cycle_edges = _trace_path(p, w, edge, parent)
+    cycle_nodes_rev, cycle_edges_rev = _trace_path(q, w, edge, parent)
     len_cycle_nodes = len(cycle_nodes)
     add_to_c_nodes = max(len(cycle_nodes_rev) - 1, 0)
     cycle_nodes_ = np.empty(len_cycle_nodes + add_to_c_nodes, dtype=np.int64)
@@ -343,7 +343,7 @@ def find_cycle(i, p, q, size, edge, parent):
 
 
 @numba.njit(cache=True)
-def find_leaving_edge(cycle_nodes, cycle_edges, capac, flows, tails, heads):
+def _find_leaving_edge(cycle_nodes, cycle_edges, capac, flows, tails, heads):
     """Return the leaving edge in a cycle represented by cycle_nodes and
     cycle_edges.
     """
@@ -363,7 +363,7 @@ def find_leaving_edge(cycle_nodes, cycle_edges, capac, flows, tails, heads):
 
 
 @numba.njit(cache=True)
-def remove_edge(s, t, size, prev, last, next_node, parent, edge):
+def _remove_edge(s, t, size, prev, last, next_node, parent, edge):
     """Remove an edge (s, t) where parent[t] == s from the spanning
     tree.
     """
@@ -390,7 +390,7 @@ def remove_edge(s, t, size, prev, last, next_node, parent, edge):
 
 
 @numba.njit(cache=True)
-def make_root(q, parent, size, last, prev, next_node, edge):
+def _make_root(q, parent, size, last, prev, next_node, edge):
     """Make a node q the root of its containing subtree."""
 
     ancestors = []
@@ -436,7 +436,7 @@ def make_root(q, parent, size, last, prev, next_node, edge):
 
 
 @numba.njit(cache=True)
-def add_edge(i, p, q, next_node, prev, last, size, parent, edge):
+def _add_edge(i, p, q, next_node, prev, last, size, parent, edge):
     """Add an edge (p, q) to the spanning tree where q is the root of a
     subtree.
     """
@@ -463,7 +463,9 @@ def add_edge(i, p, q, next_node, prev, last, size, parent, edge):
 
 
 @numba.njit(cache=True)
-def update_potentials(i, p, q, heads, potentials, costs, last_node, next_node):
+def _update_potentials(
+        i, p, q, heads, potentials, costs, last_node, next_node
+):
     """Update the potentials of the nodes in the subtree rooted at a
     node q connected to its parent p by an edge i.
     """

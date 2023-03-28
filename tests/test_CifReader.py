@@ -4,16 +4,16 @@ import warnings
 
 
 @pytest.fixture(scope='module')
-def test_cif_paths(data_dir):
+def data_cif_paths(data_dir):
     cif_names = ['cubic', 'T2_experimental']
     return {name: str(data_dir / f'{name}.cif') for name in cif_names}
 
 
 @pytest.mark.parametrize('reader', ['gemmi', 'pymatgen', 'ase', 'ccdc'])
-def test_CifReader(reader, test_cif_paths, reference_data):
-    for name in test_cif_paths:
+def test_CifReader(reader, data_cif_paths, reference_data):
+    for name in data_cif_paths:
         try:
-            read_in = list(amd.CifReader(test_cif_paths[name], reader=reader))
+            read_in = list(amd.CifReader(data_cif_paths[name], reader=reader))
         except ImportError:
             pytest.skip(
                 f'Skipping test_CifReader[{reader}] as {reader} failed to '
@@ -33,7 +33,7 @@ def test_CifReader(reader, test_cif_paths, reference_data):
                 )
 
 
-def test_periodicset_from_ase_atoms(test_cif_paths, reference_data):
+def test_periodicset_from_ase_atoms(data_cif_paths, reference_data):
     try:
         from ase.io import iread
     except ImportError:
@@ -41,13 +41,13 @@ def test_periodicset_from_ase_atoms(test_cif_paths, reference_data):
             'Skipping test_periodicset_from_ase_atoms as ase failed to import.'
         )
 
-    for name in test_cif_paths:
+    for name in data_cif_paths:
         references = reference_data[name]
         # ignore ase warning: "crystal system x is not interpreted for space
         # group Spacegroup(1, setting=1). This may result in wrong setting!"
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            atoms = list(iread(test_cif_paths[name]))
+            atoms = list(iread(data_cif_paths[name]))
         read_in = [amd.periodicset_from_ase_atoms(a) for a in atoms]
         if (not len(references) == len(read_in)) or len(read_in) == 0:
             pytest.fail(
