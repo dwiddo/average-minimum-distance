@@ -72,7 +72,6 @@ def nearest_neighbours(
     # Add one layer to the lattice, on average this is faster
     int_lat_cloud.append(next(int_lat_generator))
     cloud = _int_lattice_to_cloud(motif, cell, np.concatenate(int_lat_cloud))
-    # cloud = _lattice_to_cloud(motif, np.concatenate(int_lat_cloud) @ cell)
 
     # Find k neighbours in the point cloud for points in x
     dists_, inds = KDTree(
