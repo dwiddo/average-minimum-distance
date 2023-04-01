@@ -9,7 +9,7 @@ import numba
 from scipy.spatial.distance import squareform
 
 
-@numba.njit()
+@numba.njit(cache=True)
 def diameter(cell: npt.NDArray) -> float:
     """Return the diameter of a unit cell (given as a square matrix in
     orthogonal coordinates) in 3 or fewer dimensions. The diameter is
@@ -45,7 +45,7 @@ def diameter(cell: npt.NDArray) -> float:
     return np.sqrt(np.amax(np.sum(diagonals, axis=-1)))
 
 
-@numba.njit()
+@numba.njit(cache=True)
 def cellpar_to_cell(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
     """Convert canonical 3D unit cell parameters a,b,c,α,β,γ into a 3x3
     :class:`numpy.ndarray` representing the unit cell in orthogonal
@@ -104,7 +104,7 @@ def cellpar_to_cell(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
     return cell
 
 
-@numba.njit()
+@numba.njit(cache=True)
 def cellpar_to_cell_2D(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
     """Convert 3 parameters defining a 2D unit cell a,b,α into a 2x2
     :class:`numpy.ndarray` representing the unit cell in orthogonal
@@ -131,7 +131,7 @@ def cellpar_to_cell_2D(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
     return cell
 
 
-@numba.njit()
+@numba.njit(cache=True)
 def cell_to_cellpar(cell: npt.NDArray) -> npt.NDArray[np.float64]:
     """Convert a 3x3 :class:`numpy.ndarray` representing a unit cell in
     orthogonal coordinates (as returned by
@@ -166,7 +166,7 @@ def cell_to_cellpar(cell: npt.NDArray) -> npt.NDArray[np.float64]:
     return cellpar
 
 
-@numba.njit()
+@numba.njit(cache=True)
 def cell_to_cellpar_2D(cell: npt.NDArray) -> npt.NDArray[np.float64]:
     """Convert a 2x2 :class:`numpy.ndarray` representing a unit cell in
     orthogonal coordinates (as returned by

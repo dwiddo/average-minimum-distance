@@ -65,8 +65,8 @@ def test_periodicset_from_ase_atoms(data_cif_paths, reference_data):
 
 
 def test_CifReader_equiv_structs(data_dir):
-    reader = amd.CifReader(data_dir / 'OJIGOG.cif', show_warnings=False)
-    pdds = [amd.PDD(struct, 100) for struct in reader]
+    structs = list(amd.CifReader(data_dir / 'OJIGOG.cif', show_warnings=False))
+    pdds = [amd.PDD(struct, 100) for struct in structs]
     if amd.emd(pdds[0], pdds[1]) > 0:
         pytest.fail(
             'Asymmetric structure was read differently than identical '
@@ -75,10 +75,12 @@ def test_CifReader_equiv_structs(data_dir):
 
 
 def test_equiv_sites(data_dir):
-    reader = amd.CifReader(data_dir / 'BABMUQ.cif', show_warnings=False)
-    pdds = [amd.PDD(s, 100) for s in reader]
-    if amd.PDD_pdist(pdds):
-        pytest.fail('Equivalent structures by symmetry differ by PDD.')
+    structs = list(amd.CifReader(data_dir / 'BABMUQ.cif', show_warnings=False))
+    if structs[0] != structs[1]:
+        pytest.fail(
+            'Two equivalent structures by symmetry were read differently by '
+            f'CifReader: {structs[0]}, \n, {structs[1]}'
+        )
 
 
 def test_heaviest_component(data_dir, ccdc_enabled):

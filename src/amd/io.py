@@ -1666,7 +1666,7 @@ def _frac_molecular_centres_ccdc(
     frac_centres = []
     for comp in crystal.packing(inclusion='CentroidIncluded').components:
         coords = [a.fractional_coordinates for a in comp.atoms]
-        frac_centres.append((sum(ax) / len(coords) for ax in zip(*coords)))
+        frac_centres.append([sum(ax) / len(coords) for ax in zip(*coords)])
     frac_centres = np.mod(np.array(frac_centres, dtype=np.float64), 1)
     return frac_centres[_unique_sites(frac_centres, tol)]
 

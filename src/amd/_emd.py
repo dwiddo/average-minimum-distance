@@ -1,6 +1,7 @@
 """An implementation of the Wasserstein metric (Earth Mover's distance)
-between two weighted distributions. Aka Earth Mover's distance, the
-appropriate metric for comparing two PDDs.
+between two weighted distributions, used as the metric for comparing two
+pointwise distance distributions (PDDs), see
+:func:`amd.PDD <.calculate.PDD>`
 
 Copyright (C) 2020 Cameron Hargreaves. This code is adapted from the
 Element Movers Distance project https://github.com/lrcfmd/ElMD.
