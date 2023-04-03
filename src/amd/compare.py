@@ -42,7 +42,7 @@ def compare(
         low_memory: bool = False,
         **kwargs
 ) -> pd.DataFrame:
-    """Given one or two sets of crystals, compare by AMD or PDD and
+    r"""Given one or two sets of crystals, compare by AMD or PDD and
     return a pandas DataFrame of the distance matrix.
 
     Given one or two paths to cifs/folders, lists of CSD refcodes or
@@ -218,7 +218,7 @@ def compare(
 
     if by == 'AMD':
         invs = [AMD(s, k) for s in container]
-        if verbose:
+        if isinstance(container, tqdm.tqdm):
             container.close()
         compare_kwargs.pop('n_jobs', None)
         compare_kwargs.pop('backend', None)
@@ -261,8 +261,8 @@ def EMD(
         metric: Optional[str] = 'chebyshev',
         return_transport: Optional[bool] = False,
         **kwargs
-) -> float:
-    """Calculate the Earth mover's distance (EMD) between two PDDs, aka
+) -> Union[float, Tuple[float, npt.NDArray[np.float64]]]:
+    r"""Calculate the Earth mover's distance (EMD) between two PDDs, aka
     the Wasserstein metric.
 
     Parameters
@@ -308,7 +308,7 @@ def AMD_cdist(
         low_memory: bool = False,
         **kwargs
 ) -> npt.NDArray:
-    """Compare two sets of AMDs with each other, returning a distance
+    r"""Compare two sets of AMDs with each other, returning a distance
     matrix. This function is essentially
     :func:`scipy.spatial.distance.cdist` with the default metric
     ``chebyshev`` and a low memory option.
@@ -420,7 +420,7 @@ def PDD_cdist(
         verbose: bool = False,
         **kwargs
 ) -> npt.NDArray:
-    """Compare two sets of PDDs with each other, returning a distance
+    r"""Compare two sets of PDDs with each other, returning a distance
     matrix. Supports parallel processing via joblib. If using
     parallelisation, make sure to include an if __name__ == '__main__'
     guard around this function.
@@ -458,12 +458,11 @@ def PDD_cdist(
 
     kwargs.pop('return_transport', None)
     k = pdds[0].shape[-1] - 1
-    if verbose:
-        verbose = 3
+    _verbose = 3 if verbose else 0
 
     if n_jobs is not None and n_jobs not in (0, 1):
         # TODO: put results into preallocated empty array in place
-        dm = Parallel(backend=backend, n_jobs=n_jobs, verbose=verbose)(
+        dm = Parallel(backend=backend, n_jobs=n_jobs, verbose=_verbose)(
             delayed(partial(EMD, metric=metric, **kwargs))(pdds[i], pdds_[j])
             for i in range(len(pdds)) for j in range(len(pdds_))
         )
@@ -475,13 +474,15 @@ def PDD_cdist(
         if verbose:
             desc = f'Comparing {len(pdds)}x{len(pdds_)} PDDs (k={k})'
             progress_bar = tqdm.tqdm(desc=desc, total=n*m)
-        for i in range(n):
-            for j in range(m):
-                dm[i, j] = EMD(pdds[i], pdds_[j], metric=metric, **kwargs)
-                if verbose:
+            for i in range(n):
+                for j in range(m):
+                    dm[i, j] = EMD(pdds[i], pdds_[j], metric=metric, **kwargs)
                     progress_bar.update(1)
-        if verbose:
             progress_bar.close()
+        else:
+            for i in range(n):
+                for j in range(m):
+                    dm[i, j] = EMD(pdds[i], pdds_[j], metric=metric, **kwargs)
 
     return dm
 
@@ -531,12 +532,11 @@ def PDD_pdist(
 
     kwargs.pop('return_transport', None)
     k = pdds[0].shape[-1] - 1
-    if verbose:
-        verbose = 3
+    _verbose = 3 if verbose else 0
 
     if n_jobs is not None and n_jobs > 1:
         # TODO: put results into preallocated empty array in place
-        cdm = Parallel(backend=backend, n_jobs=n_jobs, verbose=verbose)(
+        cdm = Parallel(backend=backend, n_jobs=n_jobs, verbose=_verbose)(
             delayed(partial(EMD, metric=metric, **kwargs))(pdds[i], pdds[j])
             for i, j in combinations(range(len(pdds)), 2)
         )
@@ -550,16 +550,20 @@ def PDD_pdist(
         if verbose:
             desc = f'Comparing {len(pdds)} PDDs pairwise (k={k})'
             progress_bar = tqdm.tqdm(desc=desc, total=cdm_len)
-        for r, (i, j) in enumerate(inds):
-            cdm[r] = EMD(pdds[i], pdds[j], metric=metric, **kwargs)
-            if verbose:
+            for r, (i, j) in enumerate(inds):
+                cdm[r] = EMD(pdds[i], pdds[j], metric=metric, **kwargs)
                 progress_bar.update(1)
-        if verbose:
             progress_bar.close()
+        else:
+            for r, (i, j) in enumerate(inds):
+                cdm[r] = EMD(pdds[i], pdds[j], metric=metric, **kwargs)
+
     return cdm
 
 
-def emd(pdd: npt.NDArray, pdd_: npt.NDArray, **kwargs) -> float:
+def emd(
+        pdd: npt.NDArray, pdd_: npt.NDArray, **kwargs
+) -> Union[float, Tuple[float, npt.NDArray[np.float64]]]:
     """Alias for :func:`EMD() <.compare.EMD>`."""
     return EMD(pdd, pdd_, **kwargs)
 

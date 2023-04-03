@@ -2,7 +2,7 @@
 calculations.
 """
 
-from typing import Tuple, Iterable
+from typing import Tuple, Iterable, Union
 from itertools import product
 
 import numba
@@ -17,7 +17,7 @@ def nearest_neighbours(
         cell: npt.NDArray,
         x: npt.NDArray,
         k: int
-) -> Tuple[npt.NDArray[np.float64], ...]:
+) -> Tuple[npt.NDArray, ...]:
     """Find the ``k`` nearest neighbours in a periodic set for points in
     ``x``.
 
@@ -62,6 +62,7 @@ def nearest_neighbours(
     else:
         int_lat_generator = _generate_integer_lattice(cell.shape[0])
 
+    int_lat_generator = iter(int_lat_generator)
     n_points = 0
     int_lat_cloud = []
     while n_points <= k:
@@ -82,7 +83,7 @@ def nearest_neighbours(
     # nearer neighbours than have already been found. For a lattice point l,
     # points in l + motif are further away from x than |l| - max|p-p'| (where
     # p in x, p' in motif), used to check if l is too far away.
-    motif_diameter = np.amax(cdist(x, motif))
+    motif_diameter = float(np.amax(cdist(x, motif)))
     lattice_layers = []
     while True:
         lattice = _close_lattice_points(
@@ -301,7 +302,7 @@ def nearest_neighbours_minval(
         motif: npt.NDArray,
         cell: npt.NDArray,
         min_val: float
-) -> npt.NDArray[np.float64]:
+) -> Tuple[npt.NDArray, ...]:
     """Return the same ``dists``/PDD matrix as ``nearest_neighbours``,
     but with enough columns such that all values in the last column are
     at least ``min_val``. Unlike ``nearest_neighbours``, does not take a
@@ -313,6 +314,7 @@ def nearest_neighbours_minval(
     
     # Generate initial cloud of points from the periodic set
     int_lat_generator = _generate_integer_lattice(cell.shape[0])
+    int_lat_generator = iter(int_lat_generator)
     cloud = []
     for _ in range(3):
         cloud.append(_lattice_to_cloud(motif, next(int_lat_generator) @ cell))

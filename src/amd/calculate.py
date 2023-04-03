@@ -4,11 +4,12 @@ periodic crystals and finite sets.
 """
 
 import collections
-from typing import Tuple
+from typing import Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
 from scipy.spatial.distance import pdist, squareform
+from scipy.special import factorial
 
 from .periodicset import PeriodicSet, PeriodicSetType
 from ._nearest_neighbours import nearest_neighbours, nearest_neighbours_minval
@@ -69,7 +70,7 @@ def PDD(
         collapse: bool = True,
         collapse_tol: float = 1e-4,
         return_row_groups: bool = False
-) -> npt.NDArray[np.float64]:
+) -> Union[npt.NDArray[np.float64], Tuple[npt.NDArray[np.float64], list]]:
     """Return the PDD of a periodic set (crystal) up to k.
 
     Parameters
@@ -216,7 +217,7 @@ def PDD_finite(
         collapse: bool = True,
         collapse_tol: float = 1e-4,
         return_row_groups: bool = False
-) -> npt.NDArray[np.float64]:
+) -> Union[npt.NDArray[np.float64], Tuple[npt.NDArray[np.float64], list]]:
     """Return the PDD of a finite m-point set up to k = m - 1.
 
     Parameters
@@ -369,10 +370,10 @@ def PPC(periodic_set: PeriodicSetType) -> float:
     t = int((n - n % 2) / 2)
 
     if n % 2 == 0:
-        unit_sphere_vol = (np.pi ** t) / np.math.factorial(t)
+        unit_sphere_vol = (np.pi ** t) / factorial(t)
     else:
-        num = (2 * np.math.factorial(t) * (4 * np.pi) ** t)
-        unit_sphere_vol = num / np.math.factorial(n)
+        num = (2 * factorial(t) * (4 * np.pi) ** t)
+        unit_sphere_vol = num / factorial(n)
 
     return (cell_volume / (m * unit_sphere_vol)) ** (1. / n)
 
@@ -403,7 +404,7 @@ def AMD_estimate(
     return PPC((motif, cell)) * np.power(np.arange(1, k + 1), 1. / n)
 
 
-def _get_structure(periodic_set: PeriodicSetType) -> Tuple[npt.NDArray]:
+def _get_structure(periodic_set: PeriodicSetType) -> Tuple[npt.NDArray, ...]:
     """Extract the motif and cell, and if present the asymmetric unit
     and Wyckoff multiplicities, from a periodic set. ``periodic_set``
     can be a :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`, or a

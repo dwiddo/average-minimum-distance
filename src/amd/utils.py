@@ -217,7 +217,6 @@ def neighbours_from_distance_matrix(
     """
 
     inds = None
-
     if len(dm.shape) == 2:
         inds = np.array([
             np.argpartition(row, n)[:n] for row in dm

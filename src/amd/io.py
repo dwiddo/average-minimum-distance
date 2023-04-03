@@ -32,9 +32,9 @@ warnings.formatwarning = _custom_warning
 with open(str(Path(__file__).absolute().parent / 'atomic_numbers.json')) as f:
     _ATOMIC_NUMBERS = json.load(f)
 
-_EQ_SITE_TOL = 1e-3
+_EQ_SITE_TOL: float = 1e-3
 
-_CIF_TAGS = {
+_CIF_TAGS: dict = {
     'cellpar': [
         '_cell_length_a', '_cell_length_b', '_cell_length_c',
         '_cell_angle_alpha', '_cell_angle_beta', '_cell_angle_gamma'],
@@ -95,18 +95,18 @@ class _Reader:
                     self._progress_bar.close()
                 raise StopIteration
 
+            parse_err_msg = None
             with warnings.catch_warnings(record=True) as warning_msgs:
-                msg = None
                 try:
                     periodic_set = self._converter(item)
                 except ParseError as err:
-                    msg = str(err)
+                    parse_err_msg = str(err)
 
             if self._progress_bar is not None:
                 self._progress_bar.update(1)
 
-            if msg:
-                warnings.warn(msg)
+            if parse_err_msg is not None:
+                warnings.warn(parse_err_msg)
                 continue
 
             for warning in warning_msgs:
@@ -296,7 +296,7 @@ class CifReader(_Reader):
 
     @staticmethod
     def _dir_generator(
-            path: os.PathLike,
+            path: Path,
             file_parser: Callable,
             extensions: Iterable
     ) -> Iterator:
@@ -478,7 +478,7 @@ class ParseError(ValueError):
 def periodicset_from_gemmi_block(
         block,
         remove_hydrogens: bool = False,
-        disorder: bool = 'skip'
+        disorder: str = 'skip'
 ) -> PeriodicSet:
     """Convert a :class:`gemmi.cif.Block` object to a
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
@@ -565,8 +565,12 @@ def periodicset_from_gemmi_block(
         symbols = [as_string(s) for s in loop_dict['_atom_site_type_symbol']]
     else:
         symbols = []
-        for l in labels:
-            sym = re.search(r'([A-Z][a-z]?)', l).group() if l else ''
+        for label in labels:
+            sym = ''
+            if label:
+                match = re.search(r'([A-Z][a-z]?)', label)
+                if match is not None:
+                    sym = match.group() 
             symbols.append(sym)
     asym_types = [_ATOMIC_NUMBERS[s] for s in symbols]
 
@@ -740,15 +744,17 @@ def periodicset_from_ase_cifblock(
     # Atomic types
     asym_symbols = block.get('_atom_site_type_symbol')
     if asym_symbols is not None:
-        asym_syms = []
+        asym_symbols_ = []
         for label in asym_symbols:
-            if label not in ('.', '?'):
-                asym_syms.append(re.search(r'([A-Z][a-z]?)', label).group())
-            else:
-                asym_syms.append('')
+            sym = ''
+            if label and label not in ('.', '?'):
+                match = re.search(r'([A-Z][a-z]?)', label)
+                if match is not None:
+                    sym = match.group() 
+            asym_symbols_.append(sym)
     else:
-        asym_syms = [''] * len(asym_unit)
-    asym_types = [_ATOMIC_NUMBERS[s] for s in asym_syms]
+        asym_symbols_ = [''] * len(asym_unit)
+    asym_types = [_ATOMIC_NUMBERS[s] for s in asym_symbols_]
 
     # Find where sites have disorder if necassary
     has_disorder = []
@@ -924,15 +930,17 @@ def periodicset_from_pymatgen_cifblock(
     # Atomic types
     asym_symbols = odict.get('_atom_site_type_symbol')
     if asym_symbols is not None:
-        symbols_ = []
+        asym_symbols_ = []
         for label in asym_symbols:
-            if label not in ('.', '?'):
-                symbols_.append(re.search(r'([A-Z][a-z]?)', label).group())
-            else:
-                symbols_.append('')
+            sym = ''
+            if label and label not in ('.', '?'):
+                match = re.search(r'([A-Z][a-z]?)', label)
+                if match is not None:
+                    sym = match.group() 
+            asym_symbols_.append(sym)
     else:
-        symbols_ = [''] * len(asym_unit)
-    asym_types = [_ATOMIC_NUMBERS[s] for s in symbols_]
+        asym_symbols_ = [''] * len(asym_unit)
+    asym_types = [_ATOMIC_NUMBERS[s] for s in asym_symbols_]
 
     # Find where sites have disorder if necassary
     has_disorder = []
