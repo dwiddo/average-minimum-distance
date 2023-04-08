@@ -11,9 +11,16 @@ import numpy.typing as npt
 from scipy.spatial.distance import pdist, squareform
 from scipy.special import factorial
 
-from .periodicset import PeriodicSet, PeriodicSetType
+from .periodicset import PeriodicSet
 from ._nearest_neighbours import nearest_neighbours, nearest_neighbours_minval
 from .utils import diameter
+
+__all__ = [
+    'AMD', 'PDD', 'PDD_to_AMD', 'AMD_finite', 'PDD_finite',
+    'PDD_reconstructable', 'PPC', 'AMD_estimate'
+]
+
+PeriodicSetType = Union[PeriodicSet, Tuple[npt.NDArray, npt.NDArray]]
 
 
 def AMD(periodic_set: PeriodicSetType, k: int) -> npt.NDArray[np.float64]:
@@ -78,12 +85,12 @@ def PDD(
     periodic_set :
         A periodic set represented by a
         :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or by a
-        tuple of :class:`numpy.ndarray` s (motif, cell) with coordinates
-        in Cartesian form and a square unit cell.
+        tuple of :class:`numpy.ndarray` s (motif, cell) with Cartesian
+        coordinates and a square matrix representing the unit cell.
     k : int
-        The number of neighbours considered for each atom in the unit
-        cell. The returned matrix has k + 1 columns, the first column
-        for weights of rows.
+        The number of neighbours considered for each atom (point) in the
+        unit cell. The returned matrix has k + 1 columns, the first
+        column for weights of rows.
     lexsort : bool, default True
         Lexicographically order the rows.
     collapse: bool, default True
@@ -145,9 +152,9 @@ def PDD(
             weights = np.array([np.sum(weights[group]) for group in groups])
             dists = np.array([
                 np.average(dists[group], axis=0) for group in groups
-            ])
+            ], dtype=np.float64)
 
-    pdd = np.empty(shape=(len(weights), k + 1))
+    pdd = np.empty(shape=(len(weights), k + 1), dtype=np.float64)
     pdd[:, 0] = weights
     pdd[:, 1:] = dists
 
@@ -274,7 +281,7 @@ def PDD_finite(
                 np.average(dists[group], axis=0) for group in groups
             ])
 
-    pdd = np.empty(shape=(len(weights), m))
+    pdd = np.empty(shape=(len(weights), m), dtype=np.float64)
     pdd[:, 0] = weights
     pdd[:, 1:] = dists
 
@@ -366,16 +373,14 @@ def PPC(periodic_set: PeriodicSetType) -> float:
 
     motif, cell, _, _ = _get_structure(periodic_set)
     m, n = motif.shape
-    cell_volume = np.linalg.det(cell)
-    t = int((n - n % 2) / 2)
+    t = int(n // 2)
 
     if n % 2 == 0:
         unit_sphere_vol = (np.pi ** t) / factorial(t)
     else:
-        num = (2 * factorial(t) * (4 * np.pi) ** t)
-        unit_sphere_vol = num / factorial(n)
+        unit_sphere_vol = (2 * factorial(t) * (4 * np.pi) ** t) / factorial(n)
 
-    return (cell_volume / (m * unit_sphere_vol)) ** (1. / n)
+    return (np.linalg.det(cell) / (m * unit_sphere_vol)) ** (1.0 / n)
 
 
 def AMD_estimate(
@@ -400,32 +405,34 @@ def AMD_estimate(
     """
 
     motif, cell, _, _ = _get_structure(periodic_set)
-    n = motif.shape[1]
-    return PPC((motif, cell)) * np.power(np.arange(1, k + 1), 1. / n)
+    n = cell.shape[0]
+    k_root = np.power(np.arange(1, k + 1, dtype=np.float64), 1.0 / n)
+    return PPC((motif, cell)) * k_root
 
 
 def _get_structure(periodic_set: PeriodicSetType) -> Tuple[npt.NDArray, ...]:
     """Extract the motif and cell, and if present the asymmetric unit
-    and Wyckoff multiplicities, from a periodic set. ``periodic_set``
-    can be a :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`, or a
-    tuple of :class:`numpy.ndarray` s (motif, cell).
+    and scaled multiplicities, from a periodic set. ``periodic_set`` can
+    be a :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`, or a tuple
+    of :class:`numpy.ndarray` s (motif, cell).
     """
 
+    asymmetric_unit = None
+    weights = None
+
     if isinstance(periodic_set, PeriodicSet):
-        motif = periodic_set.motif
-        cell = periodic_set.cell
+        motif, cell = periodic_set.motif, periodic_set.cell
         asym_unit_inds = periodic_set.asymmetric_unit
         wyc_muls = periodic_set.wyckoff_multiplicities
-        if asym_unit_inds is None or wyc_muls is None:
-            asymmetric_unit = motif
-            weights = np.full((len(motif), ), 1 / len(motif))
-        else:
+        if asym_unit_inds is not None and wyc_muls is not None:
             asymmetric_unit = motif[asym_unit_inds]
             weights = wyc_muls / np.sum(wyc_muls)
     else:
         motif, cell = periodic_set
+
+    if asymmetric_unit is None or weights is None:
         asymmetric_unit = motif
-        weights = np.full((len(motif), ), 1 / len(motif))
+        weights = np.full((len(motif), ), 1 / len(motif), dtype=np.float64)
 
     return motif, cell, asymmetric_unit, weights
 
@@ -435,7 +442,6 @@ def _collapse_into_groups(overlapping: npt.NDArray) -> list:
     group overlap. ``overlapping`` indicates for each pair of items in a
     set whether or not the items overlap, in the shape of a condensed
     distance matrix.
-    TODO: This function is not efficient.
     """
 
     overlapping = squareform(overlapping)

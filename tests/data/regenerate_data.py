@@ -28,11 +28,12 @@ def regenerate(name, generator):
 
     with open(str(parent / f'{name}.pkl'), 'wb') as f:
         pickle.dump(data, f)
-    cdm = amd.PDD_pdist([d['PDD100'] for d in data])
-    np.savez_compressed(str(parent / f'{name}_cdm.npz'), cdm=cdm)
+    if len(data) > 1:
+        cdm = amd.PDD_pdist([d['PDD100'] for d in data])
+        np.savez_compressed(str(parent / f'{name}_cdm.npz'), cdm=cdm)
 
 
-def regenerate_from_cifs():
+def regenerate_cifs_test_data():
     """Regenerate and overwrite all test data using cifs in tests/data.
     Does not apply to test data extracted with ``csd-python-api``.
     """
@@ -41,7 +42,7 @@ def regenerate_from_cifs():
         regenerate(name, amd.CifReader(path, show_warnings=False))
 
 
-def regenerate_CSD_families():
+def regenerate_CSD_families_test_data():
     """Regenerate and overwrite all test data for 'CSD_families' using
     ``csd-python-api``.
     """
@@ -51,4 +52,5 @@ def regenerate_CSD_families():
 
 
 if __name__ == '__main__':
-    pass
+    regenerate_cifs_test_data()
+    regenerate_CSD_families_test_data()

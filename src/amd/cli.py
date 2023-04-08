@@ -12,15 +12,15 @@ def main():
     :func:`amd.compare() <.compare.compare>.
     """
 
-    desc = (
-        "Compare crystals by PDD or AMD from the command line. Given one or "
+    description = (
+        "Compare crystals by AMD or PDD from the command line. Given one or "
         "two paths to cifs/folders, lists of CSD refcodes or periodic sets, "
         "compare them and return a DataFrame of the distance matrix. By "
         "default, uses AMD with k = 100. Accepts most keyword arguments "
         "accepted by amd's CIF/CSD readers and comparison functions."
     )
 
-    parser = argparse.ArgumentParser(description=desc)
+    parser = argparse.ArgumentParser(description=description)
 
     parser.add_argument(
         'paths_or_refcodes', type=str, nargs='+',

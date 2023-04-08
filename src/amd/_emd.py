@@ -13,6 +13,8 @@ import numba
 import numpy as np
 import numpy.typing as npt
 
+__all__ = ['network_simplex']
+
 
 @numba.njit(cache=True)
 def network_simplex(
@@ -56,11 +58,10 @@ def network_simplex(
     """
 
     n_sources, n_sinks = source_demands.shape[0], sink_demands.shape[0]
-    network_costs = network_costs.ravel()
     n = n_sources + n_sinks
     e = n_sources * n_sinks
     B = np.int64(np.ceil(np.sqrt(e)))
-    fp_multiplier = np.int64(1e+6)
+    fp_multiplier = 1e+6
 
     # Add one additional node for a dummy source and sink
     source_d_int = (source_demands * fp_multiplier).astype(np.int64)
@@ -95,19 +96,23 @@ def network_simplex(
             heads[ind] = i
 
     # Create costs and capacities for the arcs between nodes
-    network_costs = network_costs * fp_multiplier
-    network_capac = np.empty(shape=(e, ), dtype=np.float64)
+    network_costs = (network_costs.ravel() * fp_multiplier).astype(np.int64)
+    network_capac = np.empty(shape=(e, ), dtype=np.int64)
     ind = 0
     for i in range(n_sources):
         for j in range(n_sinks):
-            network_capac[ind] = min(source_demands[i], sink_demands[j])
+            network_capac[ind] = np.int64(
+                min(source_demands[i], sink_demands[j]) * fp_multiplier
+            )
             ind += 1
-    network_capac *= fp_multiplier
 
-    faux_inf = 3 * max(
-        np.sum(network_capac), np.sum(np.abs(network_costs)),
-        np.amax(source_d_int), np.amax(sink_d_int)
-    )
+    # In amd network_costs are always positive, otherwise take abs here
+    faux_inf = np.int64(3 * max(
+        np.sum(network_costs),
+        np.sum(network_capac),
+        np.amax(source_d_int),
+        np.amax(sink_d_int)
+    ))
 
     costs = np.empty(e + n, dtype=np.int64)
     costs[:e] = network_costs
@@ -167,8 +172,7 @@ def network_simplex(
             else:
                 flows[i_] -= res_cap
 
-        # Do nothing more if the entering edge is the same as the
-        # leaving edge.
+        # Do nothing more if the entering edge is the same as the leaving edge.
         if i != j:
             if parent[t] != s:
                 # Ensure that s is the parent of t.

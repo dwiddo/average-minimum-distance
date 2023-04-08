@@ -8,7 +8,8 @@ passed as the first argument to :func:`amd.AMD() <.calculate.AMD>` or
 :func:`amd.PDD() <.calculate.PDD>` to calculate its invariants.
 """
 
-from typing import Optional, Union, Tuple
+from __future__ import annotations
+from typing import Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -20,6 +21,8 @@ from .utils import (
     cell_to_cellpar_2D,
     random_cell,
 )
+
+__all__ = ['PeriodicSet']
 
 
 class PeriodicSet:
@@ -99,7 +102,7 @@ class PeriodicSet:
 
         return (
             f'PeriodicSet(name={self.name}, motif shape {self.motif.shape}; '
-            f'{n_asym_sites} asym sites{cellpar_str}'
+            f'{n_asym_sites} asym sites{cellpar_str})'
         )
 
     def __repr__(self):
@@ -141,22 +144,22 @@ class PeriodicSet:
         return not self.__eq__(other)
 
     @staticmethod
-    def cubic(scale: float = 1.0, dims: int = 3):
+    def cubic(scale: float = 1.0, dims: int = 3) -> PeriodicSet:
         """Returns a :class:`PeriodicSet` representing a cubic lattice.
         """
         return PeriodicSet(np.zeros((1, dims)), np.identity(dims) * scale)
 
     @staticmethod
-    def hexagonal(scale: float = 1.0, dims: int = 3):
+    def hexagonal(scale: float = 1.0, dims: int = 3) -> PeriodicSet:
         """ Return a :class:`PeriodicSet` representing a hexagonal
         lattice. Dimensions 2 and 3 only.
         """
 
         if dims == 3:
-            cellpar = np.array([scale, scale, scale, 90., 90., 120.])
+            cellpar = np.array([scale, scale, scale, 90.0, 90.0, 120.0])
             cell = cellpar_to_cell(cellpar)
         elif dims == 2:
-            cell = cellpar_to_cell_2D(np.array([scale, scale, 60.]))
+            cell = cellpar_to_cell_2D(np.array([scale, scale, 60.0]))
         else:
             raise NotImplementedError(
                 'amd.PeriodicSet.hexagonal() only implemented for dimensions '
@@ -170,7 +173,7 @@ class PeriodicSet:
         length_bounds: tuple = (1.0, 2.0),
         angle_bounds: tuple = (60.0, 120.0),
         dims: int = 3
-    ):
+    ) -> PeriodicSet:
         """Return a :class:`PeriodicSet` with a chosen number of
         randomly placed points, in a random cell with edges between
         ``length_bounds`` and angles between ``angle_bounds``.
@@ -186,4 +189,3 @@ class PeriodicSet:
         return PeriodicSet(frac_motif @ cell, cell)
 
 
-PeriodicSetType = Union[PeriodicSet, Tuple[npt.NDArray, npt.NDArray]]

@@ -2,13 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.4.0] - 19/03/2023
+## [1.4.0] - 08/04/2023
+
+### Changed
 
 - ``nearest_neighbours()`` has been fixed to not exclude the first nearest neighbours of points in the query set ``x``. This was because when ``x`` is the motif (as in all uses in ``amd``) the nearest neighbours of ``x`` are themselves, which are thrown away for AMD/PDD but should not be in the general case.
 
-- Several improvements made to core function ``nearest_neighbours()``, such as pruning unneeded points generated during the algorithm. **The output of ``nearest_neighbours()`` will change, specifically ``cloud`` and ``inds``. It is no longer true that the point ``cloud[i]`` corresponds to the motif point ``motif[i % len(motif)]``.**
+- Several improvements made to core function ``nearest_neighbours()``, such as pruning unneeded points generated during the algorithm. Consequently the output of ``nearest_neighbours()`` will change, specifically ``cloud`` and ``inds``. It is no longer true that the point ``cloud[i]`` corresponds to the motif point ``motif[i % len(motif)]``.
 
 - Default backend reader changed to `gemmi` for faster CIF reads; removed `ase` as a dependency and added `gemmi`. Reads should be identical to before, but this may turn out to be false. The only known difference is that the `gemmi` parser cannot handle some characters (e.g. �), and does not allow cifs with repeated headers.
+
+- Readers in the ``io`` module give attributes of ``PeriodicSet``s smaller ``dtypes`` where appropriate: ``np.int32`` for ``asymmetric_unit`` and ``wyckoff_multiplicities``, ``np.uint8`` for ``types``.
 
 ## [1.3.6] - 25/02/2023
 

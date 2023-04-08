@@ -23,6 +23,12 @@ import tqdm
 from .utils import cellpar_to_cell
 from .periodicset import PeriodicSet
 
+__all__ = [
+    'CifReader', 'CSDReader', 'ParseError', 'periodicset_from_gemmi_block',
+    'periodicset_from_ase_cifblock', 'periodicset_from_pymatgen_cifblock',
+    'periodicset_from_ase_atoms', 'periodicset_from_pymatgen_structure',
+    'periodicset_from_ccdc_entry', 'periodicset_from_ccdc_crystal'
+]
 
 def _custom_warning(message, category, filename, lineno, *args, **kwargs):
     return f'{category.__name__}: {message}\n'
@@ -33,7 +39,6 @@ with open(str(Path(__file__).absolute().parent / 'atomic_numbers.json')) as f:
     _ATOMIC_NUMBERS = json.load(f)
 
 _EQ_SITE_TOL: float = 1e-3
-
 _CIF_TAGS: dict = {
     'cellpar': [
         '_cell_length_a', '_cell_length_b', '_cell_length_c',
@@ -53,8 +58,7 @@ _CIF_TAGS: dict = {
 
 
 class _Reader:
-    """Base reader class.
-    """
+    """Base reader class."""
 
     def __init__(
             self,
@@ -265,7 +269,7 @@ class CifReader(_Reader):
             except (ImportError, RuntimeError) as e:
                 raise ImportError('Failed to import csd-python-api') from e
 
-            extensions = ccdc.io.EntryReader.known_suffixes
+            extensions = set(ccdc.io.EntryReader.known_suffixes.keys())
             file_parser = ccdc.io.EntryReader
             converter = functools.partial(
                 periodicset_from_ccdc_entry,
@@ -398,6 +402,12 @@ class CSDReader(_Reader):
                 f"'{disorder}')"
             )
 
+        try:
+            import ccdc.search
+            import ccdc.io
+        except (ImportError, RuntimeError) as e:
+            raise ImportError('Failed to import csd-python-api') from e
+
         if isinstance(refcodes, str) and refcodes.lower() == 'csd':
             refcodes = None
 
@@ -405,11 +415,27 @@ class CSDReader(_Reader):
             families = False
         elif isinstance(refcodes, str):
             refcodes = [refcodes]
-        else:
-            refcodes = [str(refcode) for refcode in refcodes]
+        elif not all(isinstance(refcode, str) for refcode in refcodes):
+            raise ValueError(
+                f'First argument of {self.__class__.__name__} expects None, a '
+                'string or list of strings.'
+            )
 
         if families:
-            refcodes = self._refcodes_from_families_ccdc(refcodes)
+            all_refcodes = []
+            for refcode in refcodes:
+                query = ccdc.search.TextNumericSearch()
+                query.add_identifier(refcode)
+                hits = [hit.identifier for hit in query.search()]
+                all_refcodes.extend(hits)
+
+            # filter to unique refcodes while keeping order
+            refcodes = []
+            seen = set()
+            for refcode in all_refcodes:
+                if refcode not in seen:
+                    refcodes.append(refcode)
+                    seen.add(refcode)
 
         converter = functools.partial(
             periodicset_from_ccdc_entry,
@@ -418,56 +444,14 @@ class CSDReader(_Reader):
             molecular_centres=molecular_centres,
             heaviest_component=heaviest_component
         )
-        iterable = self._ccdc_generator(refcodes)
-        super().__init__(iterable, converter, show_warnings, verbose)
-
-    @staticmethod
-    def _ccdc_generator(refcodes: Optional[Union[str, List[str]]]) -> Iterator:
-        """Generates ccdc Entries from CSD refcodes.
-        """
-
-        try:
-            import ccdc.io
-        except (ImportError, RuntimeError) as e:
-            raise ImportError('Failed to import csd-python-api') from e
 
         entry_reader = ccdc.io.EntryReader('CSD')
-
         if refcodes is None:
-            yield from entry_reader
+            iterable = entry_reader
         else:
-            for refcode in refcodes:
-                entry = entry_reader.entry(refcode)
-                yield entry
+            iterable = map(entry_reader.entry, refcodes)
 
-    @staticmethod
-    def _refcodes_from_families_ccdc(refcode_families: List[str]) -> List[str]:
-        """List of strings --> all CSD refcodes starting with any of the
-        strings. Intended to be passed a list of families and return all
-        refcodes in them.
-        """
-
-        try:
-            import ccdc.search
-        except (ImportError, RuntimeError) as e:
-            raise ImportError('Failed to import csd-python-api') from e
-
-        all_refcodes = []
-        for refcode in refcode_families:
-            query = ccdc.search.TextNumericSearch()
-            query.add_identifier(refcode)
-            hits = [hit.identifier for hit in query.search()]
-            all_refcodes.extend(hits)
-
-        # filter to unique refcodes while keeping order
-        refcodes = []
-        seen = set()
-        for refcode in all_refcodes:
-            if refcode not in seen:
-                refcodes.append(refcode)
-                seen.add(refcode)
-
-        return refcodes
+        super().__init__(iterable, converter, show_warnings, verbose)
 
 
 class ParseError(ValueError):
@@ -654,9 +638,10 @@ def periodicset_from_gemmi_block(
 
     frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
     _, wyc_muls = np.unique(invs, return_counts=True)
-    asym_inds = np.zeros_like(wyc_muls)
+    wyc_muls = wyc_muls.astype(np.int32)
+    asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
-    types = np.array([asym_types[i] for i in invs])
+    types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
     motif = frac_motif @ cell
 
     return PeriodicSet(
@@ -840,9 +825,10 @@ def periodicset_from_ase_cifblock(
 
     frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
     _, wyc_muls = np.unique(invs, return_counts=True)
-    asym_inds = np.zeros_like(wyc_muls)
+    wyc_muls = wyc_muls.astype(np.int32)
+    asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
-    types = np.array([asym_types[i] for i in invs])
+    types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
     motif = frac_motif @ cell
 
     return PeriodicSet(
@@ -1015,9 +1001,10 @@ def periodicset_from_pymatgen_cifblock(
     rot, trans = _get_syms_pymatgen(odict)
     frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
     _, wyc_muls = np.unique(invs, return_counts=True)
-    asym_inds = np.zeros_like(wyc_muls)
+    wyc_muls = wyc_muls.astype(np.int32)
+    asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
-    types = np.array([asym_types[i] for i in invs])
+    types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
     motif = frac_motif @ cell
 
     return PeriodicSet(
@@ -1089,7 +1076,8 @@ def periodicset_from_ase_atoms(
     asym_unit = get_basis(atoms, spacegroup=spg, tol=_EQ_SITE_TOL)
     frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
     _, wyc_muls = np.unique(invs, return_counts=True)
-    asym_inds = np.zeros_like(wyc_muls)
+    wyc_muls = wyc_muls.astype(np.int32)
+    asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
     motif = frac_motif @ cell
 
@@ -1098,7 +1086,7 @@ def periodicset_from_ase_atoms(
         cell=cell,
         asymmetric_unit=asym_inds,
         wyckoff_multiplicities=wyc_muls,
-        types=atoms.get_atomic_numbers()
+        types=atoms.get_atomic_numbers().astype(np.uint8)
     )
 
 
@@ -1165,9 +1153,9 @@ def periodicset_from_pymatgen_structure(
     cell = structure.lattice.matrix
     sym_structure = SpacegroupAnalyzer(structure).get_symmetrized_structure()
     eq_inds = sym_structure.equivalent_indices
-    asym_unit = np.array([ind_list[0] for ind_list in eq_inds])
-    wyc_muls = np.array([len(ind_list) for ind_list in eq_inds])
-    types = np.array(sym_structure.atomic_numbers)
+    asym_unit = np.array([ix_list[0] for ix_list in eq_inds], dtype=np.int32)
+    wyc_muls = np.array([len(ix_list) for ix_list in eq_inds], dtype=np.int32)
+    types = np.array(sym_structure.atomic_numbers, dtype=np.uint8)
 
     return PeriodicSet(
         motif=motif,
@@ -1376,10 +1364,11 @@ def periodicset_from_ccdc_crystal(
     rot, trans = _parse_sitesyms(sitesym)
     frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
     _, wyc_muls = np.unique(invs, return_counts=True)
-    asym_inds = np.zeros_like(wyc_muls)
+    wyc_muls = wyc_muls.astype(np.int32)
+    asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
     motif = frac_motif @ cell
-    types = np.array([asym_types[i] for i in invs])
+    types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
 
     return PeriodicSet(
         motif=motif,

@@ -13,6 +13,8 @@ from scipy.spatial import KDTree
 from ._nearest_neighbours import generate_concentric_cloud
 from .utils import diameter
 
+__all__ = ['reconstruct']
+
 
 def reconstruct(
         pdd: npt.NDArray,

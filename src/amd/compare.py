@@ -17,8 +17,13 @@ import tqdm
 from .io import CifReader, CSDReader
 from .calculate import AMD, PDD
 from ._emd import network_simplex
-from .periodicset import PeriodicSet, PeriodicSetType
+from .periodicset import PeriodicSet
 from .utils import neighbours_from_distance_matrix
+
+__all__ = [
+    'compare', 'EMD', 'AMD_cdist', 'AMD_pdist', 'PDD_cdist', 'PDD_pdist',
+    'emd'
+]
 
 
 def compare(

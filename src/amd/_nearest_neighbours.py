@@ -2,7 +2,7 @@
 calculations.
 """
 
-from typing import Tuple, Iterable, Union
+from typing import Tuple, Iterable
 from itertools import product
 
 import numba
@@ -10,6 +10,11 @@ import numpy as np
 import numpy.typing as npt
 from scipy.spatial import KDTree
 from scipy.spatial.distance import cdist
+
+__all__ = [
+    'nearest_neighbours', 'nearest_neighbours_minval',
+    'generate_concentric_cloud'
+]
 
 
 def nearest_neighbours(
@@ -24,9 +29,9 @@ def nearest_neighbours(
     Given a periodic set described by ``motif`` and ``cell``, a query
     set of points ``x`` and an integer ``k``, find the ``k`` nearest
     neighbours in the periodic set for all points in ``x``. Return
-    distances to neighbours in order, the point cloud generated during
-    the search and the indices of which points in the cloud are the
-    neighbours of points in ``x``.
+    an array of distances to neighbours, the point cloud generated
+    during the search and the indices of which points in the cloud are
+    the neighbours of points in ``x``.
 
     Parameters
     ----------
@@ -44,15 +49,15 @@ def nearest_neighbours(
     -------
     dists : numpy.ndarray
         Array shape ``(x.shape[0], k)`` of distances from points in
-        ``x`` to their ``k`` nearest neighbours in the periodic set, in
-        order. E.g. ``dists[m][n]`` is the distance from ``x[m]`` to its
+        ``x`` to their ``k`` nearest neighbours in the periodic set in
+        order, e.g. ``dists[m][n]`` is the distance from ``x[m]`` to its
         n-th nearest neighbour in the periodic set.
     cloud : numpy.ndarray
-        Collection of points in the periodic set that was generated
-        during the nearest neighbour search.
+        Collection of points in the periodic set that were generated
+        during the search.
     inds : numpy.ndarray
         Array shape ``(x.shape[0], k)`` containing the indices of
-        nearest neighbours in ``cloud``. E.g. the n-th nearest neighbour
+        nearest neighbours in ``cloud``, e.g. the n-th nearest neighbour
         to ``x[m]`` is ``cloud[inds[m][n]]``.
     """
 
@@ -75,7 +80,7 @@ def nearest_neighbours(
     cloud = _int_lattice_to_cloud(motif, cell, np.concatenate(int_lat_cloud))
 
     # Find k neighbours in the point cloud for points in x
-    dists_, inds = KDTree(
+    dists, inds = KDTree(
         cloud, leafsize=30, compact_nodes=False, balanced_tree=False
     ).query(x, k=k)
 
@@ -87,7 +92,7 @@ def nearest_neighbours(
     lattice_layers = []
     while True:
         lattice = _close_lattice_points(
-            next(int_lat_generator), cell, dists_[:, -1], motif_diameter
+            next(int_lat_generator), cell, dists[:, -1], motif_diameter
         )
         if lattice.size == 0:
             break
@@ -98,11 +103,11 @@ def nearest_neighbours(
         cloud = np.vstack((
             cloud[np.unique(inds)], _lattice_to_cloud(motif, lattice_layers)
         ))
-        dists_, inds = KDTree(
+        dists, inds = KDTree(
             cloud, leafsize=30, compact_nodes=False, balanced_tree=False
         ).query(x, k=k)
 
-    return dists_, cloud, inds
+    return dists, cloud, inds
 
 
 def _generate_integer_lattice(dims: int) -> Iterable[npt.NDArray[np.float64]]:
@@ -126,7 +131,7 @@ def _generate_integer_lattice(dims: int) -> Iterable[npt.NDArray[np.float64]]:
     d = 0
 
     if dims == 1:
-        yield np.array([[0]], dtype=np.float64)
+        yield np.zeros((1, 1), dtype=np.float64)
         while True:
             d += 1
             yield np.array([[-d], [d]], dtype=np.float64)
@@ -289,7 +294,7 @@ def _int_lattice_to_cloud(
 
 
 @numba.njit(cache=True)
-def _in_sphere(xy: Tuple[float, float], z: float, d: float) -> bool:
+def _in_sphere(xy: Tuple[float, ...], z: float, d: float) -> bool:
     """True if sum(i^2 for i in xy) + z^2 <= d^2."""
 
     s = z ** 2
@@ -310,8 +315,7 @@ def nearest_neighbours_minval(
     does not return the point cloud or indices of the nearest
     neighbours. Used in ``PDD_reconstructable``.
     """
-    
-    
+
     # Generate initial cloud of points from the periodic set
     int_lat_generator = _generate_integer_lattice(cell.shape[0])
     int_lat_generator = iter(int_lat_generator)
