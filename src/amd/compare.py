@@ -4,11 +4,9 @@
 from typing import List, Optional, Union, Tuple
 from functools import partial
 from itertools import combinations
-import os
 from pathlib import Path
 
 import numpy as np
-import numpy.typing as npt
 import pandas as pd
 from scipy.spatial.distance import cdist, pdist, squareform
 from joblib import Parallel, delayed
@@ -37,7 +35,8 @@ def compare(
         disorder: str = 'skip',
         heaviest_component: bool = False,
         molecular_centres: bool = False,
-        families: bool = False,
+        csd_refcodes: bool = False,
+        refcode_families: bool = False,
         show_warnings: bool = True,
         collapse_tol: float = 1e-4,
         metric: str = 'chebyshev',
@@ -50,26 +49,27 @@ def compare(
     r"""Given one or two sets of crystals, compare by AMD or PDD and
     return a pandas DataFrame of the distance matrix.
 
-    Given one or two paths to cifs/folders, lists of CSD refcodes or
-    periodic sets, compare by AMD or PDD and return a DataFrame of the
-    distance matrix with names in the columns and index. Default is to
-    comapre by AMD with k = 100. Accepts most keyword arguments accepted
-    by :class:`CifReader <.io.CifReader>`,
+    Given one or two paths to CIFs, periodic sets, CSD refcodes or lists
+    thereof, compare by AMD or PDD and return a pandas DataFrame of the
+    distance matrix. Default is to comapre by AMD with k = 100. Accepts
+    most keyword arguments accepted by
+    :class:`CifReader <.io.CifReader>`,
     :class:`CSDReader <.io.CSDReader>` and functions from
     :mod:`.compare`.
 
     Parameters
     ----------
-    crystals : list of :class:`PeriodicSet <.periodicset.PeriodicSet>` or str
-        One or a collection of paths, refcodes, file objects or
-        :class:`PeriodicSets <.periodicset.PeriodicSet>`.
-    crystals\_ : list of :class:`PeriodicSet <.periodicset.PeriodicSet>` or str, optional
-        One or a collection of paths, refcodes, file objects or
-        :class:`PeriodicSets <.periodicset.PeriodicSet>`.
+    crystals : list of str or :class:`PeriodicSet <.periodicset.PeriodicSet>`
+        A path, :class:`PeriodicSet <.periodicset.PeriodicSet>`, tuple
+        or a list of those.
+    crystals\_ : list of str or :class:`PeriodicSet <.periodicset.PeriodicSet>`, optional
+        A path, :class:`PeriodicSet <.periodicset.PeriodicSet>`, tuple
+        or a list of those.
     by : str, default 'AMD'
         Use AMD or PDD to compare crystals.
     k : int, default 100
-        Number of neighbour atoms to use for AMD/PDD.
+        Parameter for AMD/PDD, the number of neighbour atoms to consider
+        for each atom in a unit cell.
     nearest : int, deafult None
         Find a number of nearest neighbours instead of a full distance
         matrix between crystals.
@@ -95,7 +95,10 @@ def compare(
     molecular_centres : bool, default False, csd-python-api only
         Use the centres of molecules for comparison
         instead of centres of atoms.
-    families : bool, optional, csd-python-api only
+    csd_refcodes : bool, optional, csd-python-api only
+        Interpret ``crystals`` and ``crystals_`` as CSD refcodes or
+        lists thereof, rather than paths.
+    refcode_families : bool, optional, csd-python-api only
         Read all entries whose refcode starts with
         the given strings, or 'families' (e.g. giving 'DEBXIT' reads all
         entries with refcodes starting with DEBXIT).
@@ -157,23 +160,29 @@ def compare(
 
     Compare two crystals by CSD refcode (PDD, k=50)::
 
-        df = amd.compare('DEBXIT01', 'DEBXIT02', by='PDD', k=50)
+        df = amd.compare('DEBXIT01', 'DEBXIT02', csd_refcodes=True, by='PDD', k=50)
 
     Compare everything in a refcode family (AMD, k=100)::
 
-        df = amd.compare('DEBXIT', families=True)
+        df = amd.compare('DEBXIT', csd_refcodes=True, families=True)
     """
 
     by = by.upper()
     if by not in ('AMD', 'PDD'):
         raise ValueError(
-            "'by' parameter of amd.compare() must be one of 'AMD' or 'PDD' "
-            f"(passed '{by}')"
+            "'by' parameter of amd.compare() must be 'AMD' or 'PDD' (passed "
+            f"'{by}')"
         )
+
+    if heaviest_component or molecular_centres:
+        reader = 'ccdc'
+
+    if refcode_families:
+        csd_refcodes = True
 
     reader_kwargs = {
         'reader': reader,
-        'families': families,
+        'families': refcode_families,
         'remove_hydrogens': remove_hydrogens,
         'disorder': disorder,
         'heaviest_component': heaviest_component,
@@ -192,10 +201,14 @@ def compare(
     }
 
     # Get list(s) of periodic sets from first input
-    crystals = _unwrap_periodicset_list(crystals, **reader_kwargs)
+    if csd_refcodes:
+        crystals = _unwrap_refcode_list(crystals, **reader_kwargs)
+    else:
+        crystals = _unwrap_pset_list(crystals, **reader_kwargs)
+
     if not crystals:
         raise ValueError(
-            'First set passed to amd.compare() contains no valid '
+            'First argument passed to amd.compare() contains no valid '
             'crystals/periodic sets'
         )
     names = [s.name for s in crystals]
@@ -209,11 +222,14 @@ def compare(
         names_ = names
         container_ = None
     else:
-        crystals_ = _unwrap_periodicset_list(crystals_, **reader_kwargs)
+        if csd_refcodes:
+            crystals_ = _unwrap_refcode_list(crystals_, **reader_kwargs)
+        else:
+            crystals_ = _unwrap_pset_list(crystals_, **reader_kwargs)
         if not crystals_:
             raise ValueError(
-                'Second set passed to amd.compare() contains no valid '
-                'crystals/periodic sets'
+                'Second argument passed to amd.compare() contains no '
+                'valid crystals/periodic sets'
             )
         names_ = [s.name for s in crystals_]
         if verbose:
@@ -261,12 +277,12 @@ def compare(
 
 
 def EMD(
-        pdd: npt.NDArray,
-        pdd_: npt.NDArray,
+        pdd: np.ndarray,
+        pdd_: np.ndarray,
         metric: Optional[str] = 'chebyshev',
         return_transport: Optional[bool] = False,
         **kwargs
-) -> Union[float, Tuple[float, npt.NDArray[np.float64]]]:
+) -> Union[float, Tuple[float, np.ndarray[np.float64]]]:
     r"""Calculate the Earth mover's distance (EMD) between two PDDs, aka
     the Wasserstein metric.
 
@@ -307,12 +323,12 @@ def EMD(
 
 
 def AMD_cdist(
-        amds: npt.ArrayLike,
-        amds_: npt.ArrayLike,
+        amds,
+        amds_,
         metric: str = 'chebyshev',
         low_memory: bool = False,
         **kwargs
-) -> npt.NDArray:
+) -> np.ndarray:
     r"""Compare two sets of AMDs with each other, returning a distance
     matrix. This function is essentially
     :func:`scipy.spatial.distance.cdist` with the default metric
@@ -361,11 +377,11 @@ def AMD_cdist(
 
 
 def AMD_pdist(
-        amds: npt.ArrayLike,
+        amds,
         metric: str = 'chebyshev',
         low_memory: bool = False,
         **kwargs
-) -> npt.NDArray:
+) -> np.ndarray:
     """Compare a set of AMDs pairwise, returning a condensed distance
     matrix. This function is essentially
     :func:`scipy.spatial.distance.pdist` with the default metric
@@ -417,14 +433,14 @@ def AMD_pdist(
 
 
 def PDD_cdist(
-        pdds: List[npt.NDArray],
-        pdds_: List[npt.NDArray],
+        pdds: List[np.ndarray],
+        pdds_: List[np.ndarray],
         metric: str = 'chebyshev',
         backend: str = 'multiprocessing',
         n_jobs: Optional[int] = None,
         verbose: bool = False,
         **kwargs
-) -> npt.NDArray:
+) -> np.ndarray:
     r"""Compare two sets of PDDs with each other, returning a distance
     matrix. Supports parallel processing via joblib. If using
     parallelisation, make sure to include an if __name__ == '__main__'
@@ -493,13 +509,13 @@ def PDD_cdist(
 
 
 def PDD_pdist(
-        pdds: List[npt.NDArray],
+        pdds: List[np.ndarray],
         metric: str = 'chebyshev',
         backend: str = 'multiprocessing',
         n_jobs: Optional[int] = None,
         verbose: bool = False,
         **kwargs
-) -> npt.NDArray:
+) -> np.ndarray:
     """Compare a set of PDDs pairwise, returning a condensed distance
     matrix. Supports parallelisation via joblib. If using
     parallelisation, make sure to include a if __name__ == '__main__'
@@ -567,61 +583,56 @@ def PDD_pdist(
 
 
 def emd(
-        pdd: npt.NDArray, pdd_: npt.NDArray, **kwargs
-) -> Union[float, Tuple[float, npt.NDArray[np.float64]]]:
+        pdd: np.ndarray, pdd_: np.ndarray, **kwargs
+) -> Union[float, Tuple[float, np.ndarray[np.float64]]]:
     """Alias for :func:`EMD() <.compare.EMD>`."""
     return EMD(pdd, pdd_, **kwargs)
 
 
-def _unwrap_periodicset_list(psets_or_str, **reader_kwargs):
+def _unwrap_refcode_list(refcodes, **reader_kwargs):
+    """Given string or list of strings, interpret as CSD refcodes and
+    return a list of PeriodicSets.
+    """
+
+    reader_kwargs.pop('reader', None)
+    if isinstance(refcodes, list):
+        if not all(isinstance(refcode, str) for refcode in refcodes):
+            raise TypeError(
+                f'amd.compare(refcodes=True) expects a string or list of '
+                'strings.'
+            )
+    elif not isinstance(refcodes, str):
+        raise TypeError(
+            f'amd.compare(refcodes=True) expects a string or list of '
+            f'strings, got {refcodes.__class__.__name__}'
+        )
+    return list(CSDReader(refcodes, **reader_kwargs))
+
+
+def _unwrap_pset_list(psets, **reader_kwargs):
     """Given a valid input for amd.compare(), return a list of
-    PeriodicSets. Accepts PeriodicSets, paths (to files or folders),
-    refcodes or lists of those."""
+    PeriodicSets. Accepts paths, PeriodicSets, tuples or lists
+    thereof."""
 
-    if isinstance(psets_or_str, list):
-        return [s for item in psets_or_str
-                for s in _extract_periodicsets(item, **reader_kwargs)]
-    return _extract_periodicsets(psets_or_str, **reader_kwargs)
+    def _extract_periodicsets(item, **reader_kwargs):
+        """Given a path, PeriodicSet or tuple, return a list of the
+        PeriodicSet(s)."""
 
-
-def _extract_periodicsets(item, **reader_kwargs):
-    """Given a path, PeriodicSet, tuple or list of CSD refcodes, return
-    a list of the PeriodicSet(s)."""
-
-    if isinstance(item, PeriodicSet):
-        return [item]
-    if isinstance(item, Tuple):
-        return [PeriodicSet(item[0], item[1])]
-
-    try:
-        path = Path(item)
-    except TypeError:
-        raise ValueError(
-            'amd.compare() expected a str, os.PathLike or amd.PeriodicSet, '
-            f"but was given type '{item.__class__.__name__}'"
-        )
-
-    if path.is_file() or path.is_dir():
-        reader_kwargs.pop('families', None)
-        reader_kwargs.pop('refcodes', None)
-        return list(CifReader(path, **reader_kwargs))
-    elif isinstance(item, str):
-        reader_kwargs.pop('reader', None)
+        if isinstance(item, PeriodicSet):
+            return [item]
+        if isinstance(item, Tuple):
+            return [PeriodicSet(item[0], item[1])]
         try:
-            return list(CSDReader(item.upper(), **reader_kwargs))
-        except ImportError:
+            path = Path(item)
+        except TypeError:
             raise ValueError(
-                'amd.compare() expected a path, os.PathLike or '
-                f"amd.PeriodicSet, but was given '{item}'; to "
-                'interpret as a CSD refcode, install csd-python-api'
+                'amd.compare() expects a string, amd.PeriodicSet or tuple, '
+                f'got {item.__class__.__name__}'
             )
-        except:
-            raise ValueError(
-                f'amd.compare() expected a path, os.PathLike, amd.PeriodicSet '
-                f"or CSD refcode, but was given '{item}'"
-            )
-    else:
-        raise ValueError(
-            'amd.compare() expected a path, os.PathLike, amd.PeriodicSet or '
-            f"CSD refcode, but was given type '{item.__class__.__name__}'"
-        )
+        return list(CifReader(path, **reader_kwargs))
+
+    reader_kwargs.pop('families', None)
+    if isinstance(psets, list):
+        return [s for i in psets
+                for s in _extract_periodicsets(i, **reader_kwargs)]
+    return _extract_periodicsets(psets, **reader_kwargs)

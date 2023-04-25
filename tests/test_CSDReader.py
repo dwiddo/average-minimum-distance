@@ -28,7 +28,7 @@ def test_CSDReader(reference_data, refcode_families, ccdc_enabled):
         )
 
     for s, s_ in zip(read_in, references):
-        if not s == s_['PeriodicSet']:
+        if not s._equal_cell_and_motif(s_['PeriodicSet']):
             s1 = str(s)
             s2 = str(s_["PeriodicSet"])
             pytest.fail(

@@ -38,8 +38,8 @@ Reading options
 * :code:`reader` (default ``gemmi``) controls the backend package used to parse the file. Accepts ``gemmi``, ``pycodcif``, ``pymatgen``, ``ase`` and ``ccdc`` (if these packages are installed). The ccdc reader can read formats accepted by :class:`ccdc.io.EntryReader`.
 * :code:`remove_hydrogens` (default ``False``) removes Hydrogen atoms from the structure.
 * :code:`disorder` (default ``skip``) controls how disordered structures are handled. The default skips any crystal with disorder, since disorder conflicts somewhat with the periodic set model. Alternatively, :code:`ordered_sites` removes atoms with disorder and :code:`all_sites` includes all atoms regardless.
-* :code:`heaviest_component` (``reader='ccdc'`` only, default ``False``) removes all but the heaviest connected molecule in the asymmetric unit, intended for removing solvents.
-* :code:`molecular_centres` (``reader='ccdc'`` only, default ``False``) uses molecular centres of mass instead of atoms as the motif of the periodic set.
+* :code:`heaviest_component` (``csd-python-api`` only, default ``False``) removes all but the heaviest connected molecule in the asymmetric unit, intended for removing solvents.
+* :code:`molecular_centres` (``csd-python-api`` only, default ``False``) uses molecular centres of mass instead of atoms as the motif of the periodic set.
 * :code:`show_warnings` (default ``True``) chooses whether to print warnings during reading, e.g. from disordered structures or crystals with missing data.
 * :code:`verbose` (default ``False``) prints a progress bar showing the number of items read so far.
 

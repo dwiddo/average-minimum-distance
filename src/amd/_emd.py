@@ -11,17 +11,16 @@ from typing import Tuple
 
 import numba
 import numpy as np
-import numpy.typing as npt
 
 __all__ = ['network_simplex']
 
 
 @numba.njit(cache=True)
 def network_simplex(
-        source_demands: npt.NDArray,
-        sink_demands: npt.NDArray,
-        network_costs: npt.NDArray
-) -> Tuple[float, npt.NDArray[np.float64]]:
+        source_demands: np.ndarray,
+        sink_demands: np.ndarray,
+        network_costs: np.ndarray
+) -> Tuple[float, np.ndarray[np.float64]]:
     """Calculate the Earth mover's distance (Wasserstien metric) between
     two weighted distributions given by two sets of weights and a cost
     matrix.
@@ -186,18 +185,10 @@ def network_simplex(
                 if val == i:
                     break
 
-            _remove_edge(
-                s, t, size, prev_node, last_node, next_node, parent, edge
-            )
-            _make_root(
-                q, parent, size, last_node, prev_node, next_node, edge
-            )
-            _add_edge(
-                i, p, q, next_node, prev_node, last_node, size, parent, edge
-            )
-            _update_potentials(
-                i, p, q, heads, potentials, costs, last_node, next_node
-            )
+            _remove_edge(s, t, size, prev_node, last_node, next_node, parent, edge)
+            _make_root(q, parent, size, last_node, prev_node, next_node, edge)
+            _add_edge(i, p, q, next_node, prev_node, last_node, size, parent, edge)
+            _update_potentials(i, p, q, heads, potentials, costs, last_node, next_node)
 
     final_flows = flows[:e] / fp_multiplier
     edge_costs = costs[:e] / fp_multiplier

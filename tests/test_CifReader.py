@@ -26,7 +26,7 @@ def test_CifReader(reader, data_cif_paths, reference_data):
                 f'structures were read from {name}.'
             )
         for s, s_ in zip(read_in, references):
-            if not s == s_['PeriodicSet']:
+            if not s._equal_cell_and_motif(s_['PeriodicSet']):
                 pytest.fail(
                     f'Structure {name}:{s.name} read with CifReader disagrees '
                     'with reference.'
@@ -56,7 +56,7 @@ def test_periodicset_from_ase_atoms(data_cif_paths, reference_data):
             )
 
         for s, s_ in zip(read_in, references):
-            if not s == s_['PeriodicSet']:
+            if not s._equal_cell_and_motif(s_['PeriodicSet']):
                 n = s_['PeriodicSet'].name
                 pytest.fail(
                     'Structure read with ase.io.iread disagrees with '
@@ -67,7 +67,7 @@ def test_periodicset_from_ase_atoms(data_cif_paths, reference_data):
 def test_CifReader_equiv_structs(data_dir):
     structs = list(amd.CifReader(data_dir / 'OJIGOG.cif', show_warnings=False))
     pdds = [amd.PDD(struct, 100) for struct in structs]
-    if amd.emd(pdds[0], pdds[1]) > 0:
+    if amd.emd(pdds[0], pdds[1]) > 0: # change
         pytest.fail(
             'Asymmetric structure was read differently than identical '
             'expanded version.'
@@ -76,7 +76,7 @@ def test_CifReader_equiv_structs(data_dir):
 
 def test_equiv_sites(data_dir):
     structs = list(amd.CifReader(data_dir / 'BABMUQ.cif', show_warnings=False))
-    if structs[0] != structs[1]:
+    if not structs[0]._equal_cell_and_motif(structs[1]):
         pytest.fail(
             'Two equivalent structures by symmetry were read differently by '
             f'CifReader: {structs[0]}, \n, {structs[1]}'

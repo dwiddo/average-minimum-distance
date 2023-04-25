@@ -7,7 +7,6 @@ import collections
 from typing import Tuple, Union
 
 import numpy as np
-import numpy.typing as npt
 from scipy.spatial.distance import pdist, squareform
 from scipy.special import factorial
 
@@ -20,10 +19,10 @@ __all__ = [
     'PDD_reconstructable', 'PPC', 'AMD_estimate'
 ]
 
-PeriodicSetType = Union[PeriodicSet, Tuple[npt.NDArray, npt.NDArray]]
+PeriodicSetType = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
 
 
-def AMD(periodic_set: PeriodicSetType, k: int) -> npt.NDArray[np.float64]:
+def AMD(periodic_set: PeriodicSetType, k: int) -> np.ndarray[np.float64]:
     """Return the AMD of a periodic set (crystal) up to k.
 
     Parameters
@@ -77,7 +76,7 @@ def PDD(
         collapse: bool = True,
         collapse_tol: float = 1e-4,
         return_row_groups: bool = False
-) -> Union[npt.NDArray[np.float64], Tuple[npt.NDArray[np.float64], list]]:
+) -> Union[np.ndarray[np.float64], Tuple[np.ndarray[np.float64], list]]:
     """Return the PDD of a periodic set (crystal) up to k.
 
     Parameters
@@ -155,21 +154,23 @@ def PDD(
             ], dtype=np.float64)
 
     pdd = np.empty(shape=(len(weights), k + 1), dtype=np.float64)
-    pdd[:, 0] = weights
-    pdd[:, 1:] = dists
 
     if lexsort:
         lex_ordering = np.lexsort(np.rot90(dists))
+        pdd[:, 0] = weights[lex_ordering]
+        pdd[:, 1:] = dists[lex_ordering]
         if return_row_groups:
             groups = [groups[i] for i in lex_ordering]
-        pdd = pdd[lex_ordering]
+    else:
+        pdd[:, 0] = weights
+        pdd[:, 1:] = dists
 
     if return_row_groups:
         return pdd, groups
     return pdd
 
 
-def PDD_to_AMD(pdd: npt.NDArray) -> npt.NDArray:
+def PDD_to_AMD(pdd: np.ndarray) -> np.ndarray:
     """Calculate an AMD from a PDD. Faster than computing both from
     scratch.
 
@@ -183,11 +184,10 @@ def PDD_to_AMD(pdd: npt.NDArray) -> npt.NDArray:
     :class:`numpy.ndarray`
         The AMD of the periodic set.
     """
-
     return np.average(pdd[:, 1:], weights=pdd[:, 0], axis=0)
 
 
-def AMD_finite(motif: npt.NDArray) -> npt.NDArray:
+def AMD_finite(motif: np.ndarray) -> np.ndarray:
     """Return the AMD of a finite m-point set up to k = m - 1.
 
     Parameters
@@ -224,7 +224,7 @@ def PDD_finite(
         collapse: bool = True,
         collapse_tol: float = 1e-4,
         return_row_groups: bool = False
-) -> Union[npt.NDArray[np.float64], Tuple[npt.NDArray[np.float64], list]]:
+) -> Union[np.ndarray[np.float64], Tuple[np.ndarray[np.float64], list]]:
     """Return the PDD of a finite m-point set up to k = m - 1.
 
     Parameters
@@ -272,23 +272,25 @@ def PDD_finite(
     groups = [[i] for i in range(len(dists))]
 
     if collapse:
-        overlapping = pdist(dists, metric='chebyshev')
-        overlapping = overlapping <= collapse_tol
+        overlapping = pdist(dists, metric='chebyshev') <= collapse_tol
         if overlapping.any():
             groups = _collapse_into_groups(overlapping)
             weights = np.array([np.sum(weights[group]) for group in groups])
             dists = np.array([
                 np.average(dists[group], axis=0) for group in groups
-            ])
+            ], dtype=np.float64)
 
     pdd = np.empty(shape=(len(weights), m), dtype=np.float64)
-    pdd[:, 0] = weights
-    pdd[:, 1:] = dists
 
     if lexsort:
         lex_ordering = np.lexsort(np.rot90(dists))
-        groups = [groups[i] for i in lex_ordering]
-        pdd = pdd[lex_ordering]
+        pdd[:, 0] = weights[lex_ordering]
+        pdd[:, 1:] = dists[lex_ordering]
+        if return_row_groups:
+            groups = [groups[i] for i in lex_ordering]
+    else:
+        pdd[:, 0] = weights
+        pdd[:, 1:] = dists
 
     if return_row_groups:
         return pdd, groups
@@ -298,7 +300,7 @@ def PDD_finite(
 def PDD_reconstructable(
         periodic_set: PeriodicSetType,
         lexsort: bool = True
-) -> npt.NDArray[np.float64]:
+) -> np.ndarray[np.float64]:
     """Return the PDD of a periodic set with `k` (number of columns)
     large enough such that the periodic set can be reconstructed from
     the PDD.
@@ -386,7 +388,7 @@ def PPC(periodic_set: PeriodicSetType) -> float:
 def AMD_estimate(
         periodic_set: PeriodicSetType,
         k: int
-) -> npt.NDArray[np.float64]:
+) -> np.ndarray[np.float64]:
     r"""Calculate an estimate of AMD based on the PPC.
 
     Parameters
@@ -410,7 +412,7 @@ def AMD_estimate(
     return PPC((motif, cell)) * k_root
 
 
-def _get_structure(periodic_set: PeriodicSetType) -> Tuple[npt.NDArray, ...]:
+def _get_structure(periodic_set: PeriodicSetType) -> Tuple[np.ndarray, ...]:
     """Extract the motif and cell, and if present the asymmetric unit
     and scaled multiplicities, from a periodic set. ``periodic_set`` can
     be a :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`, or a tuple
@@ -427,8 +429,13 @@ def _get_structure(periodic_set: PeriodicSetType) -> Tuple[npt.NDArray, ...]:
         if asym_unit_inds is not None and wyc_muls is not None:
             asymmetric_unit = motif[asym_unit_inds]
             weights = wyc_muls / np.sum(wyc_muls)
-    else:
+    elif isinstance(periodic_set, (tuple, list)):
         motif, cell = periodic_set
+    else:
+        raise ValueError(
+            'Expected amd.PeriodicSet or tuple, got '
+            f'{periodic_set.__class__.__name__}'
+        )
 
     if asymmetric_unit is None or weights is None:
         asymmetric_unit = motif
@@ -437,7 +444,7 @@ def _get_structure(periodic_set: PeriodicSetType) -> Tuple[npt.NDArray, ...]:
     return motif, cell, asymmetric_unit, weights
 
 
-def _collapse_into_groups(overlapping: npt.NDArray) -> list:
+def _collapse_into_groups(overlapping: np.ndarray) -> list:
     """Return a list of groups of indices where all indices in the same
     group overlap. ``overlapping`` indicates for each pair of items in a
     set whether or not the items overlap, in the shape of a condensed

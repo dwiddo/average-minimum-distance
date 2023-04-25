@@ -5,7 +5,6 @@ PDD. This is possible 'in a general position', see our papers for more.
 from itertools import combinations, permutations, product
 
 import numpy as np
-import numpy.typing as npt
 import numba
 from scipy.spatial.distance import cdist
 from scipy.spatial import KDTree
@@ -16,10 +15,7 @@ from .utils import diameter
 __all__ = ['reconstruct']
 
 
-def reconstruct(
-        pdd: npt.NDArray,
-        cell: npt.NDArray
-) -> npt.NDArray:
+def reconstruct(pdd: np.ndarray, cell: np.ndarray) -> np.ndarray:
     """Reconstruct a motif from a PDD and unit cell. This function will
     only work if ``pdd`` has enough columns, such that the last column
     has all values larger than 2 times the diameter of the unit cell. It

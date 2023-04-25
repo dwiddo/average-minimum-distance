@@ -12,7 +12,6 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
-import numpy.typing as npt
 
 from .utils import (
     cellpar_to_cell,
@@ -60,12 +59,12 @@ class PeriodicSet:
 
     def __init__(
             self,
-            motif: npt.NDArray,
-            cell: npt.NDArray,
+            motif: np.ndarray,
+            cell: np.ndarray,
             name: Optional[str] = None,
-            asymmetric_unit: Optional[npt.NDArray] = None,
-            wyckoff_multiplicities: Optional[npt.NDArray] = None,
-            types: Optional[npt.NDArray] = None
+            asymmetric_unit: Optional[np.ndarray] = None,
+            wyckoff_multiplicities: Optional[np.ndarray] = None,
+            types: Optional[np.ndarray] = None
     ):
 
         self.motif = motif
@@ -81,40 +80,47 @@ class PeriodicSet:
 
     def __str__(self):
 
-        if self.asymmetric_unit is None:
-            n_asym_sites = len(self.motif)
-        else:
-            n_asym_sites = len(self.asymmetric_unit)
+        def format_cellpar(par):
+            return f'{par:.2f}'.rstrip('0').rstrip('.')
 
-        cellpar_str = None
+        m, n = self.motif.shape
+        m_pl = '' if m == 1 else 's'
+        n_pl = '' if n == 1 else 's'
+
         if self.ndim == 1:
-            cellpar_str = f', cell={self.cell[0][0]})'
-        if self.ndim == 2:
+            cellpar_str = f', cell={format_cellpar(self.cell[0][0])}'
+        elif self.ndim == 2:
             cellpar = cell_to_cellpar_2D(self.cell)
-            cellpar_str = ','.join(str(round(p, 2)) for p in cellpar)
-            cellpar_str = f', abα={cellpar_str})'
+            cellpar_str = ','.join(map(format_cellpar, cellpar))
+            cellpar_str = f', abα={cellpar_str}'
         elif self.ndim == 3:
             cellpar = cell_to_cellpar(self.cell)
-            cellpar_str = ','.join(str(round(p, 2)) for p in cellpar)
-            cellpar_str = f', abcαβγ={cellpar_str})'
+            cellpar_str = ','.join(map(format_cellpar, cellpar))
+            cellpar_str = f', abcαβγ={cellpar_str}'
         else:
-            cellpar_str = ')'
+            cellpar_str = ''
 
         return (
-            f'PeriodicSet(name={self.name}, motif shape {self.motif.shape}; '
-            f'{n_asym_sites} asym sites{cellpar_str})'
+            f'PeriodicSet(name={self.name}: {m} point{m_pl} in {n} dim{n_pl}'
+            f'{cellpar_str})'
         )
 
     def __repr__(self):
+
+        name_str = f'name={self.name}, ' if self.name is not None else ''
+        optional_attrs = []
+        for attr_str in ('asymmetric_unit', 'wyckoff_multiplicities', 'types'):
+            attr = getattr(self, attr_str)
+            if attr is not None:
+                optional_attrs.append(f'{attr_str}={attr}')
+        optional_attrs_str = ', ' if optional_attrs else ''
+        optional_attrs_str += ', '.join(optional_attrs)
         return (
-            f'PeriodicSet(name={self.name}, '
-            f'motif={self.motif}, cell={self.cell}, '
-            f'asymmetric_unit={self.asymmetric_unit}, '
-            f'wyckoff_multiplicities={self.wyckoff_multiplicities}, '
-            f'types={self.types})'
+            f'PeriodicSet({name_str}motif={self.motif}, cell={self.cell}'
+            f'{optional_attrs_str})'
         )
 
-    def __eq__(self, other):
+    def _equal_cell_and_motif(self, other):
         """Used for debugging/tests. True if both 1. the unit cells are
         (close to) identical, and 2. the motifs are the same shape, and
         every point in one motif has a (close to) identical point
@@ -127,8 +133,9 @@ class PeriodicSet:
            not np.allclose(self.cell, other.cell):
             return False
 
-        fm1 = np.mod(self.motif @ np.linalg.inv(self.cell), 1)
-        fm2 = np.mod(other.motif @ np.linalg.inv(other.cell), 1)
+        cell_inv = np.linalg.inv(self.cell)
+        fm1 = np.mod(self.motif @ cell_inv, 1)
+        fm2 = np.mod(other.motif @ cell_inv, 1)
         d1 = np.abs(fm2[:, None] - fm1)
         d2 = np.abs(d1 - 1)
         diffs = np.amax(np.minimum(d1, d2), axis=-1)
@@ -139,9 +146,6 @@ class PeriodicSet:
             return False
 
         return True
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
 
     @staticmethod
     def cubic(scale: float = 1.0, dims: int = 3) -> PeriodicSet:

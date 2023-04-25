@@ -1,31 +1,45 @@
 Getting Started
 ===============
 
-Comparing crystals
-------------------
+Use pip to install average-minimum-distance::
 
-:func:`amd.compare() <amd.compare.compare>` extracts crystals from one or more CIFs
-and compares them by AMD or PDD. For example, to compare all crystals in a
-cif by AMD with k = 100::
+    pip install average-minimum-distance
 
-    import amd
-    df = amd.compare('crystals.cif', by='AMD', k=100)
+Then import average-minimum-distance with ``import amd``.
 
-To compare by PDD, use ``by='PDD'``. A distance matrix is returned as a pandas DataFrame. 
-:func:`amd.compare() <amd.compare.compare>` can also take two paths to compare all
-crystals in one file with those in the other.
+Compare crystals in .CIF files with :func:`amd.compare() <amd.compare.compare>`
+-------------------------------------------------------------------------------
 
-If csd-python-api is installed, :func:`amd.compare() <amd.compare.compare>` can also accept lists of
-CSD refcodes, or other formats.
+:func:`amd.compare() <amd.compare.compare>` extracts crystals from CIF files
+and compares them by AMD or PDD. Passing one path to a CIF will compare all
+crystals in the CIF with each other, passing two will compare all in one
+against all in the other. For example, to compare crystals in 'crystals.cif' by
+AMD with k = 100::
 
-Read, calculate descriptors and compare separately 
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    >>> import amd
+    >>> distance_matrix = amd.compare('crystals.cif', by='AMD', k=100)
+    >>> print(distance_matrix)
 
-:func:`amd.compare() <amd.compare.compare>` reads crystals, calculates AMD or PDD, and compares them. It is
-sometimes useful to do these steps separately, e.g. to save the descriptors to a file. The code above using
+               crystal_1  crystal_2  crystal_3  crystal_4
+    crystal_1   0.000000   1.319907   0.975221   2.023880
+    crystal_2   1.319907   0.000000   0.520115   0.703973
+    crystal_3   0.975221   0.520115   0.000000   1.072211
+    crystal_4   2.023880   0.703973   1.072211   0.000000
+
+The distance matrix returned is a :class:`pandas.DataFrame`.
+
+If csd-python-api is installed, :func:`amd.compare() <amd.compare.compare>`
+can also accept lists of CSD refcodes (pass ``refcode_families=True``) or other
+formats (pass ``reader='ccdc'``).
+
+Read CIFs, calculate descriptors and compare separately
+-------------------------------------------------------
+
+:func:`amd.compare() <amd.compare.compare>` reads crystals from CIFs,
+calculates descriptors and compares them. These steps can be done separately,
+e.g. to analyse the descriptors themselves. The line of code above using
 :func:`amd.compare() <amd.compare.compare>` is equivalent to the following::
 
-    import amd
     import pandas as pd
     from scipy.spatial.distance import squareform
 
@@ -33,32 +47,20 @@ sometimes useful to do these steps separately, e.g. to save the descriptors to a
     amds = [amd.AMD(crystal, 100) for crystal in crystals]  # calculate AMDs
     dm = squareform(amd.AMD_pdist(amds))                    # compare AMDs pairwise
     names = [crystal.name for crystal in crystals]
-    df = pd.DataFrame(dm, index=names, columns=names)
+    distance_matrix = pd.DataFrame(dm, index=names, columns=names)
 
+:class:`amd.CifReader <amd.io.CifReader>` reads a CIF and yields the crystals
+represented as :class:`amd.PeriodicSet <amd.periodicset.PeriodicSet>` objects.
+A :class:`amd.PeriodicSet <amd.periodicset.PeriodicSet>` can be passed to
+:func:`amd.AMD() <amd.calculate.AMD>` to calculate its AMD (similarly pass to 
+:func:`amd.PDD() <amd.calculate.PDD>` for the PDD).
 Here, :func:`amd.AMD_pdist() <amd.compare.AMD_pdist>` is used to compare the AMDs pairwise, returning a condensed distance matrix (see
 :func:`scipy.spatial.distance.squareform`, which converts it to a symmetric 2D distance matrix). There is
 an equivalent function for comparing PDDs, :func:`amd.PDD_pdist() <amd.compare.PDD_pdist>`. There are also two cdist functions, which take
 two collections of descriptors and compares everything in one set with the other returning a 2D distance matrix.
 
-Write crystals or their descriptors to a file
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-``pickle`` is an easy way to store crystals or their descriptors. 
-::
-
-    import amd
-    import pickle
-
-    crystals = list(amd.CifReader('crystals.cif'))
-
-    with open('crystals.pkl', 'wb') as f: # write
-        pickle.dump(crystals, f)
-
-    with open('crystals.pkl', 'rb') as f: # read
-        crystals = pickle.load(f)
-
-List of optional parameters
----------------------------
+Optional parameters of :func:`amd.compare() <amd.compare.compare>`
+------------------------------------------------------------------
 
 :func:`amd.compare() <amd.compare.compare>` reads crystals, computes their
 invariants and compares them in one function for convinience. It accepts
@@ -73,10 +75,11 @@ Parameters of :class:`amd.CifReader <amd.io.CifReader>` or :class:`amd.CSDReader
 * :code:`remove_hydrogens` (default ``False``) removes Hydrogen atoms from the structure.
 * :code:`disorder` (default ``skip``) controls how disordered structures are handled. The default skips any crystal with disorder, since disorder conflicts with the model of a periodic set. Alternatively, :code:`ordered_sites` removes atoms with disorder and :code:`all_sites` includes all atoms regardless of disorder.
 * :code:`show_warnings` (default ``True``) chooses whether to print warnings during reading, e.g. from disordered structures or crystals with missing data.
-* :code:`heaviest_component` (``reader='ccdc'`` only, default ``False``) removes all but the heaviest connected molecule in the asymmetric unit, intended for removing solvents.
-* :code:`molecular_centres` (``reader='ccdc'`` only, default ``False``) uses molecular centres of mass instead of atoms as the motif of the periodic set.
-* :code:`families` (``reader='ccdc'`` only, default ``False``) interprets the list of strings given as CSD refcode families and reads all crystals in those families. Only applies if the inputs are CSD refcodes.
 * :code:`verbose` (default ``False``) prints a progress bar showing the number of items read so far.
+* :code:`heaviest_component` (``csd-python-api`` only, default ``False``) removes all but the heaviest connected molecule in the asymmetric unit, intended for removing solvents.
+* :code:`molecular_centres` (``csd-python-api`` only, default ``False``) uses molecular centres of mass instead of atoms as the motif of the periodic set.
+* :code:`csd_refcodes` (``csd-python-api`` only, default ``False``) interprets the string(s) given as CSD refcodes.
+* :code:`families` (``csd-python-api`` only, default ``False``) interprets the list of strings given as CSD refcode families and reads all crystals in those families.
 
 PDD options
 ^^^^^^^^^^^

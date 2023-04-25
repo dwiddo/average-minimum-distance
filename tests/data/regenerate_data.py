@@ -7,7 +7,7 @@ import pickle
 import pathlib
 
 
-parent = pathlib.Path(__file__).absolute().parent
+_parent = pathlib.Path(__file__).absolute().parent
 
 
 def regenerate(name, generator):
@@ -26,11 +26,11 @@ def regenerate(name, generator):
             }
         )
 
-    with open(str(parent / f'{name}.pkl'), 'wb') as f:
+    with open(str(_parent / f'{name}.pkl'), 'wb') as f:
         pickle.dump(data, f)
     if len(data) > 1:
         cdm = amd.PDD_pdist([d['PDD100'] for d in data])
-        np.savez_compressed(str(parent / f'{name}_cdm.npz'), cdm=cdm)
+        np.savez_compressed(str(_parent / f'{name}_cdm.npz'), cdm=cdm)
 
 
 def regenerate_cifs_test_data():
@@ -38,7 +38,7 @@ def regenerate_cifs_test_data():
     Does not apply to test data extracted with ``csd-python-api``.
     """
     for name in ('cubic', 'T2_experimental'):
-        path = (parent / f'{name}.cif')
+        path = (_parent / f'{name}.cif')
         regenerate(name, amd.CifReader(path, show_warnings=False))
 
 

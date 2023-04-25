@@ -4,7 +4,6 @@
 from typing import Tuple
 
 import numpy as np
-import numpy.typing as npt
 import numba
 from scipy.spatial.distance import squareform
 
@@ -15,7 +14,7 @@ __all__ = [
 
 
 @numba.njit(cache=True)
-def diameter(cell: npt.NDArray) -> float:
+def diameter(cell: np.ndarray) -> float:
     """Return the diameter of a unit cell (given as a square matrix in
     orthogonal coordinates) in 3 or fewer dimensions. The diameter is
     the maxiumum distance between any two points in the unit cell.
@@ -35,11 +34,11 @@ def diameter(cell: npt.NDArray) -> float:
     if dims == 1:
         return cell[0][0]
     if dims == 2:
-        diagonals = np.empty((2, 2))
+        diagonals = np.empty((2, 2), dtype=np.float64)
         diagonals[0] = (cell[0] + cell[1]) ** 2
         diagonals[1] = (cell[0] - cell[1]) ** 2
     elif dims == 3:
-        diagonals = np.empty((4, 3))
+        diagonals = np.empty((4, 3), dtype=np.float64)
         diagonals[0] = ( cell[0] + cell[1] + cell[2]) ** 2
         diagonals[1] = ( cell[0] + cell[1] - cell[2]) ** 2
         diagonals[2] = ( cell[0] - cell[1] + cell[2]) ** 2
@@ -51,7 +50,7 @@ def diameter(cell: npt.NDArray) -> float:
 
 
 @numba.njit(cache=True)
-def cellpar_to_cell(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
+def cellpar_to_cell(cellpar: np.ndarray) -> np.ndarray[np.float64]:
     """Convert canonical 3D unit cell parameters a,b,c,α,β,γ into a 3x3
     :class:`numpy.ndarray` representing the unit cell in orthogonal
     coordinates. Numba-accelerated version of function from
@@ -69,35 +68,24 @@ def cellpar_to_cell(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
         Unit cell represented as a 3x3 matrix in orthogonal coordinates.
     """
 
-    a, b, c, alpha, beta, gamma = cellpar
+    a, b, c, al, be, ga = cellpar
     eps = 2 * np.spacing(90)
 
-    if abs(abs(alpha) - 90.0) < eps:
-        cos_alpha = 0.0
-    else:
-        cos_alpha = np.cos(np.deg2rad(alpha))
+    cos_alpha = 0.0 if abs(abs(al) - 90.0) < eps else np.cos(np.deg2rad(al))
+    cos_beta = 0.0 if abs(abs(be) - 90.0) < eps else np.cos(np.deg2rad(be))
+    cos_gamma = 0.0 if abs(abs(ga) - 90.0) < eps else np.cos(np.deg2rad(ga))
 
-    if abs(abs(beta) - 90.0) < eps:
-        cos_beta = 0.0
-    else:
-        cos_beta = np.cos(np.deg2rad(beta))
-
-    if abs(abs(gamma) - 90.0) < eps:
-        cos_gamma = 0.0
-    else:
-        cos_gamma = np.cos(np.deg2rad(gamma))
-
-    if abs(gamma - 90.0) < eps:
+    if abs(ga - 90.0) < eps:
         sin_gamma = 1.0
-    elif abs(gamma + 90.0) < eps:
+    elif abs(ga + 90.0) < eps:
         sin_gamma = -1.0
     else:
-        sin_gamma = np.sin(np.deg2rad(gamma))
+        sin_gamma = np.sin(np.deg2rad(ga))
 
     cy = (cos_alpha - cos_beta * cos_gamma) / sin_gamma
     cz_sqr = 1.0 - cos_beta ** 2 - cy ** 2
     if cz_sqr < 0:
-        raise ValueError('Could not create unit cell from given parameters.')
+        raise ValueError('Could not create a unit cell from given parameters.')
 
     cell = np.zeros((3, 3), dtype=np.float64)
     cell[0, 0] = a
@@ -110,7 +98,7 @@ def cellpar_to_cell(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
 
 
 @numba.njit(cache=True)
-def cellpar_to_cell_2D(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
+def cellpar_to_cell_2D(cellpar: np.ndarray) -> np.ndarray[np.float64]:
     """Convert 3 parameters defining a 2D unit cell a,b,α into a 2x2
     :class:`numpy.ndarray` representing the unit cell in orthogonal
     coordinates.
@@ -137,7 +125,7 @@ def cellpar_to_cell_2D(cellpar: npt.NDArray) -> npt.NDArray[np.float64]:
 
 
 @numba.njit(cache=True)
-def cell_to_cellpar(cell: npt.NDArray) -> npt.NDArray[np.float64]:
+def cell_to_cellpar(cell: np.ndarray) -> np.ndarray[np.float64]:
     """Convert a 3x3 :class:`numpy.ndarray` representing a unit cell in
     orthogonal coordinates (as returned by
     :func:`cellpar_to_cell() <.utils.cellpar_to_cell>`) into a list of 3
@@ -172,7 +160,7 @@ def cell_to_cellpar(cell: npt.NDArray) -> npt.NDArray[np.float64]:
 
 
 @numba.njit(cache=True)
-def cell_to_cellpar_2D(cell: npt.NDArray) -> npt.NDArray[np.float64]:
+def cell_to_cellpar_2D(cell: np.ndarray) -> np.ndarray[np.float64]:
     """Convert a 2x2 :class:`numpy.ndarray` representing a unit cell in
     orthogonal coordinates (as returned by
     :func:`cellpar_to_cell_2D() <.utils.cellpar_to_cell_2D>`) into a
@@ -200,8 +188,8 @@ def cell_to_cellpar_2D(cell: npt.NDArray) -> npt.NDArray[np.float64]:
 
 def neighbours_from_distance_matrix(
         n: int,
-        dm: npt.NDArray
-) -> Tuple[npt.NDArray, npt.NDArray[np.int32]]:
+        dm: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray[np.int32]]:
     """Given a distance matrix, find the n nearest neighbours of each
     item.
 
@@ -253,7 +241,7 @@ def random_cell(
         length_bounds: Tuple = (1.0, 2.0),
         angle_bounds: Tuple = (60.0, 120.0),
         dims: int = 3
-) -> npt.NDArray[np.float64]:
+) -> np.ndarray[np.float64]:
     """Return a random unit cell with uniformally chosen length and
     angle parameters between bounds. Dimensions 2 and 3 only.
     """

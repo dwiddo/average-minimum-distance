@@ -44,7 +44,7 @@ The distance matrix returned is a [pandas DataFrame](https://pandas.pydata.org/p
 
 ```amd.compare()``` reads crystals from CIFs, calculates their descriptors and compares them, but these steps can be done separately if needed (see below). ```amd.compare()``` accepts several optional parameters, see [the documentation for a full list](https://average-minimum-distance.readthedocs.io/en/latest/Getting_Started.html#list-of-optional-parameters).
 
-*CSD Python API only:* ```amd.compare()``` accepts one or more CSD refcodes or other file formats instead of cifs (by passing ```reader='ccdc'```).
+*CSD Python API only:* ```amd.compare()``` interfaces with ``csd-python-api``. It can accept one or more CSD refcodes if passed ``refcode_families=True`` or other file formats instead of cifs if passed ``reader='ccdc'``.
 
 #### Choosing a value of k
 
