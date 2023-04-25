@@ -282,7 +282,7 @@ def EMD(
         metric: Optional[str] = 'chebyshev',
         return_transport: Optional[bool] = False,
         **kwargs
-) -> Union[float, Tuple[float, np.ndarray[np.float64]]]:
+) -> Union[float, Tuple[float, np.ndarray]]:
     r"""Calculate the Earth mover's distance (EMD) between two PDDs, aka
     the Wasserstein metric.
 
@@ -377,10 +377,7 @@ def AMD_cdist(
 
 
 def AMD_pdist(
-        amds,
-        metric: str = 'chebyshev',
-        low_memory: bool = False,
-        **kwargs
+        amds, metric: str = 'chebyshev', low_memory: bool = False, **kwargs
 ) -> np.ndarray:
     """Compare a set of AMDs pairwise, returning a condensed distance
     matrix. This function is essentially
@@ -584,7 +581,7 @@ def PDD_pdist(
 
 def emd(
         pdd: np.ndarray, pdd_: np.ndarray, **kwargs
-) -> Union[float, Tuple[float, np.ndarray[np.float64]]]:
+) -> Union[float, Tuple[float, np.ndarray]]:
     """Alias for :func:`EMD() <.compare.EMD>`."""
     return EMD(pdd, pdd_, **kwargs)
 

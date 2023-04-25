@@ -50,7 +50,7 @@ def diameter(cell: np.ndarray) -> float:
 
 
 @numba.njit(cache=True)
-def cellpar_to_cell(cellpar: np.ndarray) -> np.ndarray[np.float64]:
+def cellpar_to_cell(cellpar: np.ndarray) -> np.ndarray:
     """Convert canonical 3D unit cell parameters a,b,c,α,β,γ into a 3x3
     :class:`numpy.ndarray` representing the unit cell in orthogonal
     coordinates. Numba-accelerated version of function from
@@ -98,7 +98,7 @@ def cellpar_to_cell(cellpar: np.ndarray) -> np.ndarray[np.float64]:
 
 
 @numba.njit(cache=True)
-def cellpar_to_cell_2D(cellpar: np.ndarray) -> np.ndarray[np.float64]:
+def cellpar_to_cell_2D(cellpar: np.ndarray) -> np.ndarray:
     """Convert 3 parameters defining a 2D unit cell a,b,α into a 2x2
     :class:`numpy.ndarray` representing the unit cell in orthogonal
     coordinates.
@@ -125,7 +125,7 @@ def cellpar_to_cell_2D(cellpar: np.ndarray) -> np.ndarray[np.float64]:
 
 
 @numba.njit(cache=True)
-def cell_to_cellpar(cell: np.ndarray) -> np.ndarray[np.float64]:
+def cell_to_cellpar(cell: np.ndarray) -> np.ndarray:
     """Convert a 3x3 :class:`numpy.ndarray` representing a unit cell in
     orthogonal coordinates (as returned by
     :func:`cellpar_to_cell() <.utils.cellpar_to_cell>`) into a list of 3
@@ -160,7 +160,7 @@ def cell_to_cellpar(cell: np.ndarray) -> np.ndarray[np.float64]:
 
 
 @numba.njit(cache=True)
-def cell_to_cellpar_2D(cell: np.ndarray) -> np.ndarray[np.float64]:
+def cell_to_cellpar_2D(cell: np.ndarray) -> np.ndarray:
     """Convert a 2x2 :class:`numpy.ndarray` representing a unit cell in
     orthogonal coordinates (as returned by
     :func:`cellpar_to_cell_2D() <.utils.cellpar_to_cell_2D>`) into a
@@ -189,7 +189,7 @@ def cell_to_cellpar_2D(cell: np.ndarray) -> np.ndarray[np.float64]:
 def neighbours_from_distance_matrix(
         n: int,
         dm: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray[np.int32]]:
+) -> Tuple[np.ndarray, np.ndarray]:
     """Given a distance matrix, find the n nearest neighbours of each
     item.
 
@@ -241,7 +241,7 @@ def random_cell(
         length_bounds: Tuple = (1.0, 2.0),
         angle_bounds: Tuple = (60.0, 120.0),
         dims: int = 3
-) -> np.ndarray[np.float64]:
+) -> np.ndarray:
     """Return a random unit cell with uniformally chosen length and
     angle parameters between bounds. Dimensions 2 and 3 only.
     """

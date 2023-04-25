@@ -22,7 +22,7 @@ __all__ = [
 PeriodicSetType = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
 
 
-def AMD(periodic_set: PeriodicSetType, k: int) -> np.ndarray[np.float64]:
+def AMD(periodic_set: PeriodicSetType, k: int) -> np.ndarray:
     """Return the AMD of a periodic set (crystal) up to k.
 
     Parameters
@@ -76,7 +76,7 @@ def PDD(
         collapse: bool = True,
         collapse_tol: float = 1e-4,
         return_row_groups: bool = False
-) -> Union[np.ndarray[np.float64], Tuple[np.ndarray[np.float64], list]]:
+) -> Union[np.ndarray, Tuple[np.ndarray, list]]:
     """Return the PDD of a periodic set (crystal) up to k.
 
     Parameters
@@ -224,7 +224,7 @@ def PDD_finite(
         collapse: bool = True,
         collapse_tol: float = 1e-4,
         return_row_groups: bool = False
-) -> Union[np.ndarray[np.float64], Tuple[np.ndarray[np.float64], list]]:
+) -> Union[np.ndarray, Tuple[np.ndarray, list]]:
     """Return the PDD of a finite m-point set up to k = m - 1.
 
     Parameters
@@ -298,9 +298,8 @@ def PDD_finite(
 
 
 def PDD_reconstructable(
-        periodic_set: PeriodicSetType,
-        lexsort: bool = True
-) -> np.ndarray[np.float64]:
+        periodic_set: PeriodicSetType, lexsort: bool = True
+) -> np.ndarray:
     """Return the PDD of a periodic set with `k` (number of columns)
     large enough such that the periodic set can be reconstructed from
     the PDD.
@@ -385,10 +384,7 @@ def PPC(periodic_set: PeriodicSetType) -> float:
     return (np.linalg.det(cell) / (m * unit_sphere_vol)) ** (1.0 / n)
 
 
-def AMD_estimate(
-        periodic_set: PeriodicSetType,
-        k: int
-) -> np.ndarray[np.float64]:
+def AMD_estimate(periodic_set: PeriodicSetType, k: int) -> np.ndarray:
     r"""Calculate an estimate of AMD based on the PPC.
 
     Parameters

@@ -1383,9 +1383,7 @@ def periodicset_from_ccdc_crystal(
     )
 
 
-def _parse_sitesyms(
-        symmetries: List[str]
-) -> Tuple[np.ndarray[np.float64], np.ndarray[np.float64]]:
+def _parse_sitesyms(symmetries: List[str]) -> Tuple[np.ndarray, np.ndarray]:
     """Parse a sequence of symmetries in xyz form and return rotation
     and translation arrays.
     """
@@ -1439,7 +1437,7 @@ def _expand_asym_unit(
         rotations: np.ndarray,
         translations: np.ndarray,
         tol: float
-) -> Tuple[np.ndarray[np.float64], np.ndarray[np.int32]]:
+) -> Tuple[np.ndarray, np.ndarray]:
     """Expand the asymmetric unit by applying symmetries given by
     ``rotations`` and ``translations``.
     """
@@ -1458,10 +1456,8 @@ def _expand_asym_unit(
 
 @numba.njit(cache=True)
 def _expand_sites(
-        asym_unit: np.ndarray[np.float64],
-        rotations: np.ndarray[np.float64],
-        translations: np.ndarray[np.float64]
-) -> np.ndarray[np.float64]:
+        asym_unit: np.ndarray, rotations: np.ndarray, translations: np.ndarray
+) -> np.ndarray:
     """Expand the asymmetric unit by applying ``rotations`` and
     ``translations``, without yet removing points duplicated because
     they are invariant under a symmetry. Returns a 3D array shape
@@ -1481,9 +1477,8 @@ def _expand_sites(
 
 @numba.njit(cache=True)
 def _reduce_expanded_sites(
-        expanded_sites: np.ndarray[np.float64],
-        tol: float
-) -> Tuple[np.ndarray[np.float64], np.ndarray[np.int32]]:
+        expanded_sites: np.ndarray, tol: float
+) -> Tuple[np.ndarray, np.ndarray]:
     """Reduce the asymmetric unit after being expended by symmetries by
     removing invariant points. This is the fast version which works in
     the case that no two sites in the asymmetric unit are equivalent.
@@ -1515,9 +1510,8 @@ def _reduce_expanded_sites(
 
 
 def _reduce_expanded_equiv_sites(
-        expanded_sites: np.ndarray[np.float64],
-        tol: float
-) -> Tuple[np.ndarray[np.float64], np.ndarray[np.int32]]:
+        expanded_sites: np.ndarray, tol: float
+) -> Tuple[np.ndarray, np.ndarray]:
     """Reduce the asymmetric unit after being expended by symmetries by
     removing invariant points. This is the slower version, called after
     the fast version if we find equivalent motif points which need to be
@@ -1555,9 +1549,7 @@ def _reduce_expanded_equiv_sites(
 
 
 @numba.njit(cache=True)
-def _unique_sites(
-        asym_unit: np.ndarray[np.float64], tol: float
-) -> np.ndarray[np.bool_]:
+def _unique_sites(asym_unit: np.ndarray, tol: float) -> np.ndarray:
     """Uniquify (within tol) a list of fractional coordinates,
     considering all points modulo 1. Return an array of bools such that
     asym_unit[_unique_sites(asym_unit, tol)] is the uniquified list.
@@ -1586,9 +1578,7 @@ def _has_disorder(label: str, occupancy) -> bool:
     return (occupancy < 1) or label.endswith('?')
 
 
-def _get_syms_pymatgen(
-        data: dict
-) -> Tuple[np.ndarray[np.float64], np.ndarray[np.float64]]:
+def _get_syms_pymatgen(data: dict) -> Tuple[np.ndarray, np.ndarray]:
     """Parse symmetry operations given by data = block.data where block
     is a pymatgen CifBlock object. If the symops are not present the
     space group symbol/international number is parsed and symops are
@@ -1656,9 +1646,7 @@ def _get_syms_pymatgen(
     return rotations, translations
 
 
-def _frac_molecular_centres_ccdc(
-        crystal, tol: float
-) -> np.ndarray[np.float64]:
+def _frac_molecular_centres_ccdc(crystal, tol: float) -> np.ndarray:
     """Return the geometric centres of molecules in the unit cell.
     Expects a ccdc Crystal object and returns fractional coordiantes.
     """
@@ -1695,9 +1683,7 @@ def _heaviest_component_ccdc(molecule):
     return molecule
 
 
-def _snap_small_prec_coords(
-        frac_coords: np.ndarray[np.float64], tol: float
-) -> np.ndarray[np.float64]:
+def _snap_small_prec_coords(frac_coords: np.ndarray, tol: float) -> np.ndarray:
     """Find where frac_coords is within 1e-4 of 1/3 or 2/3, change to
     1/3 and 2/3. Recommended by pymatgen's CIF parser.
     """

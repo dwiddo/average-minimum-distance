@@ -20,7 +20,7 @@ def network_simplex(
         source_demands: np.ndarray,
         sink_demands: np.ndarray,
         network_costs: np.ndarray
-) -> Tuple[float, np.ndarray[np.float64]]:
+) -> Tuple[float, np.ndarray]:
     """Calculate the Earth mover's distance (Wasserstien metric) between
     two weighted distributions given by two sets of weights and a cost
     matrix.
