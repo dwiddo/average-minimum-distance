@@ -23,9 +23,8 @@ def main():
     parser = argparse.ArgumentParser(description=description)
 
     parser.add_argument(
-        'paths_or_refcodes', type=str, nargs='+',
-        help='(str) One or two paths to files or folders, or a collection of '
-             'CSD refcodes if csd-python-api is installed.'
+        'paths', type=str, nargs='+',
+        help='(str) One or two paths to CIF files or folders.'
     )
     parser.add_argument(
         '--outpath', '-o', type=str,
@@ -72,18 +71,23 @@ def main():
     )
     parser.add_argument(
         '--heaviest_component', default=False, action='store_true',
-        help='(flag) (reader="ccdc" only) Keep only the heaviest part of the '
+        help='(flag) (csd-python-api only) Keep only the heaviest part of the '
              'asymmetric unit, intended for removing solvents.'
     )
     parser.add_argument(
         '--molecular_centres', default=False, action='store_true',
-        help='(flag) (reader="ccdc" only) Uses the centres of molecules for '
+        help='(flag) (csd-python-api only) Uses the centres of molecules for '
              'comparisons instead of atoms.'
     )
     parser.add_argument(
-        '--families', default=False, action='store_true',
-        help='(flag) (reader="ccdc" only) Interpret paths_or_refcodes as '
+        '--csd_refcodes', default=False, action='store_true',
+        help='(flag) (csd-python-api only) Interpret paths as CSD refcodes.'
              'refcode families.'
+    )
+    parser.add_argument(
+        '--refcode_families', default=False, action='store_true',
+        help='(flag) (csd-python-api only) Interpret paths as CSD refcode '
+             'families.'
     )
 
     # PDD args
@@ -121,7 +125,7 @@ def main():
 
     # Remove some arguments before passing others to amd.compare
     kwargs = vars(parser.parse_args())
-    paths_or_refcodes = kwargs.pop('paths_or_refcodes')
+    paths = kwargs.pop('paths')
     outpath = kwargs.pop('outpath', None)
     if outpath is None:
         outpath = f"{kwargs['by']}_k={kwargs['k']}_dist_matrix"
@@ -131,11 +135,11 @@ def main():
     kwargs['show_warnings'] = not kwargs['supress_warnings']
     kwargs.pop('supress_warnings', None)
 
-    crystals = paths_or_refcodes[0]
+    crystals = paths[0]
     crystals_ = None
-    if len(paths_or_refcodes) == 2:
-        crystals_ = paths_or_refcodes[1]
-    elif len(paths_or_refcodes) > 2:
+    if len(paths) == 2:
+        crystals_ = paths[1]
+    elif len(paths) > 2:
         raise ValueError(
             'amd.compare accepts one or two collections of crystals for '
             'comparison.'
