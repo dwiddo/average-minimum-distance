@@ -187,8 +187,7 @@ def cell_to_cellpar_2D(cell: np.ndarray) -> np.ndarray:
 
 
 def neighbours_from_distance_matrix(
-        n: int,
-        dm: np.ndarray
+        n: int, dm: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Given a distance matrix, find the n nearest neighbours of each
     item.
@@ -211,9 +210,9 @@ def neighbours_from_distance_matrix(
 
     inds = None
     if len(dm.shape) == 2:
-        inds = np.array([
-            np.argpartition(row, n)[:n] for row in dm
-        ], dtype=np.int32)
+        inds = np.array(
+            [np.argpartition(row, n)[:n] for row in dm], dtype=np.int32
+        )
     elif len(dm.shape) == 1:
         dm = squareform(dm)
         inds = []

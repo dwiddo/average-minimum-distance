@@ -66,7 +66,6 @@ class PeriodicSet:
             wyckoff_multiplicities: Optional[np.ndarray] = None,
             types: Optional[np.ndarray] = None
     ):
-
         self.motif = motif
         self.cell = cell
         self.name = name
@@ -100,24 +99,29 @@ class PeriodicSet:
         else:
             cellpar_str = ''
 
+        name_str = f'{self.name}: ' if self.name is not None else ''
+
         return (
-            f'PeriodicSet(name={self.name}: {m} point{m_pl} in {n} dim{n_pl}'
+            f'PeriodicSet({name_str}{m} point{m_pl} in {n} dim{n_pl}'
             f'{cellpar_str})'
         )
 
     def __repr__(self):
 
-        name_str = f'name={self.name}, ' if self.name is not None else ''
         optional_attrs = []
-        for attr_str in ('asymmetric_unit', 'wyckoff_multiplicities', 'types'):
-            attr = getattr(self, attr_str)
-            if attr is not None:
-                optional_attrs.append(f'{attr_str}={attr}')
-        optional_attrs_str = ', ' if optional_attrs else ''
-        optional_attrs_str += ', '.join(optional_attrs)
+        for attr in ('asymmetric_unit', 'wyckoff_multiplicities', 'types'):
+            val = getattr(self, attr)
+            if val is not None:
+                st = str(val).replace('\n ', '\n' + ' ' * (len(attr) + 6))
+                optional_attrs.append(f'{attr}={st}')
+        optional_attrs_str = ',\n    ' if optional_attrs else ''
+        optional_attrs_str += ',\n    '.join(optional_attrs)
+        motif_str = str(self.motif).replace('\n ', '\n' + ' ' * 11)
+        cell_str = str(self.cell).replace('\n ', '\n' + ' ' * 10)
         return (
-            f'PeriodicSet({name_str}motif={self.motif}, cell={self.cell}'
-            f'{optional_attrs_str})'
+            f'PeriodicSet(name={self.name},\n'
+            f'    motif={motif_str},\n'
+            f'    cell={cell_str}{optional_attrs_str})'
         )
 
     def _equal_cell_and_motif(self, other):
@@ -185,9 +189,7 @@ class PeriodicSet:
         """
 
         cell = random_cell(
-            length_bounds=length_bounds,
-            angle_bounds=angle_bounds,
-            dims=dims
+            length_bounds=length_bounds, angle_bounds=angle_bounds, dims=dims
         )
         frac_motif = np.random.uniform(size=(n_points, dims))
         return PeriodicSet(frac_motif @ cell, cell)

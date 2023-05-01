@@ -23,7 +23,14 @@ PeriodicSetType = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
 
 
 def AMD(periodic_set: PeriodicSetType, k: int) -> np.ndarray:
-    """Return the AMD of a periodic set (crystal) up to k.
+    """Return the average minimum distance (AMD) of a periodic set
+    (crystal).
+    
+    The AMD of a periodic set is a geometry based descriptor independent
+    of choice of motif and unit cell. It is a vector, the (weighted)
+    average of the :func:`PDD <.calculate.PDD>` matrix, which has one
+    row for each (unique) point in the unit cell containing distances to
+    k nearest neighbours.
 
     Parameters
     ----------
@@ -33,8 +40,8 @@ def AMD(periodic_set: PeriodicSetType, k: int) -> np.ndarray:
         tuple of :class:`numpy.ndarray` s (motif, cell) with coordinates
         in Cartesian form and a square unit cell.
     k : int
-        Length of the AMD returned; the number of neighbours considered
-        for each atom in the unit cell to make the AMD.
+        The number of neighbouring points (atoms) considered for each
+        point in the unit cell.
 
     Returns
     -------
@@ -77,7 +84,13 @@ def PDD(
         collapse_tol: float = 1e-4,
         return_row_groups: bool = False
 ) -> Union[np.ndarray, Tuple[np.ndarray, list]]:
-    """Return the PDD of a periodic set (crystal) up to k.
+    """Return the point-wise distance distribution (PDD) of a periodic
+    set (crystal).
+    
+    The PDD of a periodic set is a geometry based descriptor independent
+    of choice of motif and unit cell. It is a matrix where each row
+    corresponds to a point in the motif, containing a weight followed by
+    distances to the k nearest neighbours of the point.
 
     Parameters
     ----------

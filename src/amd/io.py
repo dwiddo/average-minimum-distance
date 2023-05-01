@@ -13,7 +13,15 @@ import errno
 import math
 import json
 from pathlib import Path
-from typing import Iterable, Iterator, Optional, Union, Callable, Tuple, List
+from typing import (
+    Iterable,
+    Iterator,
+    Optional,
+    Union,
+    Callable,
+    Tuple,
+    List
+)
 
 import numpy as np
 import numba
@@ -23,10 +31,16 @@ from .utils import cellpar_to_cell
 from .periodicset import PeriodicSet
 
 __all__ = [
-    'CifReader', 'CSDReader', 'ParseError', 'periodicset_from_gemmi_block',
-    'periodicset_from_ase_cifblock', 'periodicset_from_pymatgen_cifblock',
-    'periodicset_from_ase_atoms', 'periodicset_from_pymatgen_structure',
-    'periodicset_from_ccdc_entry', 'periodicset_from_ccdc_crystal'
+    'CifReader',
+    'CSDReader',
+    'ParseError',
+    'periodicset_from_gemmi_block',
+    'periodicset_from_ase_cifblock',
+    'periodicset_from_pymatgen_cifblock',
+    'periodicset_from_ase_atoms',
+    'periodicset_from_pymatgen_structure',
+    'periodicset_from_ccdc_entry',
+    'periodicset_from_ccdc_crystal',
 ]
 
 def _custom_warning(message, category, filename, lineno, *args, **kwargs):
@@ -40,19 +54,36 @@ with open(str(Path(__file__).absolute().parent / 'atomic_numbers.json')) as f:
 _EQ_SITE_TOL: float = 1e-3
 _CIF_TAGS: dict = {
     'cellpar': [
-        '_cell_length_a', '_cell_length_b', '_cell_length_c',
-        '_cell_angle_alpha', '_cell_angle_beta', '_cell_angle_gamma'],
+        '_cell_length_a',
+        '_cell_length_b',
+        '_cell_length_c',
+        '_cell_angle_alpha',
+        '_cell_angle_beta',
+        '_cell_angle_gamma'
+    ],
     'atom_site_fract': [
-        '_atom_site_fract_x', '_atom_site_fract_y', '_atom_site_fract_z'],
+        '_atom_site_fract_x',
+        '_atom_site_fract_y',
+        '_atom_site_fract_z'
+    ],
     'atom_site_cartn': [
-        '_atom_site_Cartn_x', '_atom_site_Cartn_y', '_atom_site_Cartn_z'],
+        '_atom_site_Cartn_x',
+        '_atom_site_Cartn_y',
+        '_atom_site_Cartn_z'
+    ],
     'symop': [
-        '_space_group_symop_operation_xyz', '_space_group_symop.operation_xyz',
-        '_symmetry_equiv_pos_as_xyz'],
+        '_space_group_symop_operation_xyz',
+        '_space_group_symop.operation_xyz',
+        '_symmetry_equiv_pos_as_xyz'
+    ],
     'spacegroup_name': [
-        '_space_group_name_H-M_alt', '_symmetry_space_group_name_H-M'],
+        '_space_group_name_H-M_alt',
+        '_symmetry_space_group_name_H-M'
+    ],
     'spacegroup_number': [
-        '_space_group_IT_number', '_symmetry_Int_Tables_number']
+        '_space_group_IT_number',
+        '_symmetry_Int_Tables_number'
+    ],
 }
 
 
@@ -98,19 +129,15 @@ class _Reader:
                     self._progress_bar.close()
                 raise StopIteration
 
-            parse_err_msg = None
             with warnings.catch_warnings(record=True) as warning_msgs:
                 try:
                     periodic_set = self._converter(item)
                 except ParseError as err:
-                    parse_err_msg = str(err)
-
-            if self._progress_bar is not None:
-                self._progress_bar.update(1)
-
-            if parse_err_msg is not None:
-                warnings.warn(parse_err_msg)
-                continue
+                    warnings.warn(str(err))
+                    continue
+                finally:
+                    if self._progress_bar is not None:
+                        self._progress_bar.update(1)
 
             for warning in warning_msgs:
                 msg = f'(name={periodic_set.name}) {warning.message}'
@@ -121,8 +148,7 @@ class _Reader:
     def read(self) -> Union[PeriodicSet, List[PeriodicSet]]:
         """Read the crystal(s), return one
         :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` if there is
-        only one, otherwise return a list. If there the structure cannot
-        be parsed, return None.
+        only one, otherwise return a list.
         """
         items = list(self)
         if len(items) == 1:
@@ -292,16 +318,14 @@ class CifReader(_Reader):
             iterable = CifReader._dir_generator(path, file_parser, extensions)
         else:
             raise FileNotFoundError(
-                errno.ENOENT, os.strerror(errno.ENOENT), path
+                errno.ENOENT, os.strerror(errno.ENOENT), str(path)
             )
 
         super().__init__(iterable, converter, show_warnings, verbose)
 
     @staticmethod
     def _dir_generator(
-            path: Path,
-            file_parser: Callable,
-            extensions: Iterable
+            path: Path, file_parser: Callable, extensions: Iterable
     ) -> Iterator:
         for file_path in path.iterdir():
             if not file_path.is_file():
@@ -312,7 +336,8 @@ class CifReader(_Reader):
                 yield from file_parser(str(file_path))
             except Exception as e:
                 warnings.warn(
-                    f'Error parsing "{str(file_path)}", skipping: {str(e)}'
+                    f'Error parsing "{str(file_path)}", skipping file. '
+                    f'Exception: {repr(e)}'
                 )
 
 
@@ -463,9 +488,7 @@ class ParseError(ValueError):
 
 
 def periodicset_from_gemmi_block(
-        block,
-        remove_hydrogens: bool = False,
-        disorder: str = 'skip'
+        block, remove_hydrogens: bool = False, disorder: str = 'skip'
 ) -> PeriodicSet:
     """Convert a :class:`gemmi.cif.Block` object to a
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
@@ -529,15 +552,15 @@ def periodicset_from_gemmi_block(
             )
 
     tablified_loop = [[] for _ in range(len(xyz_loop.tags))]
-    n_cols = xyz_loop.width()
     for i, item in enumerate(xyz_loop.values):
-        tablified_loop[i % n_cols].append(item)
+        tablified_loop[i % xyz_loop.width()].append(item)
     loop_dict = {tag: l for tag, l in zip(xyz_loop.tags, tablified_loop)}
     xyz_str = [loop_dict[t] for t in _CIF_TAGS['atom_site_fract']]
     asym_unit = np.transpose(np.array(
-        [[as_number(c) for c in coords] for coords in xyz_str]
+        [[as_number(c) for c in xyz] for xyz in xyz_str]
     ))
     asym_unit = np.mod(asym_unit, 1)
+
     # recommended by pymatgen
     # asym_unit = _snap_small_prec_coords(asym_unit, 1e-4) 
 
@@ -550,7 +573,7 @@ def periodicset_from_gemmi_block(
     # Atomic types
     if '_atom_site_type_symbol' in loop_dict:
         symbols = [as_string(s) for s in loop_dict['_atom_site_type_symbol']]
-    else:
+    else:  # Get atomic types from label
         symbols = []
         for label in labels:
             sym = ''
@@ -573,9 +596,7 @@ def periodicset_from_gemmi_block(
     remove_sites.extend(np.nonzero(np.isnan(asym_unit.min(axis=-1)))[0])
 
     if disorder == 'skip':
-        if any(
-            _has_disorder(lab, occ) for lab, occ in zip(labels, occupancies)
-        ):
+        if any(_has_disorder(l, o) for l, o in zip(labels, occupancies)):
             raise ParseError(
                 f"{block.name} has disorder, pass disorder='ordered_sites' or "
                 "'all_sites' to remove/ignore disorder"
@@ -586,9 +607,7 @@ def periodicset_from_gemmi_block(
                 remove_sites.append(i)
 
     if remove_hydrogens:
-        remove_sites.extend(
-            i for i, num in enumerate(asym_types) if num == 1
-        )
+        remove_sites.extend(i for i, num in enumerate(asym_types) if num == 1)
 
     asym_unit = np.delete(asym_unit, remove_sites, axis=0)
     asym_types = [s for i, s in enumerate(asym_types) if i not in remove_sites]
@@ -645,7 +664,7 @@ def periodicset_from_gemmi_block(
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
     types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
-    motif = frac_motif @ cell
+    motif = np.matmul(frac_motif, cell)
 
     return PeriodicSet(
         motif=motif,
@@ -658,9 +677,7 @@ def periodicset_from_gemmi_block(
 
 
 def periodicset_from_ase_cifblock(
-        block,
-        remove_hydrogens: bool = False,
-        disorder: str = 'skip'
+        block, remove_hydrogens: bool = False, disorder: str = 'skip'
 ) -> PeriodicSet:
     """Convert a :class:`ase.io.cif.CIFBlock` object to a 
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
@@ -763,8 +780,9 @@ def periodicset_from_ase_cifblock(
         asym_unit = [c for i, c in enumerate(asym_unit) if i not in invalid]
         asym_types = [t for i, t in enumerate(asym_types) if i not in invalid]
         if disorder != 'all_sites':
-            has_disorder = [d for i, d in enumerate(has_disorder)
-                            if i not in invalid]
+            has_disorder = [
+                d for i, d in enumerate(has_disorder) if i not in invalid
+            ]
 
     remove_sites = []
 
@@ -832,7 +850,7 @@ def periodicset_from_ase_cifblock(
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
     types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
-    motif = frac_motif @ cell
+    motif = np.matmul(frac_motif, cell)
 
     return PeriodicSet(
         motif=motif,
@@ -845,9 +863,7 @@ def periodicset_from_ase_cifblock(
 
 
 def periodicset_from_pymatgen_cifblock(
-        block,
-        remove_hydrogens: bool = False,
-        disorder: str = 'skip'
+        block, remove_hydrogens: bool = False, disorder: str = 'skip'
 ) -> PeriodicSet:
     """Convert a :class:`pymatgen.io.cif.CifBlock` object to a
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
@@ -894,7 +910,9 @@ def periodicset_from_pymatgen_cifblock(
     cellpar = [odict.get(tag) for tag in _CIF_TAGS['cellpar']]
     if any(par in (None, '?', '.') for par in cellpar):
         raise ParseError(f'{block.header} has missing cell data')
-    cell = cellpar_to_cell(np.array([str2float(v) for v in cellpar]))
+    cell = cellpar_to_cell(
+        np.array([str2float(v) for v in cellpar], dtype=np.float64)
+    )
 
     # Asymmetric unit coordinates
     asym_unit = [odict.get(tag) for tag in _CIF_TAGS['atom_site_fract']]
@@ -1008,7 +1026,7 @@ def periodicset_from_pymatgen_cifblock(
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
     types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
-    motif = frac_motif @ cell
+    motif = np.matmul(frac_motif, cell)
 
     return PeriodicSet(
         motif=motif,
@@ -1021,8 +1039,7 @@ def periodicset_from_pymatgen_cifblock(
 
 
 def periodicset_from_ase_atoms(
-        atoms,
-        remove_hydrogens: bool = False
+        atoms, remove_hydrogens: bool = False
 ) -> PeriodicSet:
     """Convert an :class:`ase.atoms.Atoms` object to a
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`. Does not have
@@ -1082,21 +1099,20 @@ def periodicset_from_ase_atoms(
     wyc_muls = wyc_muls.astype(np.int32)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
-    motif = frac_motif @ cell
+    types = atoms.get_atomic_numbers().astype(np.uint8)
+    motif = np.matmul(frac_motif, cell)
 
     return PeriodicSet(
         motif=motif,
         cell=cell,
         asymmetric_unit=asym_inds,
         wyckoff_multiplicities=wyc_muls,
-        types=atoms.get_atomic_numbers().astype(np.uint8)
+        types=types
     )
 
 
 def periodicset_from_pymatgen_structure(
-        structure,
-        remove_hydrogens: bool = False,
-        disorder: str = 'skip'
+        structure, remove_hydrogens: bool = False, disorder: str = 'skip'
 ) -> PeriodicSet:
     """Convert a :class:`pymatgen.core.structure.Structure` object to a
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`. Does not set
@@ -1329,7 +1345,7 @@ def periodicset_from_ccdc_crystal(
 
     if molecular_centres:
         frac_centres = _frac_molecular_centres_ccdc(crystal, _EQ_SITE_TOL)
-        mol_centres = frac_centres @ cell
+        mol_centres = np.matmul(frac_centres, cell)
         return PeriodicSet(mol_centres, cell, name=crystal.identifier)
 
     asym_atoms = crystal.asymmetric_unit_molecule.atoms
@@ -1370,8 +1386,8 @@ def periodicset_from_ccdc_crystal(
     wyc_muls = wyc_muls.astype(np.int32)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
-    motif = frac_motif @ cell
     types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
+    motif = np.matmul(frac_motif, cell)
 
     return PeriodicSet(
         motif=motif,

@@ -52,19 +52,15 @@ def reconstruct(pdd: np.ndarray, cell: np.ndarray) -> np.ndarray:
         raise ValueError(
             'Reconstructing from PDD only implemented for 2 and 3 dimensions'
         )
-
     diam = diameter(cell)
-    # set first point as origin wlog, return if 1 motif point
     motif = [np.zeros((dims, ))]
-
     if pdd.shape[0] == 1:
-        motif = np.array(motif)
-        return motif
+        return np.array(motif)
 
     # finding lattice distances so we can ignore them
     cloud_generator = generate_concentric_cloud(np.array(motif), cell)
+    next(cloud_generator)  # is just the origin
     cloud = []
-    next(cloud_generator)
     layer = next(cloud_generator)
     while np.any(np.linalg.norm(layer, axis=-1) <= diam):
         cloud.append(layer)
@@ -92,15 +88,12 @@ def reconstruct(pdd: np.ndarray, cell: np.ndarray) -> np.ndarray:
             bases.extend(basis for basis in permutations(vecs, dims))
 
     q = _find_second_point(shared_dists, bases, cloud, PREC)
-
     if q is None:
         raise RuntimeError('Second point of motif could not be found.')
-
     motif.append(q)
 
     if pdd.shape[0] == 2:
-        motif = np.array(motif)
-        return motif
+        return np.array(motif)
 
     for row in pdd[2:, :]:
         row_reduced = _remove_vals(row, lattice_dists, PREC)
@@ -111,10 +104,8 @@ def reconstruct(pdd: np.ndarray, cell: np.ndarray) -> np.ndarray:
         q_ = _find_further_point(
             shared_dists1, shared_dists2, bases, cloud, q, PREC
         )
-
         if q_ is None:
             raise RuntimeError('Further point of motif could not be found.')
-
         motif.append(q_)
 
     motif = np.array(motif)
@@ -125,23 +116,16 @@ def reconstruct(pdd: np.ndarray, cell: np.ndarray) -> np.ndarray:
 def _find_second_point(shared_dists, bases, cloud, prec):
     dims = cloud.shape[-1]
     abs_q = shared_dists[0]
+    sphere_intersect_func = _trilaterate if dims == 3 else _bilaterate
 
     for distance_tup in combinations(shared_dists[1:], dims):
         for basis in bases:
-            res = None
-            if dims == 2:
-                res = _bilaterate(*basis, *distance_tup, abs_q, prec)
-            elif dims == 3:
-                if not _four_sphere_pairwise_intersecion(
-                    *basis, *distance_tup, abs_q, prec
-                ):
-                    continue
-                res = _trilaterate(*basis, *distance_tup, abs_q, prec)
-
-            if res is not None:
-                cloud_res_dists = np.linalg.norm(cloud - res, axis=-1)
-                if np.all(cloud_res_dists - abs_q + prec > 0):
-                    return res
+            res = sphere_intersect_func(*basis, *distance_tup, abs_q, prec)
+            if res is None:
+                continue
+            cloud_res_dists = np.linalg.norm(cloud - res, axis=-1)
+            if np.all(cloud_res_dists - abs_q + prec > 0):
+                return res
 
 
 def _find_further_point(shared_dists1, shared_dists2, bases, cloud, q, prec):
@@ -151,27 +135,22 @@ def _find_further_point(shared_dists1, shared_dists2, bases, cloud, q, prec):
 
     # try all ordered subsequences of distances shared between first and
     # further row, with all combinations of the vectors in the neighbour set
-    # forming a basis
+    # forming a basis, see if spheres centered at the vectors with the shared
+    # distances as radii intersect at 4 (3 dims) points.
+    sphere_intersect_func = _trilaterate if dims == 3 else _bilaterate
     for distance_tup in combinations(shared_dists1[1:], dims):
         for basis in bases:
-            res = None
-            if dims == 2:
-                res = _bilaterate(*basis, *distance_tup, abs_q_, prec)
-            elif dims == 3:
-                if not _four_sphere_pairwise_intersecion(
-                    *basis, *distance_tup, abs_q_, prec
-                ):
-                    continue
-                res = _trilaterate(*basis, *distance_tup, abs_q_, prec)
-
-            if res is not None:
-                # check point is in the voronoi domain
-                cloud_res_dists = np.linalg.norm(cloud - res, axis=-1)
-                if np.all(cloud_res_dists - abs_q_ + prec > 0):
-                    # check |p - point| is among the row's shared distances
-                    dist_diff = np.abs(shared_dists2 - np.linalg.norm(q - res))
-                    if np.any(dist_diff < prec):
-                        return res
+            res = sphere_intersect_func(*basis, *distance_tup, abs_q_, prec)
+            if res is None:
+                continue
+            # check point is in the voronoi domain
+            cloud_res_dists = np.linalg.norm(cloud - res, axis=-1)
+            if not np.all(cloud_res_dists - abs_q_ + prec > 0):
+                continue
+            # check |p - point| is among the row's shared distances
+            dist_diff = np.abs(shared_dists2 - np.linalg.norm(q - res))
+            if np.any(dist_diff < prec):
+                return res
 
 
 def _neighbour_set(cell, prec):
@@ -191,16 +170,16 @@ def _neighbour_set(cell, prec):
     cloud_generator = generate_concentric_cloud(origin, cell)
     cloud = np.concatenate((next(cloud_generator), next(cloud_generator)))
     tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
-    dists, inds = tree.query(vecs, k=k_, workers=-1)
+    dists, inds = tree.query(vecs, k=k_)
     dists_ = np.empty_like(dists)
 
     while not np.allclose(dists, dists_, atol=0, rtol=1e-12):
         dists = dists_
-        cloud = np.vstack((cloud,
-                           next(cloud_generator),
-                           next(cloud_generator)))
+        cloud = np.vstack(
+            (cloud, next(cloud_generator), next(cloud_generator))
+        )
         tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
-        dists_, inds = tree.query(vecs, k=k_, workers=-1)
+        dists_, inds = tree.query(vecs, k=k_)
 
     tmp_inds = np.unique(inds[:, 1:].flatten())
     tmp_inds = tmp_inds[tmp_inds != 0]
@@ -209,7 +188,7 @@ def _neighbour_set(cell, prec):
     # reduce neighbour set
     # half the lattice points and find their nearest neighbours in the lattice
     neighbour_set_half = neighbour_set / 2
-    # for each of these vectors, check if 0 is A nearest neighbour.
+    # for each of these vectors, check if 0 is a nearest neighbour.
     # so, check if the dist to 0 is leq (within tol) than dist to all other
     # lattice points.
     nn_norms = np.linalg.norm(neighbour_set, axis=-1)
@@ -225,27 +204,9 @@ def _neighbour_set(cell, prec):
     return neighbour_set
 
 
-def _four_sphere_pairwise_intersecion(p1, p2, p3, r1, r2, r3, abs_val, prec):
-    """Return True if four spheres intersect at a point."""
-
-    if np.linalg.norm(p1) > abs_val + r1 - prec:
-        return False
-    if np.linalg.norm(p2) > abs_val + r2 - prec:
-        return False
-    if np.linalg.norm(p3) > abs_val + r3 - prec:
-        return False
-    if np.linalg.norm(p1 - p2) > r1 + r2 - prec:
-        return False
-    if np.linalg.norm(p1 - p3) > r1 + r3 - prec:
-        return False
-    if np.linalg.norm(p2 - p3) > r2 + r3 - prec:
-        return False
-    return True
-
-
-@numba.njit()
+@numba.njit(cache=True)
 def _bilaterate(p1, p2, r1, r2, abs_val, prec):
-    """Return True if three circles intersect at a point."""
+    """Return the intersection of three circles."""
 
     d = np.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2)
     v = (p2 - p1) / d
@@ -275,9 +236,22 @@ def _bilaterate(p1, p2, r1, r2, abs_val, prec):
     return None
 
 
-@numba.njit()
+@numba.njit(cache=True)
 def _trilaterate(p1, p2, p3, r1, r2, r3, abs_val, prec):
     """Return the intersection of four spheres."""
+
+    if np.linalg.norm(p1) > abs_val + r1 - prec:
+        return None
+    if np.linalg.norm(p2) > abs_val + r2 - prec:
+        return None
+    if np.linalg.norm(p3) > abs_val + r3 - prec:
+        return None
+    if np.linalg.norm(p1 - p2) > r1 + r2 - prec:
+        return None
+    if np.linalg.norm(p1 - p3) > r1 + r3 - prec:
+        return None
+    if np.linalg.norm(p2 - p3) > r2 + r3 - prec:
+        return None
 
     temp1 = p2 - p1
     d = np.linalg.norm(temp1)
