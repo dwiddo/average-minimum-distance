@@ -16,8 +16,6 @@ import numpy as np
 from .utils import (
     cellpar_to_cell,
     cellpar_to_cell_2D,
-    cell_to_cellpar,
-    cell_to_cellpar_2D,
     random_cell,
 )
 
@@ -46,13 +44,13 @@ class PeriodicSet:
         6 cell parameters to an orthogonal square matrix.
     name : str, optional
         Name of the periodic set.
-    asymmetric_unit : :class:`numpy.ndarray`, optional
-        Indices for the asymmetric unit, pointing to the motif. Useful
-        in invariant calculations.
-    wyckoff_multiplicities : :class:`numpy.ndarray`, optional
-        Wyckoff multiplicities of each atom in the asymmetric unit
-        (number of unique sites generated under all symmetries). Useful
-        in invariant calculations.
+    asym_unit : :class:`numpy.ndarray`, optional
+        Indices for the asymmetric unit, pointing to the motif. Used in
+        calculating AMD and PDD.
+    weights : :class:`numpy.ndarray`, optional
+        Wyckoff multiplicities of point in the asymmetric unit (number
+        of unique sites generated under all symmetries) divided by
+        number of motif points. Used in calculating AMD and PDD.
     types : :class:`numpy.ndarray`, optional
         Array of atomic numbers of motif points.
     """
@@ -62,54 +60,41 @@ class PeriodicSet:
             motif: np.ndarray,
             cell: np.ndarray,
             name: Optional[str] = None,
-            asymmetric_unit: Optional[np.ndarray] = None,
-            wyckoff_multiplicities: Optional[np.ndarray] = None,
+            asym_unit: Optional[np.ndarray] = None,
+            weights: Optional[np.ndarray] = None,
             types: Optional[np.ndarray] = None
     ):
         self.motif = motif
         self.cell = cell
         self.name = name
-        self.asymmetric_unit = asymmetric_unit
-        self.wyckoff_multiplicities = wyckoff_multiplicities
+        self.asym_unit = asym_unit
+        self.weights = weights
         self.types = types
 
     @property
     def ndim(self) -> int:
         return self.cell.shape[0]
 
+    def _nns_input_data(self):
+        if self.asym_unit is None or self.weights is None:
+            m = len(self.motif)
+            weights = np.full((m, ), 1 / m, dtype=np.float64)
+            return self.motif, self.cell, self.motif, weights
+        return (
+            self.motif, self.cell, self.motif[self.asym_unit], self.weights
+        )
+
     def __str__(self):
-
-        def format_cellpar(par):
-            return f'{par:.2f}'.rstrip('0').rstrip('.')
-
         m, n = self.motif.shape
         m_pl = '' if m == 1 else 's'
         n_pl = '' if n == 1 else 's'
-
-        if self.ndim == 1:
-            cellpar_str = f', cell={format_cellpar(self.cell[0][0])}'
-        elif self.ndim == 2:
-            cellpar = cell_to_cellpar_2D(self.cell)
-            cellpar_str = ','.join(map(format_cellpar, cellpar))
-            cellpar_str = f', abα={cellpar_str}'
-        elif self.ndim == 3:
-            cellpar = cell_to_cellpar(self.cell)
-            cellpar_str = ','.join(map(format_cellpar, cellpar))
-            cellpar_str = f', abcαβγ={cellpar_str}'
-        else:
-            cellpar_str = ''
-
         name_str = f'{self.name}: ' if self.name is not None else ''
-
-        return (
-            f'PeriodicSet({name_str}{m} point{m_pl} in {n} dim{n_pl}'
-            f'{cellpar_str})'
-        )
+        return f'PeriodicSet({name_str}{m} point{m_pl} in {n} dimension{n_pl})'
 
     def __repr__(self):
 
         optional_attrs = []
-        for attr in ('asymmetric_unit', 'wyckoff_multiplicities', 'types'):
+        for attr in ('asym_unit', 'weights', 'types'):
             val = getattr(self, attr)
             if val is not None:
                 st = str(val).replace('\n ', '\n' + ' ' * (len(attr) + 6))

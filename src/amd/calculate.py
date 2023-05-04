@@ -15,17 +15,21 @@ from ._nearest_neighbours import nearest_neighbours, nearest_neighbours_minval
 from .utils import diameter
 
 __all__ = [
-    'AMD', 'PDD', 'PDD_to_AMD', 'AMD_finite', 'PDD_finite',
-    'PDD_reconstructable', 'PPC', 'AMD_estimate'
+    'AMD',
+    'PDD',
+    'PDD_to_AMD',
+    'AMD_finite',
+    'PDD_finite',
+    'PDD_reconstructable',
+    'PPC',
+    'AMD_estimate'
 ]
 
-PeriodicSetType = Union[PeriodicSet, Tuple[np.ndarray, np.ndarray]]
 
-
-def AMD(periodic_set: PeriodicSetType, k: int) -> np.ndarray:
+def AMD(periodic_set: PeriodicSet, k: int) -> np.ndarray:
     """Return the average minimum distance (AMD) of a periodic set
     (crystal).
-    
+
     The AMD of a periodic set is a geometry based descriptor independent
     of choice of motif and unit cell. It is a vector, the (weighted)
     average of the :func:`PDD <.calculate.PDD>` matrix, which has one
@@ -34,11 +38,9 @@ def AMD(periodic_set: PeriodicSetType, k: int) -> np.ndarray:
 
     Parameters
     ----------
-    periodic_set :
-        A periodic set represented by a
-        :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or by a
-        tuple of :class:`numpy.ndarray` s (motif, cell) with coordinates
-        in Cartesian form and a square unit cell.
+    periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
+        A periodic set (crystal) consisting of a unit cell and motif of
+        points.
     k : int
         The number of neighbouring points (atoms) considered for each
         point in the unit cell.
@@ -63,21 +65,22 @@ def AMD(periodic_set: PeriodicSetType, k: int) -> np.ndarray:
         for periodic_set in amd.CSDReader(['HXACAN', 'ACSALA'], families=True):
             amds.append(amd.AMD(periodic_set, 10))
 
-    Manually pass a periodic set as a tuple (motif, cell)::
+    Manually create a periodic set as a tuple (motif, cell)::
 
         # simple cubic lattice
         motif = np.array([[0,0,0]])
         cell = np.array([[1,0,0], [0,1,0], [0,0,1]])
-        cubic_amd = amd.AMD((motif, cell), 100)
+        periodic_set = amd.PeriodicSet(motif, cell)
+        cubic_amd = amd.AMD(periodic_set, 100)
     """
 
-    motif, cell, asymmetric_unit, weights = _get_structure(periodic_set)
-    dists, _, _ = nearest_neighbours(motif, cell, asymmetric_unit, k + 1)
+    motif, cell, asym_unit, weights = periodic_set._nns_input_data()
+    dists, _, _ = nearest_neighbours(motif, cell, asym_unit, k + 1)
     return np.average(dists[:, 1:], axis=0, weights=weights)
 
 
 def PDD(
-        periodic_set: PeriodicSetType,
+        periodic_set: PeriodicSet,
         k: int,
         lexsort: bool = True,
         collapse: bool = True,
@@ -86,7 +89,7 @@ def PDD(
 ) -> Union[np.ndarray, Tuple[np.ndarray, list]]:
     """Return the point-wise distance distribution (PDD) of a periodic
     set (crystal).
-    
+
     The PDD of a periodic set is a geometry based descriptor independent
     of choice of motif and unit cell. It is a matrix where each row
     corresponds to a point in the motif, containing a weight followed by
@@ -94,11 +97,9 @@ def PDD(
 
     Parameters
     ----------
-    periodic_set :
-        A periodic set represented by a
-        :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or by a
-        tuple of :class:`numpy.ndarray` s (motif, cell) with Cartesian
-        coordinates and a square matrix representing the unit cell.
+    periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
+        A periodic set (crystal) consisting of a unit cell and motif of
+        points.
     k : int
         The number of neighbours considered for each atom (point) in the
         unit cell. The returned matrix has k + 1 columns, the first
@@ -112,12 +113,14 @@ def PDD(
         are merged and weights are given to rows in proportion to the
         number of times they appeared.
     return_row_groups: bool, default False
-        Return data about which PDD rows correspond to which points. If
-        True, a tuple is returned ``(pdd, groups)`` where ``groups[i]``
-        contains the indices of the point(s) corresponding to
-        ``pdd[i]``. Note that these indices are for the asymmetric unit
-        of the set, whose indices in ``periodic_set.motif`` are
-        accessible through ``periodic_set.asymmetric_unit``.
+        If True, return a tuple ``(pdd, groups)`` where ``groups``
+        contains information about which rows in ``pdd`` correspond to
+        which points. If ``periodic_set.asym_unit`` is None, then
+        ``groups[i]`` contains indices of points in
+        ``periodic_set.motif`` corresponding to ``pdd[i]``. Otherwise,
+        PDD rows correspond to points in the asymmetric unit, and
+        ``groups[i]`` contains indices of points in
+        ``periodic_set.motif[periodic_set.asym_unit]``.
 
     Returns
     -------
@@ -144,16 +147,17 @@ def PDD(
             # do not collapse rows
             pdds.append(amd.PDD(periodic_set, 10, collapse=False))
 
-    Manually pass a periodic set as a tuple (motif, cell)::
+    Manually create a periodic set as a tuple (motif, cell)::
 
         # simple cubic lattice
         motif = np.array([[0,0,0]])
         cell = np.array([[1,0,0], [0,1,0], [0,0,1]])
-        cubic_amd = amd.PDD((motif, cell), 100)
+        periodic_set = amd.PeriodicSet(motif, cell)
+        cubic_amd = amd.PDD(periodic_set, 100)
     """
 
-    motif, cell, asymmetric_unit, weights = _get_structure(periodic_set)
-    dists, _, _ = nearest_neighbours(motif, cell, asymmetric_unit, k + 1)
+    motif, cell, asym_unit, weights = periodic_set._nns_input_data()
+    dists, _, _ = nearest_neighbours(motif, cell, asym_unit, k + 1)
     dists = dists[:, 1:]
     groups = [[i] for i in range(len(dists))]
 
@@ -206,7 +210,7 @@ def AMD_finite(motif: np.ndarray) -> np.ndarray:
     Parameters
     ----------
     motif : :class:`numpy.ndarray`
-        Coordinates of a set of points.
+        Collection of points.
 
     Returns
     -------
@@ -254,10 +258,14 @@ def PDD_finite(
         are merged and weights are given to rows in proportion to the
         number of times they appeared.
     return_row_groups: bool, default False
-        Whether to return data about which PDD rows correspond to which
-        points. If True, a tuple is returned ``(pdd, groups)`` where
-        ``groups[i]`` contains the indices of the point(s) corresponding
-        to ``pdd[i]``.
+        If True, return a tuple ``(pdd, groups)`` where ``groups``
+        contains information about which rows in ``pdd`` correspond to
+        which points. If ``periodic_set.asym_unit`` is None, then
+        ``groups[i]`` contains indices of points in
+        ``periodic_set.motif`` corresponding to ``pdd[i]``. Otherwise,
+        PDD rows correspond to points in the asymmetric unit, and
+        ``groups[i]`` contains indices of points in
+        ``periodic_set.motif[periodic_set.asym_unit]``.
 
     Returns
     -------
@@ -311,7 +319,7 @@ def PDD_finite(
 
 
 def PDD_reconstructable(
-        periodic_set: PeriodicSetType, lexsort: bool = True
+        periodic_set: PeriodicSet, lexsort: bool = True
 ) -> np.ndarray:
     """Return the PDD of a periodic set with `k` (number of columns)
     large enough such that the periodic set can be reconstructed from
@@ -319,11 +327,9 @@ def PDD_reconstructable(
 
     Parameters
     ----------
-    periodic_set :
-        A periodic set represented by a
-        :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or by a
-        tuple of :class:`numpy.ndarray` s (motif, cell) with coordinates
-        in Cartesian form and a square unit cell.
+    periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
+        A periodic set (crystal) consisting of a unit cell and motif of
+        points.
     lexsort : bool, default True
         Whether or not to lexicographically order the rows.
 
@@ -334,7 +340,7 @@ def PDD_reconstructable(
         reconstructable.
     """
 
-    motif, cell, _, _ = _get_structure(periodic_set)
+    motif, cell, _, _ = periodic_set._nns_input_data()
     dims = cell.shape[0]
 
     if dims not in (2, 3):
@@ -352,7 +358,7 @@ def PDD_reconstructable(
     return pdd
 
 
-def PPC(periodic_set: PeriodicSetType) -> float:
+def PPC(periodic_set: PeriodicSet) -> float:
     r"""Return the point packing coefficient (PPC) of ``periodic_set``.
 
     The PPC is a constant of any periodic set determining the
@@ -373,11 +379,9 @@ def PPC(periodic_set: PeriodicSetType) -> float:
 
     Parameters
     ----------
-    periodic_set :
-        A periodic set represented by a
-        :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or by a
-        tuple of :class:`numpy.ndarray` s (motif, cell) with coordinates
-        in Cartesian form.
+    periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
+        A periodic set (crystal) consisting of a unit cell and motif of
+        points.
 
     Returns
     -------
@@ -385,7 +389,7 @@ def PPC(periodic_set: PeriodicSetType) -> float:
         The PPC of ``periodic_set``.
     """
 
-    motif, cell, _, _ = _get_structure(periodic_set)
+    motif, cell, _, _ = periodic_set._nns_input_data()
     m, n = motif.shape
     t = int(n // 2)
 
@@ -397,16 +401,14 @@ def PPC(periodic_set: PeriodicSetType) -> float:
     return (np.linalg.det(cell) / (m * unit_sphere_vol)) ** (1.0 / n)
 
 
-def AMD_estimate(periodic_set: PeriodicSetType, k: int) -> np.ndarray:
+def AMD_estimate(periodic_set: PeriodicSet, k: int) -> np.ndarray:
     r"""Calculate an estimate of AMD based on the PPC.
 
     Parameters
     ----------
-    periodic_set :
-        A periodic set represented by a
-        :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` or by a
-        tuple of :class:`numpy.ndarray` s (motif, cell) with coordinates
-        in Cartesian form.
+    periodic_set : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
+        A periodic set (crystal) consisting of a unit cell and motif of
+        points.
 
     Returns
     -------
@@ -415,42 +417,10 @@ def AMD_estimate(periodic_set: PeriodicSetType, k: int) -> np.ndarray:
         :math:`= \text{PPC} \sqrt[n]{k}` in n dimensions.
     """
 
-    motif, cell, _, _ = _get_structure(periodic_set)
+    motif, cell, _, _ = periodic_set._nns_input_data()
     n = cell.shape[0]
     k_root = np.power(np.arange(1, k + 1, dtype=np.float64), 1.0 / n)
     return PPC((motif, cell)) * k_root
-
-
-def _get_structure(periodic_set: PeriodicSetType) -> Tuple[np.ndarray, ...]:
-    """Extract the motif and cell, and if present the asymmetric unit
-    and scaled multiplicities, from a periodic set. ``periodic_set`` can
-    be a :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`, or a tuple
-    of :class:`numpy.ndarray` s (motif, cell).
-    """
-
-    asymmetric_unit = None
-    weights = None
-
-    if isinstance(periodic_set, PeriodicSet):
-        motif, cell = periodic_set.motif, periodic_set.cell
-        asym_unit_inds = periodic_set.asymmetric_unit
-        wyc_muls = periodic_set.wyckoff_multiplicities
-        if asym_unit_inds is not None and wyc_muls is not None:
-            asymmetric_unit = motif[asym_unit_inds]
-            weights = wyc_muls / np.sum(wyc_muls)
-    elif isinstance(periodic_set, (tuple, list)):
-        motif, cell = periodic_set
-    else:
-        raise ValueError(
-            'Expected amd.PeriodicSet or tuple, got '
-            f'{periodic_set.__class__.__name__}'
-        )
-
-    if asymmetric_unit is None or weights is None:
-        asymmetric_unit = motif
-        weights = np.full((len(motif), ), 1 / len(motif), dtype=np.float64)
-
-    return motif, cell, asymmetric_unit, weights
 
 
 def _collapse_into_groups(overlapping: np.ndarray) -> list:

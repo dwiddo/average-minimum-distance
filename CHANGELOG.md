@@ -6,7 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Changes to attributes in ``amd.PeriodicSet``: ``wyckoff_multiplicities`` is replaced with ``weights`` which is ``wyckoff_multiplicities`` divided by the number of motif points, and the name of ``asymmetric_unit`` is now ``asym_unit``.
+
 - ``nearest_neighbours()`` has been fixed to not exclude the first nearest neighbours of points in the query set ``x``. This was because when ``x`` is the motif (as in all uses in ``amd``) the nearest neighbours of ``x`` are themselves, which are thrown away for AMD/PDD but should not be in the general case.
+
+- ``amd.AMD()``, ``amd.PDD()`` and other functions in ``amd.calculate`` which accept a periodic set no longer accept a tuple, only a ``amd.PeriodicSet``. A tuple can be converted before passing, e.g. replace ``amd.AMD((motif, cell), k)`` with ``amd.AMD(amd.PeriodicSet(motif, cell), k)``.
 
 - Several improvements made to core function ``nearest_neighbours()``, such as pruning unneeded points generated during the algorithm. Consequently the output of ``nearest_neighbours()`` will change, specifically ``cloud`` and ``inds``. It is no longer true that the point ``cloud[i]`` corresponds to the motif point ``motif[i % len(motif)]``.
 

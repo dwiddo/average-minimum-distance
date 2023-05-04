@@ -58,7 +58,7 @@ Sometimes it's useful to know which rows of the PDD came from which motif points
 Setting ``return_row_groups=True`` makes the function return a tuple ``(pdd, groups)``, where 
 ``groups[i]`` contains the indices of the point(s) corresponding to ``pdd[i]``. Note that these 
 indices are for the asymmetric unit, whose indices in ``periodic_set.motif`` are 
-accessible through ``periodic_set.asymmetric_unit`` if it exists.
+accessible through ``periodic_set.asym_unit`` if it exists.
 
 Comparison
 ----------

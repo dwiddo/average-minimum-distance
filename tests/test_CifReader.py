@@ -97,5 +97,5 @@ def test_heaviest_component(data_dir, ccdc_enabled):
         heaviest_component=True
     ).read()
 
-    if not s.asymmetric_unit.shape[0] == 26:
+    if not s.asym_unit.shape[0] == 26:
         pytest.fail('Heaviest component test failed.')

@@ -15,7 +15,7 @@ If you have a .cif file, use :class:`amd.CifReader <amd.io.CifReader>` to extrac
 The :class:`CifReader <amd.io.CifReader>` yields :class:`PeriodicSet <amd.periodicset.PeriodicSet>` objects representing the crystals, 
 which can be passed to :func:`amd.AMD() <amd.calculate.AMD>` or :func:`amd.PDD() <amd.calculate.PDD>` to calculate their invariants. 
 The :class:`PeriodicSet <amd.periodicset.PeriodicSet>` has attributes ``name``, ``motif``, ``cell``, ``types`` (atomic numbers), 
-as well as ``asymmetric_unit`` and ``wyckoff_multiplicities`` for use in AMD/PDD calculations.
+as well as ``asym_unit`` and ``weights`` for use in AMD/PDD calculations.
 
 *CSD Python API only*: :class:`CifReader <amd.io.CifReader>` can accept other file formats when passed ``reader='ccdc'``.
 

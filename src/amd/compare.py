@@ -19,7 +19,12 @@ from .periodicset import PeriodicSet
 from .utils import neighbours_from_distance_matrix
 
 __all__ = [
-    'compare', 'EMD', 'AMD_cdist', 'AMD_pdist', 'PDD_cdist', 'PDD_pdist',
+    'compare',
+    'EMD',
+    'AMD_cdist',
+    'AMD_pdist',
+    'PDD_cdist',
+    'PDD_pdist',
     'emd'
 ]
 

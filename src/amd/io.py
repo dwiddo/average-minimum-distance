@@ -660,18 +660,18 @@ def periodicset_from_gemmi_block(
 
     frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
     _, wyc_muls = np.unique(invs, return_counts=True)
-    wyc_muls = wyc_muls.astype(np.int32)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
+    weights = wyc_muls / frac_motif.shape[0]
     types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
     motif = np.matmul(frac_motif, cell)
 
     return PeriodicSet(
-        motif=motif,
-        cell=cell,
+        motif,
+        cell,
         name=block.name,
-        asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=wyc_muls,
+        asym_unit=asym_inds,
+        weights=weights,
         types=types
     )
 
@@ -846,18 +846,18 @@ def periodicset_from_ase_cifblock(
 
     frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
     _, wyc_muls = np.unique(invs, return_counts=True)
-    wyc_muls = wyc_muls.astype(np.int32)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
+    weights = wyc_muls / frac_motif.shape[0]
     types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
     motif = np.matmul(frac_motif, cell)
 
     return PeriodicSet(
-        motif=motif,
-        cell=cell,
+        motif,
+        cell,
         name=block.name,
-        asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=wyc_muls,
+        asym_unit=asym_inds,
+        weights=weights,
         types=types
     )
 
@@ -1022,18 +1022,18 @@ def periodicset_from_pymatgen_cifblock(
     rot, trans = _get_syms_pymatgen(odict)
     frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
     _, wyc_muls = np.unique(invs, return_counts=True)
-    wyc_muls = wyc_muls.astype(np.int32)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
+    weights = wyc_muls / frac_motif.shape[0]
     types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
     motif = np.matmul(frac_motif, cell)
 
     return PeriodicSet(
-        motif=motif,
-        cell=cell,
+        motif,
+        cell,
         name=block.header,
-        asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=wyc_muls,
+        asym_unit=asym_inds,
+        weights=weights,
         types=types
     )
 
@@ -1096,17 +1096,17 @@ def periodicset_from_ase_atoms(
     asym_unit = get_basis(atoms, spacegroup=spg, tol=_EQ_SITE_TOL)
     frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
     _, wyc_muls = np.unique(invs, return_counts=True)
-    wyc_muls = wyc_muls.astype(np.int32)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
+    weights = wyc_muls / frac_motif.shape[0]
     types = atoms.get_atomic_numbers().astype(np.uint8)
     motif = np.matmul(frac_motif, cell)
 
     return PeriodicSet(
-        motif=motif,
-        cell=cell,
-        asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=wyc_muls,
+        motif,
+        cell,
+        asym_unit=asym_inds,
+        weights=weights,
         types=types
     )
 
@@ -1172,15 +1172,16 @@ def periodicset_from_pymatgen_structure(
     cell = structure.lattice.matrix
     sym_structure = SpacegroupAnalyzer(structure).get_symmetrized_structure()
     eq_inds = sym_structure.equivalent_indices
-    asym_unit = np.array([ix_list[0] for ix_list in eq_inds], dtype=np.int32)
+    asym_inds = np.array([ix_list[0] for ix_list in eq_inds], dtype=np.int32)
     wyc_muls = np.array([len(ix_list) for ix_list in eq_inds], dtype=np.int32)
+    weights = wyc_muls / motif.shape[0]
     types = np.array(sym_structure.atomic_numbers, dtype=np.uint8)
 
     return PeriodicSet(
-        motif=motif,
-        cell=cell,
-        asymmetric_unit=asym_unit,
-        wyckoff_multiplicities=wyc_muls,
+        motif,
+        cell,
+        asym_unit=asym_inds,
+        weights=weights,
         types=types
     )
 
@@ -1213,8 +1214,8 @@ def periodicset_from_ccdc_entry(
         Removes all but the heaviest molecule in the asymmeric unit,
         intended for removing solvents.
     molecular_centres : bool, default False
-        Extract the centres of molecules in the unit cell and store in
-        the attribute molecular_centres of the returned PeriodicSet.
+        Use molecular centres of mass as the motif instead of centres of
+        atoms.
 
     Returns
     -------
@@ -1284,8 +1285,8 @@ def periodicset_from_ccdc_crystal(
         Removes all but the heaviest molecule in the asymmeric unit,
         intended for removing solvents.
     molecular_centres : bool, default False
-        Extract the centres of molecules in the unit cell and store in
-        the attribute molecular_centres of the returned PeriodicSet.
+        Use molecular centres of mass as the motif instead of centres of
+        atoms.
 
     Returns
     -------
@@ -1327,15 +1328,15 @@ def periodicset_from_ccdc_crystal(
             a for a in molecule.atoms if a.atomic_symbol in 'HD'
         )
 
-    if heaviest_component and len(molecule.components) > 1:
-        molecule = _heaviest_component_ccdc(molecule)
-
     # Remove atoms with missing coordinates and warn
     if any(a.fractional_coordinates is None for a in molecule.atoms):
         warnings.warn('atoms without sites or missing data will be removed')
         molecule.remove_atoms(
             a for a in molecule.atoms if a.fractional_coordinates is None
         )
+
+    if heaviest_component and len(molecule.components) > 1:
+        molecule = _heaviest_component_ccdc(molecule)
 
     crystal.molecule = molecule
     cellpar = crystal.cell_lengths + crystal.cell_angles
@@ -1383,18 +1384,18 @@ def periodicset_from_ccdc_crystal(
     rot, trans = _parse_sitesyms(sitesym)
     frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
     _, wyc_muls = np.unique(invs, return_counts=True)
-    wyc_muls = wyc_muls.astype(np.int32)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
+    weights = wyc_muls / frac_motif.shape[0]
     types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
     motif = np.matmul(frac_motif, cell)
 
     return PeriodicSet(
-        motif=motif,
-        cell=cell,
+        motif,
+        cell,
         name=crystal.identifier,
-        asymmetric_unit=asym_inds,
-        wyckoff_multiplicities=wyc_muls,
+        asym_unit=asym_inds,
+        weights=weights,
         types=types
     )
 

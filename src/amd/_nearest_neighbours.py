@@ -11,7 +11,8 @@ from scipy.spatial import KDTree
 from scipy.spatial.distance import cdist
 
 __all__ = [
-    'nearest_neighbours', 'nearest_neighbours_minval',
+    'nearest_neighbours',
+    'nearest_neighbours_minval',
     'generate_concentric_cloud'
 ]
 
