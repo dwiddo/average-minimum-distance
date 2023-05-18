@@ -60,7 +60,7 @@ def network_simplex(
     n = n_sources + n_sinks
     e = n_sources * n_sinks
     B = np.int64(np.ceil(np.sqrt(e)))
-    fp_multiplier = 1e+6
+    fp_multiplier = np.float64(1_000_000)
 
     # Add one additional node for a dummy source and sink
     source_d_int = (source_demands * fp_multiplier).astype(np.int64)
@@ -148,7 +148,6 @@ def network_simplex(
     edge = np.arange(e, e + n, dtype=np.int64)
 
     # Pivot loop
-
     f = 0
     while True:
         i, p, q, f = _find_entering_edges(
@@ -216,7 +215,6 @@ def _find_entering_edges(B, e, f, tails, heads, costs, potentials, flows):
     """
 
     m = 0
-
     while m < (e + B - 1) // B:
         # Determine the next block of edges.
         l = f + B
@@ -376,7 +374,6 @@ def _remove_edge(s, t, size, prev, last, next_node, parent, edge):
     prev[next_last_t] = prev_t
     next_node[last_t] = t
     prev[t] = last_t
-
     # Update the subtree sizes & last descendants of the (old) ancestors of t
     while s != -2:
         size[s] -= size_t
@@ -403,7 +400,6 @@ def _make_root(q, parent, size, last, prev, next_node, edge):
         prev_q = prev[q]
         last_q = last[q]
         next_last_q = next_node[last_q]
-
         # Make p a child of q
         parent[p] = q
         parent[q] = -2
@@ -411,17 +407,14 @@ def _make_root(q, parent, size, last, prev, next_node, edge):
         edge[q] = -2
         size[p] = size_p - size[q]
         size[q] = size_p
-
         # Remove the subtree rooted at q from the depth-first thread
         next_node[prev_q] = next_last_q
         prev[next_last_q] = prev_q
         next_node[last_q] = q
         prev[q] = last_q
-
         if last_p == last_q:
             last[p] = prev_q
             last_p = prev_q
-
         # Add the remaining parts of the subtree rooted at p as a subtree of q
         # in the depth-first thread
         prev[p] = last_q
@@ -449,7 +442,6 @@ def _add_edge(i, p, q, next_node, prev, last, size, parent, edge):
     prev[q] = last_p
     prev[next_last_p] = last_q
     next_node[last_q] = next_last_p
-
     # Update the subtree sizes and last descendants of the (new) ancestors of q
     while p != -2:
         size[p] += size_q
@@ -470,7 +462,6 @@ def _update_potentials(
         d = potentials[p] - costs[i] - potentials[q]
     else:
         d = potentials[p] + costs[i] - potentials[q]
-
     potentials[q] += d
     l = last_node[q]
     while q != l:

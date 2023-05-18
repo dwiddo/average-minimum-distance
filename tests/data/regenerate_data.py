@@ -1,4 +1,5 @@
-"""Script for regenerating data found in the tests/data directory.
+"""Script for regenerating data found in the tests/data directory, using
+whatever version of average-minimum-distance is installed to Python.
 """
 
 import numpy as np
@@ -38,7 +39,7 @@ def regenerate_cifs_test_data():
     Does not apply to test data extracted with ``csd-python-api``.
     """
     for name in ('cubic', 'T2_experimental'):
-        path = (_parent / f'{name}.cif')
+        path = _parent / f'{name}.cif'
         regenerate(name, amd.CifReader(path, show_warnings=False))
 
 

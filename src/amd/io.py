@@ -662,16 +662,15 @@ def periodicset_from_gemmi_block(
     _, wyc_muls = np.unique(invs, return_counts=True)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
-    weights = wyc_muls / frac_motif.shape[0]
     types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
     motif = np.matmul(frac_motif, cell)
 
     return PeriodicSet(
-        motif,
-        cell,
+        motif=motif,
+        cell=cell,
         name=block.name,
         asym_unit=asym_inds,
-        weights=weights,
+        multiplicities=wyc_muls,
         types=types
     )
 
@@ -848,16 +847,15 @@ def periodicset_from_ase_cifblock(
     _, wyc_muls = np.unique(invs, return_counts=True)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
-    weights = wyc_muls / frac_motif.shape[0]
     types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
     motif = np.matmul(frac_motif, cell)
 
     return PeriodicSet(
-        motif,
-        cell,
+        motif=motif,
+        cell=cell,
         name=block.name,
         asym_unit=asym_inds,
-        weights=weights,
+        multiplicities=wyc_muls,
         types=types
     )
 
@@ -1024,16 +1022,15 @@ def periodicset_from_pymatgen_cifblock(
     _, wyc_muls = np.unique(invs, return_counts=True)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
-    weights = wyc_muls / frac_motif.shape[0]
     types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
     motif = np.matmul(frac_motif, cell)
 
     return PeriodicSet(
-        motif,
-        cell,
+        motif=motif,
+        cell=cell,
         name=block.header,
         asym_unit=asym_inds,
-        weights=weights,
+        multiplicities=wyc_muls,
         types=types
     )
 
@@ -1098,15 +1095,14 @@ def periodicset_from_ase_atoms(
     _, wyc_muls = np.unique(invs, return_counts=True)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
-    weights = wyc_muls / frac_motif.shape[0]
     types = atoms.get_atomic_numbers().astype(np.uint8)
     motif = np.matmul(frac_motif, cell)
 
     return PeriodicSet(
-        motif,
-        cell,
+        motif=motif,
+        cell=cell,
         asym_unit=asym_inds,
-        weights=weights,
+        multiplicities=wyc_muls,
         types=types
     )
 
@@ -1174,14 +1170,13 @@ def periodicset_from_pymatgen_structure(
     eq_inds = sym_structure.equivalent_indices
     asym_inds = np.array([ix_list[0] for ix_list in eq_inds], dtype=np.int32)
     wyc_muls = np.array([len(ix_list) for ix_list in eq_inds], dtype=np.int32)
-    weights = wyc_muls / motif.shape[0]
     types = np.array(sym_structure.atomic_numbers, dtype=np.uint8)
 
     return PeriodicSet(
-        motif,
-        cell,
+        motif=motif,
+        cell=cell,
         asym_unit=asym_inds,
-        weights=weights,
+        multiplicities=wyc_muls,
         types=types
     )
 
@@ -1386,67 +1381,88 @@ def periodicset_from_ccdc_crystal(
     _, wyc_muls = np.unique(invs, return_counts=True)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
-    weights = wyc_muls / frac_motif.shape[0]
     types = np.array([asym_types[i] for i in invs], dtype=np.uint8)
     motif = np.matmul(frac_motif, cell)
 
     return PeriodicSet(
-        motif,
-        cell,
+        motif=motif,
+        cell=cell,
         name=crystal.identifier,
         asym_unit=asym_inds,
-        weights=weights,
+        multiplicities=wyc_muls,
         types=types
     )
+
+
+def memoize(f):
+    """Cache for _parse_sitesym()."""
+    cache = {}
+    def wrapper(arg):
+        if arg not in cache:
+            cache[arg] = f(arg)
+        return cache[arg]
+    return wrapper
+
+
+@memoize
+def _parse_sitesym(sym: str) -> Tuple[np.ndarray, np.ndarray]:
+    """Parse a single symmetry as an xyz string and return a 3x3
+    rotation matrix and a 3x1 translation vector.
+    """
+
+    rot = np.zeros((3, 3), dtype=np.float64)
+    trans = np.zeros((3, ), dtype=np.float64)
+
+    for ind, element in enumerate(sym.split(',')):
+
+        is_positive = True
+        is_fraction = False
+        sng_trans = None
+        fst_trans = []
+        snd_trans = []
+
+        for char in element.lower():
+            if char == '+':
+                is_positive = True
+            elif char == '-':
+                is_positive = False
+            elif char == '/':
+                is_fraction = True
+            elif char in 'xyz':
+                rot_sgn = 1.0 if is_positive else -1.0
+                rot[ind][ord(char) - ord('x')] = rot_sgn
+            elif char.isdigit() or char == '.':
+                if sng_trans is None:
+                    sng_trans = 1.0 if is_positive else -1.0
+                if is_fraction:
+                    snd_trans.append(char)
+                else:
+                    fst_trans.append(char)
+
+        if not fst_trans:
+            e_trans = 0.0
+        else:
+            e_trans = sng_trans * float(''.join(fst_trans))
+
+        if is_fraction:
+            e_trans /= float(''.join(snd_trans))
+
+        trans[ind] = e_trans
+
+    return rot, trans
 
 
 def _parse_sitesyms(symmetries: List[str]) -> Tuple[np.ndarray, np.ndarray]:
     """Parse a sequence of symmetries in xyz form and return rotation
     and translation arrays.
     """
-
-    n_syms = len(symmetries)
-    rotations = np.zeros((n_syms, 3, 3), dtype=np.float64)
-    translations = np.zeros((n_syms, 3), dtype=np.float64)
-
-    for i, sym in enumerate(symmetries):
-        for ind, element in enumerate(sym.split(',')):
-
-            is_positive = True
-            is_fraction = False
-            sng_trans = None
-            fst_trans = []
-            snd_trans = []
-
-            for char in element.lower():
-                if char == '+':
-                    is_positive = True
-                elif char == '-':
-                    is_positive = False
-                elif char == '/':
-                    is_fraction = True
-                elif char in 'xyz':
-                    rot_sgn = 1.0 if is_positive else -1.0
-                    rotations[i][ind][ord(char) - ord('x')] = rot_sgn
-                elif char.isdigit() or char == '.':
-                    if sng_trans is None:
-                        sng_trans = 1.0 if is_positive else -1.0
-                    if is_fraction:
-                        snd_trans.append(char)
-                    else:
-                        fst_trans.append(char)
-
-            if not fst_trans:
-                e_trans = 0.0
-            else:
-                e_trans = sng_trans * float(''.join(fst_trans))
-
-            if is_fraction:
-                e_trans /= float(''.join(snd_trans))
-
-            translations[i][ind] = e_trans
-
-    return rotations, translations
+    rotations = []
+    translations = []
+    for sym in symmetries:
+        rot, trans = _parse_sitesym(sym)
+        rotations.append(rot)
+        translations.append(trans)
+    return np.array(rotations), np.array(translations)
 
 
 def _expand_asym_unit(
@@ -1576,7 +1592,6 @@ def _unique_sites(asym_unit: np.ndarray, tol: float) -> np.ndarray:
     where_unique = np.full(shape=(m, ), fill_value=True)
 
     for i in range(1, m):
-        asym_unit[i]
         site_diffs1 = np.abs(asym_unit[:i, :] - asym_unit[i])
         site_diffs2 = np.abs(site_diffs1 - 1)
         sites_neq_mask = (site_diffs1 > tol) & (site_diffs2 > tol)
@@ -1659,7 +1674,6 @@ def _get_syms_pymatgen(data: dict) -> Tuple[np.ndarray, np.ndarray]:
     translations = [op.translation_vector for op in symops]
     rotations = np.array(rotations, dtype=np.float64)
     translations = np.array(translations, dtype=np.float64)
-
     return rotations, translations
 
 
@@ -1704,7 +1718,6 @@ def _snap_small_prec_coords(frac_coords: np.ndarray, tol: float) -> np.ndarray:
     """Find where frac_coords is within 1e-4 of 1/3 or 2/3, change to
     1/3 and 2/3. Recommended by pymatgen's CIF parser.
     """
-
     frac_coords[np.abs(1 - 3 * frac_coords) < tol] = 1 / 3.
     frac_coords[np.abs(1 - 3 * frac_coords / 2) < tol] = 2 / 3.
     return frac_coords

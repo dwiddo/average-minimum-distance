@@ -2,21 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.4.0] - 08/04/2023
+## [1.4.0] - 16/05/2023
 
 ### Changed
 
-- Changes to attributes in ``amd.PeriodicSet``: ``wyckoff_multiplicities`` is replaced with ``weights`` which is ``wyckoff_multiplicities`` divided by the number of motif points, and the name of ``asymmetric_unit`` is now ``asym_unit``.
+- Core function ``nearest_neighbours()`` and other code in the ``_nearest_neighbours`` module has changed significantly. ``nearest_neighbours()`` no longer returns ``cloud`` or ``inds``; this behaviour is now given by ``nearest_neighbours_data()``. ``nearest_neighbours()`` has been fixed to not exclude the first nearest neighbours of points in the query set ``x``. Use of ``KDTree`` has been removed. Integer lattice points are stored in a cache.
 
-- ``nearest_neighbours()`` has been fixed to not exclude the first nearest neighbours of points in the query set ``x``. This was because when ``x`` is the motif (as in all uses in ``amd``) the nearest neighbours of ``x`` are themselves, which are thrown away for AMD/PDD but should not be in the general case.
-
-- ``amd.AMD()``, ``amd.PDD()`` and other functions in ``amd.calculate`` which accept a periodic set no longer accept a tuple, only a ``amd.PeriodicSet``. A tuple can be converted before passing, e.g. replace ``amd.AMD((motif, cell), k)`` with ``amd.AMD(amd.PeriodicSet(motif, cell), k)``.
-
-- Several improvements made to core function ``nearest_neighbours()``, such as pruning unneeded points generated during the algorithm. Consequently the output of ``nearest_neighbours()`` will change, specifically ``cloud`` and ``inds``. It is no longer true that the point ``cloud[i]`` corresponds to the motif point ``motif[i % len(motif)]``.
+- Changes to attribute names in ``amd.PeriodicSet``: ``wyckoff_multiplicities`` --> ``multiplicities`` and ``asymmetric_unit`` --> ``asym_unit``.
 
 - Default backend reader changed to `gemmi` for faster CIF reads; removed `ase` as a dependency and added `gemmi`. Reads should be identical to before, but this may turn out to be false. The only known difference is that the `gemmi` parser cannot handle some characters (e.g. �), and does not allow cifs with repeated headers.
 
-- Readers in the ``io`` module give attributes of ``PeriodicSet``s smaller ``dtypes`` where appropriate: ``np.int32`` for ``asymmetric_unit`` and ``wyckoff_multiplicities``, ``np.uint8`` for ``types``.
+- Readers in the ``io`` module give attributes of ``PeriodicSet``s smaller ``dtypes`` where appropriate: ``np.int32`` for ``asym_unit`` and ``multiplicities``, ``np.uint8`` for ``types``.
+
+- ``amd.AMD()``, ``amd.PDD()`` and other functions in ``amd.calculate`` which accept a periodic set no longer accept a tuple, only ``amd.PeriodicSet``. A tuple can be converted before passing, e.g. replace ``amd.AMD((motif, cell), k)`` with ``amd.AMD(amd.PeriodicSet(motif, cell), k)``.
 
 ## [1.3.6] - 25/02/2023
 

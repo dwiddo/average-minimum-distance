@@ -28,7 +28,8 @@ def test_PDD(reference_data):
                 pytest.fail(
                     f'PDD of structure {n} disagrees with reference. '
                     f'reference: {ref_pdd}, calculated: {calc_pdd}. '
-                    f'Largest elementwise diffs between PDDs: {diffs}'
+                    f'Largest elementwise diffs between PDDs: {diffs}. '
+                    f'PDD EMD: {amd.EMD(s["PDD100"], calc_pdd)}.'
                 )
 
 
