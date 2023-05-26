@@ -528,13 +528,12 @@ def periodicset_from_gemmi_block(
     """
 
     import gemmi
-    from gemmi.cif import as_number, as_string, as_int
 
     # Unit cell
     cellpar = [block.find_value(t) for t in _CIF_TAGS['cellpar']]
     if not all(isinstance(par, str) for par in cellpar):
         raise ParseError(f'{block.name} has missing cell data')
-    cellpar = np.array([as_number(par) for par in cellpar])
+    cellpar = np.array([gemmi.cif.as_number(par) for par in cellpar])
     if np.isnan(np.sum(cellpar)):
         raise ParseError(f'{block.name} has missing cell data')
     cell = cellpar_to_cell(cellpar)
@@ -557,7 +556,7 @@ def periodicset_from_gemmi_block(
     loop_dict = {tag: l for tag, l in zip(xyz_loop.tags, tablified_loop)}
     xyz_str = [loop_dict[t] for t in _CIF_TAGS['atom_site_fract']]
     asym_unit = np.transpose(np.array(
-        [[as_number(c) for c in xyz] for xyz in xyz_str]
+        [[gemmi.cif.as_number(c) for c in xyz] for xyz in xyz_str]
     ))
     asym_unit = np.mod(asym_unit, 1)
 
@@ -566,13 +565,19 @@ def periodicset_from_gemmi_block(
 
     # Labels
     if '_atom_site_label' in loop_dict:
-        labels = [as_string(label) for label in loop_dict['_atom_site_label']]
+        labels = [
+            gemmi.cif.as_string(lab) for lab in loop_dict['_atom_site_label']
+        ]
     else:
         labels = [''] * xyz_loop.length()
 
     # Atomic types
+    symbols = []
     if '_atom_site_type_symbol' in loop_dict:
-        symbols = [as_string(s) for s in loop_dict['_atom_site_type_symbol']]
+        for s in loop_dict['_atom_site_type_symbol']:
+            sym = gemmi.cif.as_string(s)
+            sym = re.search(r'([A-Z][a-z]?)', sym).group()
+            symbols.append(sym)
     else:  # Get atomic types from label
         symbols = []
         for label in labels:
@@ -586,7 +591,9 @@ def periodicset_from_gemmi_block(
 
     # Occupancies
     if '_atom_site_occupancy' in loop_dict:
-        occs = [as_number(occ) for occ in loop_dict['_atom_site_occupancy']]
+        occs = [
+            gemmi.cif.as_number(oc) for oc in loop_dict['_atom_site_occupancy']
+        ]
         occupancies = [occ if not math.isnan(occ) else 1 for occ in occs]
     else:
         occupancies = [1] * xyz_loop.length()
@@ -648,7 +655,7 @@ def periodicset_from_gemmi_block(
             for tag in _CIF_TAGS['spacegroup_number']:
                 spg_num = block.find_value(tag)
                 if spg_num is not None:
-                    spg_num = as_int(spg_num)
+                    spg_num = gemmi.cif.as_int(spg_num)
                     break
             else:
                 warnings.warn('no symmetry data found, defaulting to P1')
