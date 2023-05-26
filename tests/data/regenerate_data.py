@@ -18,7 +18,7 @@ def regenerate(name, generator):
 
     data = []
     for s in generator:
-        pdd = amd.PDD(s, 100)
+        pdd = amd.PDD(s, 100, lexsort=False)  # No lexsort to avoid FP problems
         data.append(
             {
                 'PeriodicSet': s,

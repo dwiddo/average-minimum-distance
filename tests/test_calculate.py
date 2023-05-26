@@ -19,8 +19,11 @@ def test_AMD(reference_data):
 def test_PDD(reference_data):
     for name in reference_data:
         for s in reference_data[name]:
-            calc_pdd = amd.PDD(s['PeriodicSet'], 100)
+            calc_pdd = amd.PDD(s['PeriodicSet'], 100, lexsort=False)
+            # Not ideal, but it seems different Python versions can make
+            # floating point changes that reorders the rows of the PDD.
             if not np.allclose(calc_pdd, s['PDD100']):
+            # if not amd.EMD(s["PDD100"], calc_pdd) < 1e-14:
                 abs_diffs = np.abs(calc_pdd - s['PDD100'])
                 diffs = str(np.sort(abs_diffs.flatten())[::-1][:10])
                 n = s['PeriodicSet'].name
@@ -36,7 +39,7 @@ def test_PDD(reference_data):
 def test_PDD_to_AMD(reference_data):
     for name in reference_data:
         for s in reference_data[name]:
-            calc_pdd = amd.PDD(s['PeriodicSet'], 100)
+            calc_pdd = amd.PDD(s['PeriodicSet'], 100, lexsort=False)
             calc_amd = amd.AMD(s['PeriodicSet'], 100)
             amd_from_pdd = amd.PDD_to_AMD(calc_pdd)
             if not np.allclose(calc_amd, amd_from_pdd):

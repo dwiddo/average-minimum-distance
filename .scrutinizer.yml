@@ -4,8 +4,6 @@ checks:
         duplicate_code: true
 
 build:
-    environment:
-            python: 3.8
     dependencies:
         override:
             - "pip install -r requirements.txt"
