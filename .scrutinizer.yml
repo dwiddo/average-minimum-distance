@@ -4,6 +4,8 @@ checks:
         duplicate_code: true
 
 build:
+    environment:
+            python: 3.11
     dependencies:
         override:
             - "pip install -r requirements.txt"
