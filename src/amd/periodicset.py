@@ -1,6 +1,6 @@
 """Implements the :class:`PeriodicSet` class representing a periodic
-set, defined by a motif and unit cell. This models a crystal with a
-point at the center of each atom.
+set, defined by a motif (collection of points) and unit cell (basis).
+This models a crystal with a point at the center of each atom.
 
 This is the type yielded by :class:`amd.CifReader <.io.CifReader>` and
 :class:`amd.CSDReader <.io.CSDReader>`. A :class:`PeriodicSet` can be
@@ -28,30 +28,34 @@ class PeriodicSet:
     representing a crystal.
 
     :class:`PeriodicSet` s are returned by the readers in the
-    :mod:`.io` module. They can be passed to
+    :mod:`.io` module (:class:`amd.CifReader <.io.CifReader>` and
+    :class:`amd.CSDReader <.io.CSDReader>`). They can be passed to
     :func:`amd.AMD() <.calculate.AMD>` or
     :func:`amd.PDD() <.calculate.PDD>` to calculate their invariants.
 
     Parameters
     ----------
     motif : :class:`numpy.ndarray`
-        Cartesian (orthogonal) coordinates of the motif, shape (no
-        points, dims).
+        Collection of motif points in Cartesian (orthogonal)
+        coordinates, shape (no points, ``dims``).
     cell : :class:`numpy.ndarray`
-        Cartesian (orthogonal) square array representing the unit cell,
-        shape (dims, dims). Use
+        Square array representing the unit cell in Cartesian
+        (orthogonal) coordinates, shape (``dims``, ``dims``). Use
         :func:`amd.cellpar_to_cell <.utils.cellpar_to_cell>` to convert
-        6 cell parameters to an orthogonal square matrix.
+        a vector of 6 conventional cell parameters a,b,c,α,β,γ to a 3x3
+        matrix.
     name : str, optional
         Name of the periodic set.
     asym_unit : :class:`numpy.ndarray`, optional
-        Indices for the asymmetric unit, pointing to the motif. Used in
-        calculating AMD and PDD.
+        Indices of motif points constituting an asymmetric unit, so that
+        ``motif[asym_unit]`` are points in an asymmetric unit. Used in
+        AMD/PDD calculation.
     multiplicities : :class:`numpy.ndarray`, optional
-        Wyckoff multiplicities of points in the asymmetric unit, number
-        of unique sites generated under symmetries.
+        Wyckoff multiplicities of points in the asymmetric unit (the
+        number of unique sites generated under symmetries). Used in
+        AMD/PDD calculation.
     types : :class:`numpy.ndarray`, optional
-        Array of atomic numbers of motif points.
+        Atomic numbers of motif points.
     """
 
     def __init__(
@@ -74,14 +78,14 @@ class PeriodicSet:
     def ndim(self) -> int:
         return self.cell.shape[0]
 
-    def __str__(self):
+    def __str__(self) -> str:
         m, n = self.motif.shape
         m_pl = '' if m == 1 else 's'
         n_pl = '' if n == 1 else 's'
         name_str = f'{self.name}: ' if self.name is not None else ''
         return f'PeriodicSet({name_str}{m} point{m_pl} in {n} dimension{n_pl})'
 
-    def __repr__(self):
+    def __repr__(self) -> str:
 
         motif_str = str(self.motif).replace('\n ', '\n' + ' ' * 11)
         cell_str = str(self.cell).replace('\n ', '\n' + ' ' * 10)
@@ -100,7 +104,7 @@ class PeriodicSet:
             f'    cell={cell_str}{optional_attrs_str})'
         )
 
-    def _equal_cell_and_motif(self, other):
+    def _equal_cell_and_motif(self, other: PeriodicSet) -> bool:
         """Used for debugging/tests. True if both 1. the unit cells are
         (close to) identical, and 2. the motifs are the same shape, and
         every point in one motif has a (close to) identical point
@@ -129,14 +133,13 @@ class PeriodicSet:
 
     @staticmethod
     def cubic(scale: float = 1.0, dims: int = 3) -> PeriodicSet:
-        """Returns a :class:`PeriodicSet` representing a cubic lattice.
-        """
+        """Return a :class:`PeriodicSet` representing a cubic lattice."""
         return PeriodicSet(np.zeros((1, dims)), np.identity(dims) * scale)
 
     @staticmethod
     def hexagonal(scale: float = 1.0, dims: int = 3) -> PeriodicSet:
-        """ Return a :class:`PeriodicSet` representing a hexagonal
-        lattice. Dimensions 2 and 3 only.
+        """Return a :class:`PeriodicSet` representing a hexagonal
+        lattice. Implemented for dimensions 2 and 3 only.
         """
 
         if dims == 3:
@@ -161,13 +164,17 @@ class PeriodicSet:
         """Return a :class:`PeriodicSet` with a chosen number of
         randomly placed points, in a random cell with edges between
         ``length_bounds`` and angles between ``angle_bounds``.
-        Dimensions 2 and 3 only.
+        Implemented for dimensions 2 and 3 only.
         """
+
+        if dims not in (2, 3):
+            raise NotImplementedError(
+            'amd.PeriodicSet._random only implemented for dimensions 2 '
+            f'and 3, passed {dims}'
+        )
 
         cell = random_cell(
             length_bounds=length_bounds, angle_bounds=angle_bounds, dims=dims
         )
         frac_motif = np.random.uniform(size=(n_points, dims))
         return PeriodicSet(frac_motif @ cell, cell)
-
-

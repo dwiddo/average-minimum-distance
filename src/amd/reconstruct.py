@@ -204,7 +204,7 @@ def _neighbour_set(cell, prec):
     return neighbour_set
 
 
-@numba.njit(cache=True)
+@numba.njit(cache=True, fastmath=True)
 def _bilaterate(p1, p2, r1, r2, abs_val, prec):
     """Return the intersection of three circles."""
 

@@ -572,21 +572,14 @@ def periodicset_from_gemmi_block(
         labels = [''] * xyz_loop.length()
 
     # Atomic types
-    symbols = []
     if '_atom_site_type_symbol' in loop_dict:
+        symbols = []
         for s in loop_dict['_atom_site_type_symbol']:
             sym = gemmi.cif.as_string(s)
             sym = re.search(r'([A-Z][a-z]?)', sym).group()
             symbols.append(sym)
     else:  # Get atomic types from label
-        symbols = []
-        for label in labels:
-            sym = ''
-            if label:
-                match = re.search(r'([A-Z][a-z]?)', label)
-                if match is not None:
-                    sym = match.group() 
-            symbols.append(sym)
+        symbols = _process_symbols(labels)
     asym_types = [_ATOMIC_NUMBERS[s] for s in symbols]
 
     # Occupancies
@@ -755,14 +748,7 @@ def periodicset_from_ase_cifblock(
     # Atomic types
     asym_symbols = block.get('_atom_site_type_symbol')
     if asym_symbols is not None:
-        asym_symbols_ = []
-        for label in asym_symbols:
-            sym = ''
-            if label and label not in ('.', '?'):
-                match = re.search(r'([A-Z][a-z]?)', label)
-                if match is not None:
-                    sym = match.group() 
-            asym_symbols_.append(sym)
+        asym_symbols_ = _process_symbols(asym_symbols)
     else:
         asym_symbols_ = [''] * len(asym_unit)
     asym_types = [_ATOMIC_NUMBERS[s] for s in asym_symbols_]
@@ -942,14 +928,7 @@ def periodicset_from_pymatgen_cifblock(
     # Atomic types
     asym_symbols = odict.get('_atom_site_type_symbol')
     if asym_symbols is not None:
-        asym_symbols_ = []
-        for label in asym_symbols:
-            sym = ''
-            if label and label not in ('.', '?'):
-                match = re.search(r'([A-Z][a-z]?)', label)
-                if match is not None:
-                    sym = match.group() 
-            asym_symbols_.append(sym)
+        asym_symbols_ = _process_symbols(asym_symbols)
     else:
         asym_symbols_ = [''] * len(asym_unit)
     asym_types = [_ATOMIC_NUMBERS[s] for s in asym_symbols_]
@@ -1615,6 +1594,21 @@ def _has_disorder(label: str, occupancy) -> bool:
     except Exception:
         occupancy = 1
     return (occupancy < 1) or label.endswith('?')
+
+
+def _process_symbols(symbols):
+    """Remove extra parts from atom symbols (_atom_site_type_symbol),
+    e.g. charges, and replace unknown values with empty strings.
+    """
+    symbols_ = []
+    for label in symbols:
+        sym = ''
+        if label and label not in ('.', '?'):
+            match = re.search(r'([A-Z][a-z]?)', label)
+            if match is not None:
+                sym = match.group() 
+        symbols_.append(sym)
+    return symbols_
 
 
 def _get_syms_pymatgen(data: dict) -> Tuple[np.ndarray, np.ndarray]:
