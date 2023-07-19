@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file.
 
 - ``nearest_neighbours_data()`` algorithm made more like ``nearest_neighbours()``, improving performance ~10x.
 
+- Improved docs and formatting.
+
 ## [1.4.0] - 16/05/2023
 
 ### Changed

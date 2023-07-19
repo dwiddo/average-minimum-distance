@@ -6,6 +6,7 @@ and :func:`amd.PDD() <.calculate.PDD>`.
 """
 
 import warnings
+import collections
 import os
 import re
 import functools
@@ -87,7 +88,7 @@ _CIF_TAGS: dict = {
 }
 
 
-class _Reader:
+class _Reader(collections.abc.Iterator):
     """Base reader class."""
 
     def __init__(
@@ -105,9 +106,6 @@ class _Reader:
             self._progress_bar = tqdm.tqdm(desc='Reading', delay=1)
         else:
             self._progress_bar = None
-
-    def __iter__(self):
-        return self
 
     def __next__(self):
         """Iterate over self._iterator, passing items through
@@ -327,6 +325,8 @@ class CifReader(_Reader):
     def _dir_generator(
             path: Path, file_parser: Callable, extensions: Iterable
     ) -> Iterator:
+        """Generate items from all files with extensions in
+        ``extensions`` from a directory ``path``."""
         for file_path in path.iterdir():
             if not file_path.is_file():
                 continue
@@ -1703,7 +1703,7 @@ def _heaviest_component_ccdc(molecule):
         for a in component.atoms:
             try:
                 occ = float(a.occupancy)
-            except ValueError:
+            except:
                 occ = 1
             try:
                 weight += float(a.atomic_weight) * occ

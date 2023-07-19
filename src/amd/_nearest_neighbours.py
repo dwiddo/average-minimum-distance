@@ -58,7 +58,6 @@ def nearest_neighbours(
     # Get an initial collection of lattice points + a generator for more
     int_lattice, int_lat_generator = _integer_lattice_batches(dims, k / m)
     cloud = _int_lattice_to_cloud(motif, cell, int_lattice)
-    # cloud = _lattice_to_cloud(motif, int_lattice @ cell)
 
     # Squared distances to k nearest neighbours
     sqdists = cdist(x, cloud, metric='sqeuclidean')
@@ -153,8 +152,7 @@ def nearest_neighbours_data(
     m, dims = motif.shape
     # Get an initial collection of lattice points + a generator for more
     int_lattice, int_lat_generator = _integer_lattice_batches(dims, k / m)
-    # cloud = _int_lattice_to_cloud(motif, cell, int_lattice)
-    cloud = _lattice_to_cloud(motif, int_lattice @ cell)
+    cloud = _int_lattice_to_cloud(motif, cell, int_lattice)
     full_cloud.append(cloud)
     cloud_ind_offset = len(cloud)
 
@@ -190,7 +188,8 @@ def nearest_neighbours_data(
             break
 
         # Squared distances to up to k nearest new points + inds
-        part_inds = np.argpartition(sqdists_, k - 1)[:, :k]
+        _argpart_upto = min(k - 1, sqdists_.shape[-1] - 1)
+        part_inds = np.argpartition(sqdists_, _argpart_upto)[:, :k]
         part_sqdists = np.take_along_axis(sqdists_, part_inds, axis=-1)[:, :k]
         part_sort_inds = np.argsort(part_sqdists)
         inds_ = np.take_along_axis(part_inds, part_sort_inds, axis=-1)

@@ -15,9 +15,11 @@
 
 ## What's amd?
 
-The typical representation of a crystal as a motif and unit cell is ambiguous, because many choices of cell and motif define the same crystal. This package implements crystal descriptors designed to be *isometry invariants*, meaning they are always the same for any two crystals which are geometrically equivalent, independent of the unit cell and motif. The descriptors can be compared to give a distance which is 0 for identical crystals, and close to 0 for similar crystals (a *continuous metric*).
+*Average minimum distances* (AMD) and *pointwise distance distributions* (PDD) are geometry-based crystal descriptors designed to have desirable properties such as independence from choice of a unit cell and continuity under perturbations of points.
 
-The *pointwise distance distribution* (PDD) is a descriptor that records the environment of each atom in the unit cell by listing distances to neighbouring atoms. Two PDDs are compared using an optimal matching algorithm ([Earth Mover's distance](https://en.wikipedia.org/wiki/Earth_mover%27s_distance)). Taking the average of a PDD gives a vector called the *average minimum distance* (AMD), which are simpler and faster to compare (by several orders of magnitude) but can still identify crystals with similar geometry. Both have a parameter k, the number of neighbouring atoms considered for each atom in the unit cell.
+The typical representation of a crystal as a motif and unit cell is ambiguous, because many choices of cell and motif define the same crystal. This package implements descriptors which are *isometry invariants*, meaning they are always the same for any two crystals which are geometrically equivalent, independent of a choice of unit cell and motif. AMDs/PDDs can be compared to give a distance between crystals, which is 0 for identical crystals and close to 0 for similar crystals (a *continuous metric*).
+
+The *pointwise distance distribution* (PDD) records the environment of each atom in a unit cell by listing distances to neighbouring atoms in order. Two PDDs are compared using an optimal matching algorithm ([Earth Mover's distance](https://en.wikipedia.org/wiki/Earth_mover%27s_distance)). Taking the average of a PDD gives a vector called the *average minimum distance* (AMD), which are simpler and faster to compare but still identify crystals with similar geometry. Both have one parameter k, equal to the number of neighbouring atoms considered for each atom in the unit cell.
 
 ## Getting started
 

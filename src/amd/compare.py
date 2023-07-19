@@ -382,7 +382,10 @@ def AMD_cdist(
 
 
 def AMD_pdist(
-        amds, metric: str = 'chebyshev', low_memory: bool = False, **kwargs
+        amds,
+        metric: str = 'chebyshev',
+        low_memory: bool = False,
+        **kwargs
 ) -> np.ndarray:
     """Compare a set of AMDs pairwise, returning a condensed distance
     matrix. This function is essentially

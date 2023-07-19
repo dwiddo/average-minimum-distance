@@ -229,7 +229,7 @@ def neighbours_from_distance_matrix(
         ValueError(
             'amd.neighbours_from_distance_matrix() accepts a distance matrix, '
             'either a 2D distance matrix or a condensed distance matrix as '
-            'returned by scipy.spatial.distance.pdist()'
+            'returned by scipy.spatial.distance.pdist().'
         )
 
     # inds are the indexes of nns: inds[i, j] is the j-th nn to point i
