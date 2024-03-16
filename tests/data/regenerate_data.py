@@ -48,7 +48,7 @@ def regenerate_CSD_families_test_data():
     ``csd-python-api``.
     """
     csd_families = ['DEBXIT', 'GLYCIN', 'HXACAN', 'ACSALA']
-    reader = amd.CSDReader(csd_families, families=True, show_warnings=False)
+    reader = amd.CSDReader(csd_families, refcode_families=True, show_warnings=False)
     regenerate('CSD_families', reader)
 
 

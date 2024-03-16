@@ -5,17 +5,20 @@ PDD. This is possible 'in a general position', see our papers for more.
 from itertools import combinations, permutations, product
 
 import numpy as np
+import numpy.typing as npt
 import numba
 from scipy.spatial.distance import cdist
 from scipy.spatial import KDTree
 
-from ._nearest_neighbours import generate_concentric_cloud
+from ._nearest_neighbors import generate_concentric_cloud
 from .utils import diameter
+
+FloatArray = npt.NDArray[np.floating]
 
 __all__ = ['reconstruct']
 
 
-def reconstruct(pdd: np.ndarray, cell: np.ndarray) -> np.ndarray:
+def reconstruct(pdd: FloatArray, cell: FloatArray) -> FloatArray:
     """Reconstruct a motif from a PDD and unit cell. This function will
     only work if ``pdd`` has enough columns, such that the last column
     has all values larger than 2 times the diameter of the unit cell. It
@@ -42,7 +45,7 @@ def reconstruct(pdd: np.ndarray, cell: np.ndarray) -> np.ndarray:
         The reconstructed motif of the periodic set.
     """
 
-    # TODO: get a more reduced neighbour set
+    # TODO: get a more reduced neighbor set
     # TODO: find all shared distances in a big operation at the start
     # TODO: move PREC variable to its proper place
     PREC = 1e-10
@@ -58,8 +61,8 @@ def reconstruct(pdd: np.ndarray, cell: np.ndarray) -> np.ndarray:
         return np.array(motif)
 
     # finding lattice distances so we can ignore them
-    cloud_generator = generate_concentric_cloud(np.array(motif), cell)
-    next(cloud_generator)  # is just the origin
+    cloud_generator = iter(generate_concentric_cloud(np.array(motif), cell))
+    next(cloud_generator)  # the origin
     cloud = []
     layer = next(cloud_generator)
     while np.any(np.linalg.norm(layer, axis=-1) <= diam):
@@ -68,7 +71,7 @@ def reconstruct(pdd: np.ndarray, cell: np.ndarray) -> np.ndarray:
     cloud = np.concatenate(cloud)
 
     # is (a superset of) lattice points close enough to Voronoi domain
-    nn_set = _neighbour_set(cell, PREC)
+    nn_set = _neighbor_set(cell, PREC)
     lattice_dists = np.linalg.norm(cloud, axis=-1)
     lattice_dists = lattice_dists[lattice_dists <= diam]
     lattice_dists = _unique_within_tol(lattice_dists, PREC)
@@ -80,7 +83,7 @@ def reconstruct(pdd: np.ndarray, cell: np.ndarray) -> np.ndarray:
     shared_dists = _shared_vals(row1_reduced, row2_reduced, PREC)
     shared_dists = _unique_within_tol(shared_dists, PREC)
 
-    # all combinations of vecs in neighbour set forming a basis
+    # all combinations of vecs in neighbor set forming a basis
     bases = []
     for vecs in combinations(nn_set, dims):
         vecs = np.asarray(vecs)
@@ -134,7 +137,7 @@ def _find_further_point(shared_dists1, shared_dists2, bases, cloud, q, prec):
     abs_q_ = shared_dists1[0]
 
     # try all ordered subsequences of distances shared between first and
-    # further row, with all combinations of the vectors in the neighbour set
+    # further row, with all combinations of the vectors in the neighbor set
     # forming a basis, see if spheres centered at the vectors with the shared
     # distances as radii intersect at 4 (3 dims) points.
     sphere_intersect_func = _trilaterate if dims == 3 else _bilaterate
@@ -153,8 +156,8 @@ def _find_further_point(shared_dists1, shared_dists2, bases, cloud, q, prec):
                 return res
 
 
-def _neighbour_set(cell, prec):
-    """(A superset of) the neighbour set of origin for a lattice."""
+def _neighbor_set(cell, prec):
+    """(A superset of) the neighbor set of origin for a lattice."""
 
     k_ = 5
     coeffs = np.array(list(product((-1, 0, 1), repeat=cell.shape[0])))
@@ -167,7 +170,7 @@ def _neighbour_set(cell, prec):
     vecs = np.array(vecs)
 
     origin = np.zeros((1, cell.shape[0]))
-    cloud_generator = generate_concentric_cloud(origin, cell)
+    cloud_generator = iter(generate_concentric_cloud(origin, cell))
     cloud = np.concatenate((next(cloud_generator), next(cloud_generator)))
     tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
     dists, inds = tree.query(vecs, k=k_)
@@ -183,25 +186,25 @@ def _neighbour_set(cell, prec):
 
     tmp_inds = np.unique(inds[:, 1:].flatten())
     tmp_inds = tmp_inds[tmp_inds != 0]
-    neighbour_set = cloud[tmp_inds]
+    neighbor_set = cloud[tmp_inds]
 
-    # reduce neighbour set
-    # half the lattice points and find their nearest neighbours in the lattice
-    neighbour_set_half = neighbour_set / 2
-    # for each of these vectors, check if 0 is a nearest neighbour.
+    # reduce neighbor set
+    # half the lattice points and find their nearest neighbors in the lattice
+    neighbor_set_half = neighbor_set / 2
+    # for each of these vectors, check if 0 is a nearest neighbor.
     # so, check if the dist to 0 is leq (within tol) than dist to all other
     # lattice points.
-    nn_norms = np.linalg.norm(neighbour_set, axis=-1)
+    nn_norms = np.linalg.norm(neighbor_set, axis=-1)
     halves_norms = nn_norms / 2
-    halves_to_lattice_dists = cdist(neighbour_set_half, neighbour_set)
+    halves_to_lattice_dists = cdist(neighbor_set_half, neighbor_set)
 
     # Do I need to + PREC?
-    # inds of voronoi neighbours in cloud
-    voronoi_neighbours = np.all(
+    # inds of voronoi neighbors in cloud
+    voronoi_neighbors = np.all(
         halves_to_lattice_dists - halves_norms + prec >= 0, axis=-1
     )
-    neighbour_set = neighbour_set[voronoi_neighbours]
-    return neighbour_set
+    neighbor_set = neighbor_set[voronoi_neighbors]
+    return neighbor_set
 
 
 @numba.njit(cache=True, fastmath=True)

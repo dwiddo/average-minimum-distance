@@ -1,37 +1,41 @@
-"""Implements core function nearest_neighbours used for AMD and PDD
+"""Implements core function nearest_neighbors used for AMD and PDD
 calculations.
 """
 
-from typing import Tuple, Iterable, Callable
+from typing import Tuple, Iterable, Iterator, Callable, List
 from itertools import product, tee, accumulate
 import functools
 
 import numba
 import numpy as np
+import numpy.typing as npt
 from scipy.spatial import KDTree
 from scipy.spatial.distance import cdist
 
+FloatArray = npt.NDArray[np.floating]
+IntArray = npt.NDArray[np.integer]
+
 __all__ = [
-    'nearest_neighbours',
-    'nearest_neighbours_data',
-    'nearest_neighbours_minval',
+    'nearest_neighbors',
+    'nearest_neighbors_data',
+    'nearest_neighbors_minval',
     'generate_concentric_cloud'
 ]
 
 
-def nearest_neighbours(
-        motif: np.ndarray, cell: np.ndarray, x: np.ndarray, k: int
-) -> np.ndarray:
-    """Find distances to ``k`` nearest neighbours in a periodic set for
+def nearest_neighbors(
+        motif: FloatArray, cell: FloatArray, x: FloatArray, k: int
+) -> FloatArray:
+    """Find distances to ``k`` nearest neighbors in a periodic set for
     each point in ``x``.
 
     Given a periodic set described by ``motif`` and ``cell``, a query
     set of points ``x`` and an integer ``k``, find distances to the
-    ``k`` nearest neighbours in the periodic set for all points in
+    ``k`` nearest neighbors in the periodic set for all points in
     ``x``. Returns an array with shape (x.shape[0], k) of distances to
-    the neighbours. This function only returns distances, see the
-    function nearest_neighbours_data() to also get the point cloud and
-    indices of the points which are neighbours.
+    the neighbors. This function only returns distances, see the
+    function nearest_neighbors_data() to also get the point cloud and
+    indices of the points which are neighbors.
 
     Parameters
     ----------
@@ -40,84 +44,92 @@ def nearest_neighbours(
     cell : :class:`numpy.ndarray`
         The unit cell as a square array, shape (dims, dims).
     x : :class:`numpy.ndarray`
-        Array of points to query for neighbours. For AMD/PDD invariants
+        Array of points to query for neighbors. For AMD/PDD invariants
         this is the motif, or more commonly an asymmetric unit of it.
     k : int
-        Number of nearest neighbours to find for each point in ``x``.
+        Number of nearest neighbors to find for each point in ``x``.
 
     Returns
     -------
     dists : numpy.ndarray
         Array shape ``(x.shape[0], k)`` of distances from points in
-        ``x`` to their ``k`` nearest neighbours in the periodic set in
+        ``x`` to their ``k`` nearest neighbors in the periodic set in
         order, e.g. ``dists[m][n]`` is the distance from ``x[m]`` to its
-        n-th nearest neighbour in the periodic set.
+        n-th nearest neighbor in the periodic set.
     """
 
     m, dims = motif.shape
-    # Get an initial collection of lattice points + a generator for more
-    int_lattice, int_lat_generator = _integer_lattice_batches(dims, k / m)
-    cloud = _int_lattice_to_cloud(motif, cell, int_lattice)
 
-    # Squared distances to k nearest neighbours
-    sqdists = cdist(x, cloud, metric='sqeuclidean')
-    motif_diam = np.sqrt(_max_in_first_n_columns(sqdists, m))
+    # Get an initial collection of points and a generator for more
+    int_lattice, int_lat_generator = _integer_lattice_batches(dims, m, k)
+    cloud = _lattice_to_cloud(motif, int_lattice @ cell)
+
+    # Squared distances to k nearest neighbors
+    sqdists = _cdist_sqeulcidean(x, cloud)
+    motif_diam = np.sqrt(sqdists[:, :m].max())
     sqdists.partition(k - 1)
     sqdists = sqdists[:, :k]
     sqdists.sort()
 
-    # Generate layers of lattice until they are too far away to give nearer
-    # neighbours. For a lattice point l, points in l + motif are further away
-    # from x than |l| - max|p-p'| (p in x, p' in motif), giving a bound we can
-    # use to rule out distant lattice points.
-    max_sqd = _max_in_column(sqdists, k - 1)
+    # Generate layers of the lattice until they are too far away to give nearer
+    # neighbors. If a lattice point l has |l| >= max|p-p'| + max_d, (p in x,
+    # p' in motif) then |p-(l+p')| >= max_d for all p in x, p' in motif, so all
+    # points l+p' are too far away to be nearer neighbors and l is discarded.
+    max_sqd = sqdists[:, -1].max()
     bound = (np.sqrt(max_sqd) + motif_diam) ** 2
 
     while True:
 
-        # Get next layer of lattice
-        lattice = _close_lattice_points(next(int_lat_generator), cell, bound)
+        # Get next layer of lattice and prune distant lattice points
+        lattice = next(int_lat_generator) @ cell
+        # The einsum call is equivalent to (lattice ** 2).sum(axis=-1)
+        lattice = lattice[np.einsum('ij,ij->i', lattice, lattice) < bound]
         if lattice.size == 0:  # None are close enough
             break
 
         # Squared distances to new points
         cloud = _lattice_to_cloud(motif, lattice)
-        sqdists_ = cdist(x, cloud, metric='sqeuclidean')
-        close = sqdists_ < max_sqd
-        if not np.any(close):  # None are close enough
+        sqdists_ = _cdist_sqeulcidean(x, cloud)
+
+        where_close = (sqdists_ < max_sqd).any(axis=0)
+        if not np.any(where_close):  # None are close enough
             break
 
         # Squared distances to up to k nearest new points
-        sqdists_ = sqdists_[:, np.any(close, axis=0)]
+        sqdists_ = sqdists_[:, where_close]
         if sqdists_.shape[-1] > k:
             sqdists_.partition(k - 1)
             sqdists_ = sqdists_[:, :k]
         sqdists_.sort()
 
         # Merge existing and new distances
-        sqdists = _merge_dists(sqdists, sqdists_)
-        max_sqd = _max_in_column(sqdists, k - 1)
+        sqdists = _merge_sorted_arrays(sqdists, sqdists_)
+        max_sqd = sqdists[:, -1].max()
         bound = (np.sqrt(max_sqd) + motif_diam) ** 2
 
     return np.sqrt(sqdists)
 
 
-def nearest_neighbours_data(
-        motif: np.ndarray, cell: np.ndarray, x: np.ndarray, k: int
-) -> Tuple[np.ndarray, ...]:
-    """Find the ``k`` nearest neighbours in a periodic set for each
-    point in ``x``, along with data about those neighbours.
+def nearest_neighbors_data(
+        motif: FloatArray, cell: FloatArray, x: FloatArray, k: int
+) -> Tuple[FloatArray, FloatArray, IntArray]:
+    """Find the ``k`` nearest neighbors in a periodic set for each
+    point in ``x``, along with the point cloud generated during the
+    search and indices of the nearest neighbors in the cloud.
+    
+    Note: the points in ``x`` are
 
     Given a periodic set described by ``motif`` and ``cell``, a query
     set of points ``x`` and an integer ``k``, find the ``k`` nearest
-    neighbours in the periodic set for all points in ``x``. Return
-    an array of distances to neighbours, the point cloud generated
+    neighbors in the periodic set for all points in ``x``. Return
+    an array of distances to neighbors, the point cloud generated
     during the search and the indices of which points in the cloud are
-    the neighbours of points in ``x``.
+    the neighbors of points in ``x``.
 
-    Note: the point ``cloud[i]`` in the periodic set comes from the
-    motif point ``motif[i % len(motif)]``, because points are added to
-    ``cloud`` in batches of whole unit cells and not rearranged.
+    Note: the point ``cloud[i]`` in the periodic set comes from (is
+    translationally equivalent to) the motif point
+    ``motif[i % len(motif)]``, because points are added to ``cloud`` in
+    batches of whole unit cells and not rearranged.
 
     Parameters
     ----------
@@ -126,39 +138,40 @@ def nearest_neighbours_data(
     cell : :class:`numpy.ndarray`
         The unit cell as a square array, shape (dims, dims).
     x : :class:`numpy.ndarray`
-        Array of points to query for neighbours. For AMD/PDD invariants
+        Array of points to query for neighbors. For AMD/PDD invariants
         this is the motif, or more commonly an asymmetric unit of it.
     k : int
-        Number of nearest neighbours to find for each point in ``x``.
+        Number of nearest neighbors to find for each point in ``x``.
 
     Returns
     -------
     dists : numpy.ndarray
         Array shape ``(x.shape[0], k)`` of distances from points in
-        ``x`` to their ``k`` nearest neighbours in the periodic set in
+        ``x`` to their ``k`` nearest neighbors in the periodic set in
         order, e.g. ``dists[m][n]`` is the distance from ``x[m]`` to its
-        n-th nearest neighbour in the periodic set.
+        n-th nearest neighbor in the periodic set.
     cloud : numpy.ndarray
         Collection of points in the periodic set that were generated
         during the search. Arranged such that cloud[i] comes from the
         motif point motif[i % len(motif)] by translation. 
     inds : numpy.ndarray
         Array shape ``(x.shape[0], k)`` containing the indices of
-        nearest neighbours in ``cloud``, e.g. the n-th nearest neighbour
+        nearest neighbors in ``cloud``, e.g. the n-th nearest neighbor
         to ``x[m]`` is ``cloud[inds[m][n]]``.
     """
 
     full_cloud = []
     m, dims = motif.shape
+
     # Get an initial collection of lattice points + a generator for more
-    int_lattice, int_lat_generator = _integer_lattice_batches(dims, k / m)
-    cloud = _int_lattice_to_cloud(motif, cell, int_lattice)
+    int_lattice, int_lat_generator = _integer_lattice_batches(dims, m, k)
+    cloud = _lattice_to_cloud(motif, int_lattice @ cell)
     full_cloud.append(cloud)
     cloud_ind_offset = len(cloud)
 
-    # Squared distances to k nearest neighbours + inds of neighbours in cloud
-    sqdists = cdist(x, cloud, metric='sqeuclidean')
-    motif_diam = np.sqrt(_max_in_first_n_columns(sqdists, m))
+    # Squared distances to k nearest neighbors + inds of neighbors in cloud
+    sqdists = _cdist_sqeulcidean(x, cloud)
+    motif_diam = np.sqrt(sqdists[:, :m].max())
     part_inds = np.argpartition(sqdists, k - 1)[:, :k]
     part_sqdists = np.take_along_axis(sqdists, part_inds, axis=-1)[:, :k]
     part_sort_inds = np.argsort(part_sqdists)
@@ -166,77 +179,79 @@ def nearest_neighbours_data(
     sqdists = np.take_along_axis(part_sqdists, part_sort_inds, axis=-1)
 
     # Generate layers of lattice until they are too far away to give nearer
-    # neighbours. For a lattice point l, points in l + motif are further away
+    # neighbors. For a lattice point l, points in l + motif are further away
     # from x than |l| - max|p-p'| (p in x, p' in motif), giving a bound we can
     # use to rule out distant lattice points.
-    max_sqd = _max_in_column(sqdists, k - 1)
+    max_sqd = sqdists[:, -1].max()
     bound = (np.sqrt(max_sqd) + motif_diam) ** 2
 
     while True:
 
-        # Get next layer of lattice
-        lattice = _close_lattice_points(next(int_lat_generator), cell, bound)
+        # Get next layer of lattice and prune distant lattice points
+        lattice = next(int_lat_generator) @ cell
+        lattice = lattice[np.einsum('ij,ij->i', lattice, lattice) < bound]
         if lattice.size == 0:  # None are close enough
             break
 
         cloud = _lattice_to_cloud(motif, lattice)
         full_cloud.append(cloud)
         # Squared distances to new points
-        sqdists_ = cdist(x, cloud, metric='sqeuclidean')
+        sqdists_ = _cdist_sqeulcidean(x, cloud)
         close = sqdists_ < max_sqd
         if not np.any(close):  # None are close enough
             break
 
         # Squared distances to up to k nearest new points + inds
-        _argpart_upto = min(k - 1, sqdists_.shape[-1] - 1)
-        part_inds = np.argpartition(sqdists_, _argpart_upto)[:, :k]
+        argpart_upto = min(k - 1, sqdists_.shape[-1] - 1)
+        part_inds = np.argpartition(sqdists_, argpart_upto)[:, :k]
         part_sqdists = np.take_along_axis(sqdists_, part_inds, axis=-1)[:, :k]
         part_sort_inds = np.argsort(part_sqdists)
         inds_ = np.take_along_axis(part_inds, part_sort_inds, axis=-1)
         sqdists_ = np.take_along_axis(part_sqdists, part_sort_inds, axis=-1)
 
-        # Move inds_ so they point to full_cloud instead of cloud
+        # Offset inds_ so they point to full_cloud instead of cloud
         inds_ += cloud_ind_offset
         cloud_ind_offset += len(cloud)
 
-        # Merge sqdists and sqdists_, and inds and inds_
-        sqdists, inds = _merge_dists_inds(sqdists, sqdists_, inds, inds_)
-        max_sqd = _max_in_column(sqdists, k - 1)
+        # Merge sqdists & sqdists_, inds & inds_
+        sqdists, inds = _merge_sorted_arrays_inds(sqdists, sqdists_, inds, inds_)
+        max_sqd = sqdists[:, -1].max()
         bound = (np.sqrt(max_sqd) + motif_diam) ** 2
 
     return np.sqrt(sqdists), np.concatenate(full_cloud), inds
 
 
-def _integer_lattice_batches_cache(integer_lattice_batches_func):
+def _integer_lattice_batches_cache(func: Callable) -> Callable:
     """Specialised cache for ``_integer_lattice_batches``. Stores layers
-    of integer lattice points from ``_generate_integer_lattice``
-    already concatenated to avoid re-computing and concatenating them.
+    of integer lattice points from ``_integer_lattice_generator``.
     How many layers are needed depends on the ratio of k to m, so this
     is passed to the cache. One cache is kept for each dimension.
     """
 
-    cache = {}          # (dims, n_layers): [layers, generator]
-    npoints_cache = {}  # dims: [#points in layer for layer=1,2,...]
+    cache = {}          # (dims, n_layers): (layers, generator)
+    npoints_cache = {}  # dims: [num points accumulated in layers 1,2,...]
 
-    @functools.wraps(integer_lattice_batches_func)
-    def wrapper(dims, k_over_m):
+    @functools.wraps(func)
+    def wrapper(
+            dims: int, m: int, k: int
+    ) -> Tuple[List[FloatArray], Iterator[FloatArray]]:
 
         if dims not in npoints_cache:
             npoints_cache[dims] = []
 
         # Use npoints_cache to get how many layers of the lattice are needed
+        # Delicate code; change in accordance with _integer_lattice_batches
         n_layers = 1
         for n_points in npoints_cache[dims]:
-            if n_points > k_over_m:
+            if n_points * m > k:
                 break
             n_layers += 1
         n_layers += 1
 
         # Update cache and possibly npoints_cache
         if (dims, n_layers) not in cache:
-            layers, generator = integer_lattice_batches_func(dims, k_over_m)
+            layers, generator = func(dims, m, k)
             n_layers = len(layers)
-
             # If more layers were made than seen so far, update npoints_cache
             if len(npoints_cache[dims]) < n_layers:
                 npoints_cache[dims] = list(accumulate(len(i) for i in layers))
@@ -244,7 +259,6 @@ def _integer_lattice_batches_cache(integer_lattice_batches_func):
 
         layers, generator = cache[(dims, n_layers)]
         cache[(dims, n_layers)][1], ret_generator = tee(generator)
-
         return layers, ret_generator
 
     return wrapper
@@ -252,21 +266,22 @@ def _integer_lattice_batches_cache(integer_lattice_batches_func):
 
 @_integer_lattice_batches_cache
 def _integer_lattice_batches(
-        dims: int, k_over_m: float
-) -> Tuple[np.ndarray, Iterable[np.ndarray]]:
+        dims: int, m: int, k: int
+) -> Tuple[List[FloatArray], Iterator[FloatArray]]:
     """Return an initial batch of integer lattice points (number
-    according to k / m) and a generator for more distant points. Results
-    are cached for speed.
+    according to k & m) and a generator for more distant points.
 
     Parameters
     ----------
     dims : int
         The dimension of Euclidean space the lattice is in.
-    k_over_m : float
-        Number of nearest neighbours to find (parameter of
-        nearest_neighbours, k) divided by the number of motif points in
-        the periodic set (m). Used to determine how many layers of the
-        integer lattice to return.
+    m : int
+        Number of motif points. Used to determine how many layers of
+        lattice points to put into the initial batch.
+    k : int
+        Parameter of ``nearest_neighbors``, the number of neighbors to
+        find for each point. Used to determine how many layers of
+        lattice points to put into the initial batch.
 
     Returns
     -------
@@ -279,10 +294,10 @@ def _integer_lattice_batches(
         in ``initial_integer_lattice``.
     """
 
-    int_lattice_generator = iter(_generate_integer_lattice(dims))
+    int_lattice_generator = iter(_integer_lattice_generator(dims))
     layers = [next(int_lattice_generator)]
     n_points = 1
-    while n_points <= k_over_m:
+    while n_points * m <= k:
         layer = next(int_lattice_generator)
         n_points += layer.shape[0]
         layers.append(layer)
@@ -303,7 +318,7 @@ def memoized_generator(generator_function: Callable) -> Callable:
 
 
 @memoized_generator
-def _generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
+def _integer_lattice_generator(dims: int) -> Iterable[FloatArray]:
     """Generate batches of integer lattice points. Each yield gives all
     points (that have not already been yielded) inside a sphere centered
     at the origin with radius d; d starts at 0 and increments by 1 on
@@ -349,10 +364,10 @@ def _generate_integer_lattice(dims: int) -> Iterable[np.ndarray]:
 
 @numba.njit(cache=True, fastmath=True)
 def _reflect_positive_integer_lattice(
-        positive_int_lattice: np.ndarray
-) -> np.ndarray:
+        positive_int_lattice: FloatArray
+) -> FloatArray:
     """Reflect points in the positive quadrant across all combinations
-    of axes, without duplicating points that are invariant under
+    of axes without duplicating points that are invariant under
     reflections.
     """
 
@@ -362,8 +377,11 @@ def _reflect_positive_integer_lattice(
 
     for n_reflections in range(1, dims + 1):
 
-        axes = np.arange(n_reflections)
-        batches.extend(_reflect_in_axes(positive_int_lattice, axes))
+        axes = np.arange(n_reflections, dtype=np.int64)
+        off_axes = (positive_int_lattice[:, axes] == 0).sum(axis=-1) == 0
+        int_lattice = positive_int_lattice[off_axes]
+        int_lattice[:, axes] *= -1
+        batches.extend(int_lattice)
 
         while True:
             i = n_reflections - 1
@@ -376,57 +394,20 @@ def _reflect_positive_integer_lattice(
             axes[i] += 1
             for j in range(i + 1, n_reflections):
                 axes[j] = axes[j-1] + 1
-            batches.extend(_reflect_in_axes(positive_int_lattice, axes))
+
+            off_axes = (positive_int_lattice[:, axes] == 0).sum(axis=-1) == 0
+            int_lattice = positive_int_lattice[off_axes]
+            int_lattice[:, axes] *= -1
+            batches.extend(int_lattice)
 
     int_lattice = np.empty(shape=(len(batches), dims), dtype=np.float64)
     for i in range(len(batches)):
         int_lattice[i] = batches[i]
-
     return int_lattice
 
 
 @numba.njit(cache=True, fastmath=True)
-def _reflect_in_axes(
-        positive_int_lattice: np.ndarray, axes: np.ndarray
-) -> np.ndarray:
-    """Reflect points in `positive_int_lattice` in the axes described by
-    `axes`, without duplicating invariant points.
-    """
-    not_on_axes = (positive_int_lattice[:, axes] == 0).sum(axis=-1) == 0
-    int_lattice = positive_int_lattice[not_on_axes]
-    int_lattice[:, axes] *= -1
-    return int_lattice
-
-
-@numba.njit(cache=True, fastmath=True)
-def _close_lattice_points(
-        int_lattice: np.ndarray, cell: np.ndarray, bound: float
-) -> np.ndarray:
-    """Given integer lattice points, a unit cell and ``bound``, return
-    lattice points which are close enough such that the corresponding
-    motif copy could contain nearest neighbours. ``bound`` should be
-    equal to (max_d + motif_diam) ** 2, where max_d is the maximum
-    k-th nearest neighbour distance found so far and motif_diam is the
-    largest distance between any point in the query set and motif.
-    """
-
-    lattice = int_lattice @ cell
-    inds = []
-    for i in range(len(lattice)):
-        s = 0
-        for xyz in lattice[i]:
-            s += xyz ** 2
-        if s < bound:
-            inds.append(i)
-    n_points = len(inds)
-    ret = np.empty((n_points, cell.shape[0]), dtype=np.float64)
-    for i in range(n_points):
-        ret[i] = lattice[inds[i]]
-    return ret
-
-
-@numba.njit(cache=True, fastmath=True)
-def _lattice_to_cloud(motif: np.ndarray, lattice: np.ndarray) -> np.ndarray:
+def _lattice_to_cloud(motif: FloatArray, lattice: FloatArray) -> FloatArray:
     """Create a cloud of points from a periodic set with ``motif``,
     and a collection of lattice points ``lattice``. 
     """
@@ -440,105 +421,75 @@ def _lattice_to_cloud(motif: np.ndarray, lattice: np.ndarray) -> np.ndarray:
     return layer
 
 
-@numba.njit(cache=True, fastmath=True)
-def _int_lattice_to_cloud(
-        motif: np.ndarray, cell: np.ndarray, int_lattice: np.ndarray
-) -> np.ndarray:
-    """Create a cloud of points from a periodic set given by ``motif``
-    and ``cell`` from a collection of integer lattice points
-    ``int_lattice``.
-    """
-    return _lattice_to_cloud(motif, int_lattice @ cell)
+@numba.njit(fastmath=True, cache=True)
+def _cdist_sqeulcidean(XA, XB):
+    mA, mB = XA.shape[0], XB.shape[0]
+    dims = XA.shape[-1]
+    dm = np.empty((mA, mB), np.float64)
+    for i in range(mA):
+        for j in range(mB):
+            v = 0
+            for d in range(dims):
+                v += (XA[i, d] - XB[j, d]) ** 2
+            dm[i, j] = v
+    return dm
 
 
 @numba.njit(cache=True, fastmath=True)
-def _max_in_column(arr: np.ndarray, col: int) -> float:
-    """Return maximum value in chosen column col of array arr. Assumes
-    all values of arr are non-negative."""
-    ret = 0
-    for i in range(arr.shape[0]):
-        v = arr[i, col]
-        if v > ret:
-            ret = v
-    return ret
-
-
-@numba.njit(cache=True, fastmath=True)
-def _max_in_first_n_columns(arr: np.ndarray, n: int) -> float:
-    """Return maximum value in all columns up to a chosen column col of
-    array arr."""
-    ret = 0
-    for col in range(n):
-        v = _max_in_column(arr, col)
-        if v > ret:
-            ret = v
-    return ret
-
-
-@numba.njit(cache=True, fastmath=True)
-def _merge_dists(dists: np.ndarray, dists_: np.ndarray) -> np.ndarray:
-    """Merge two 2D arrays sorted along last axis into one sorted array
-    with same number of columns as ``dists``. Optimised for the distance
-    arrays in nearest_neighbours, where ``dists`` will contain most of
-    the smallest elements and only a few values in later columns will
-    need to be replaced with values in ``dists_``.
+def _merge_sorted_arrays(dists: FloatArray, dists_: FloatArray) -> FloatArray:
+    """Merge two 2D arrays with sorted rows into one sorted array with
+    same number of columns as ``dists``.
     """
 
     m, n_new_points = dists_.shape
     ret = np.copy(dists)
 
     for i in range(m):
-
-        # Traverse row backwards until value smaller than dists_[i, 0]
-        j = 0
+        # Traverse dists[i] backwards until value smaller than dists_[i, 0]
+        j = -1
         dp_ = 0
-        d_ = dists_[i, dp_]
-
+        dist_ = dists_[i, dp_]
         while True:
-            j -= 1
-            if dists[i, j] <= d_:
+            if dists[i, j] <= dist_:
                 j += 1
                 break
+            j -= 1
 
-        # If dists_[i, 0] >= dists[i, -1], no need to insert
-        if j == 0:
+        if j == 0:   # If dists_[i, 0] >= dists[i, -1], no need to insert
             continue
 
-        # dp points to dists[i], dp_ points to dists_[i]
-        # Fill ret with the larger dist, then increment pointers and repeat
+        # dp points to dists[i], dp_ points to dists_[i], j points to ret[i]
+        # Fill ret with the larger value, increment pointers and repeat
         dp = j
-        d = dists[i, dp]
+        dist = dists[i, dp]
 
         while j < 0:
-
-            if d <= d_:
-                ret[i, j] = d
+            if dist <= dist_:
+                ret[i, j] = dist
                 dp += 1
-                d = dists[i, dp]
+                dist = dists[i, dp]
             else:
-                ret[i, j] = d_
+                ret[i, j] = dist_
                 dp_ += 1
-                
                 if dp_ < n_new_points:
-                    d_ = dists_[i, dp_]
+                    dist_ = dists_[i, dp_]
                 else:  # ran out of points in dists_
-                    d_ = np.inf
-
+                    dist_ = np.inf
             j += 1
 
     return ret
 
 
 @numba.njit(cache=True, fastmath=True)
-def _merge_dists_inds(
-        dists: np.ndarray,
-        dists_: np.ndarray,
-        inds: np.ndarray,
-        inds_: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray]:
-    """The same as _merge_dists, but also merges two arrays
-    ``inds`` and ``inds_`` in the same pattern ``dists`` and ``dists_``
-    are merged.
+def _merge_sorted_arrays_inds(
+        dists: FloatArray,
+        dists_: FloatArray,
+        inds: IntArray,
+        inds_: IntArray
+) -> Tuple[FloatArray, IntArray]:
+    """Similar to _merge_sorted_arrays, but also merges two arrays
+    ``inds`` and ``inds_`` with the same pattern for
+    ``nearest_neighbors_data``.
     """
 
     m, n_new_points = dists_.shape
@@ -547,77 +498,75 @@ def _merge_dists_inds(
 
     for i in range(m):
 
-        j = 0
+        j = -1
         dp_ = 0
-        d_ = dists_[i, dp_]
+        dist_ = dists_[i, dp_]
         p_ = inds_[i, dp_]
 
         while True:
-            j -= 1
-            if dists[i, j] <= d_:
+            if dists[i, j] <= dist_:
                 j += 1
                 break
+            j -= 1
 
         if j == 0:
             continue
 
         dp = j
-        d = dists[i, dp]
+        dist = dists[i, dp]
         p = inds[i, dp]
 
         while j < 0:
 
-            if d <= d_:
-                ret_dists[i, j] = d
+            if dist <= dist_:
+                ret_dists[i, j] = dist
                 ret_inds[i, j] = p
                 dp += 1
-                d = dists[i, dp]
+                dist = dists[i, dp]
                 p = inds[i, dp]
             else:
-                ret_dists[i, j] = d_
+                ret_dists[i, j] = dist_
                 ret_inds[i, j] = p_
                 dp_ += 1
-
                 if dp_ < n_new_points:
-                    d_ = dists_[i, dp_]
+                    dist_ = dists_[i, dp_]
                     p_ = inds_[i, dp_]
                 else:
-                    d_ = np.inf
-
+                    dist_ = np.inf
             j += 1
 
     return ret_dists, ret_inds
 
 
-def nearest_neighbours_minval(
-        motif: np.ndarray, cell: np.ndarray, min_val: float
-) -> Tuple[np.ndarray, ...]:
-    """Return the same ``dists``/PDD matrix as ``nearest_neighbours``,
+def nearest_neighbors_minval(
+        motif: FloatArray, cell: FloatArray, min_val: float
+) -> Tuple[FloatArray, FloatArray, IntArray]:
+    """Return the same ``dists``/PDD matrix as ``nearest_neighbors``,
     but with enough columns such that all values in the last column are
-    at least ``min_val``. Unlike ``nearest_neighbours``, does not take a
-    query array ``x`` but only finds neighbours to motif points, and
+    at least ``min_val``. Unlike ``nearest_neighbors``, does not take a
+    query array ``x`` but only finds neighbors to motif points, and
     does not return the point cloud or indices of the nearest
-    neighbours. Used in ``PDD_reconstructable``.
+    neighbors. Used in ``PDD_reconstructable``.
     
     TODO: this function should be updated in line with
-    nearest_neighbours.
+    nearest_neighbors.
     """
 
     # Generate initial cloud of points from the periodic set
-    int_lat_generator = _generate_integer_lattice(cell.shape[0])
+    int_lat_generator = _integer_lattice_generator(cell.shape[0])
     int_lat_generator = iter(int_lat_generator)
     cloud = []
     for _ in range(3):
         cloud.append(_lattice_to_cloud(motif, next(int_lat_generator) @ cell))
     cloud = np.concatenate(cloud)
 
-    # Find k neighbours in the point cloud for points in motif
+    # Find k neighbors in the point cloud for points in motif
     dists_, inds = KDTree(
         cloud, leafsize=30, compact_nodes=False, balanced_tree=False
     ).query(motif, k=cloud.shape[0])
     dists = np.zeros_like(dists_, dtype=np.float64)
 
-    # Add layers & find k nearest neighbours until all distances smaller than
+    # Add layers & find k nearest neighbors until all distances smaller than
     # min_val don't change
     max_cdist = np.amax(cdist(motif, motif))
     while True:
@@ -644,8 +593,8 @@ def nearest_neighbours_minval(
 
 
 def generate_concentric_cloud(
-        motif: np.ndarray, cell: np.ndarray
-) -> Iterable[np.ndarray]:
+        motif: FloatArray, cell: FloatArray
+) -> Iterable[FloatArray]:
     """Generates batches of points from a periodic set given by (motif,
     cell) which get successively further away from the origin.
 
@@ -666,6 +615,6 @@ def generate_concentric_cloud(
         Yields arrays of points from the periodic set.
     """
 
-    int_lat_generator = _generate_integer_lattice(cell.shape[0])
+    int_lat_generator = _integer_lattice_generator(cell.shape[0])
     for layer in int_lat_generator:
         yield _lattice_to_cloud(motif, layer @ cell)

@@ -11,16 +11,19 @@ from typing import Tuple
 
 import numba
 import numpy as np
+import numpy.typing as npt
+
+FloatArray = npt.NDArray[np.floating]
 
 __all__ = ['network_simplex']
 
 
 @numba.njit(cache=True)
 def network_simplex(
-        source_demands: np.ndarray,
-        sink_demands: np.ndarray,
-        network_costs: np.ndarray
-) -> Tuple[float, np.ndarray]:
+        source_demands: FloatArray,
+        sink_demands: FloatArray,
+        network_costs: FloatArray
+) -> Tuple[float, FloatArray]:
     """Calculate the Earth mover's distance (Wasserstien metric) between
     two weighted distributions given by two sets of weights and a cost
     matrix.
@@ -60,7 +63,7 @@ def network_simplex(
     n = n_sources + n_sinks
     e = n_sources * n_sinks
     B = np.int64(np.ceil(np.sqrt(e)))
-    fp_multiplier = np.float64(1_000_000)
+    fp_multiplier = np.float64(100_000_000)
 
     # Add one additional node for a dummy source and sink
     source_d_int = (source_demands * fp_multiplier).astype(np.int64)

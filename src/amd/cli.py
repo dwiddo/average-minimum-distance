@@ -42,11 +42,11 @@ def main():
     )
     parser.add_argument(
         '--k', '-k', type=int, default=100,
-        help='(int) Number of neighbour atoms to use for AMD/PDD.'
+        help='(int) Number of neighbor atoms to use for AMD/PDD.'
     )
     parser.add_argument(
         '--nearest', '-n', type=int, default=None,
-        help='(int) Find n nearest neighbours instead of a full distance '
+        help='(int) Find n nearest neighbors instead of a full distance '
              'matrix between crystals.'
     )
 

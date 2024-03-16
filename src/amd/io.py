@@ -25,6 +25,7 @@ from typing import (
 )
 
 import numpy as np
+import numpy.typing as npt
 import numba
 import tqdm
 
@@ -43,6 +44,9 @@ __all__ = [
     'periodicset_from_ccdc_entry',
     'periodicset_from_ccdc_crystal',
 ]
+
+FloatArray = npt.NDArray[np.floating]
+IntArray = npt.NDArray[np.integer]
 
 def _custom_warning(message, category, filename, lineno, *args, **kwargs):
     return f'{category.__name__}: {message}\n'
@@ -87,6 +91,18 @@ _CIF_TAGS: dict = {
     ],
 }
 
+__all__ = [
+    'CifReader',
+    'CSDReader',
+    'ParseError',
+    'periodicset_from_gemmi_block',
+    'periodicset_from_ase_cifblock',
+    'periodicset_from_pymatgen_cifblock',
+    'periodicset_from_ase_atoms',
+    'periodicset_from_pymatgen_structure',
+    'periodicset_from_ccdc_entry',
+    'periodicset_from_ccdc_crystal',
+]
 
 class _Reader(collections.abc.Iterator):
     """Base reader class."""
@@ -350,10 +366,9 @@ class CSDReader(_Reader):
     refcodes : str or List[str], optional
         Single or list of CSD refcodes to read. If None or 'CSD',
         iterates over the whole CSD.
-    families : bool, optional
-        Read all entries whose refcode starts with the given strings, or
-        'families' (e.g. giving 'DEBXIT' reads all entries starting with
-        DEBXIT).
+    refcode_families : bool, optional
+        Interpret ``refcodes`` as one or more refcode families, reading
+        all entries whose refcode starts with the given strings.
     remove_hydrogens : bool, optional
         Remove hydrogens from the crystals.
     disorder : str, optional
@@ -393,13 +408,13 @@ class CSDReader(_Reader):
             structures = list(amd.CSDReader(refcodes))
 
             # Read refcode families (any whose refcode starts with strings in the list)
-            refcode_families = ['ACSALA', 'HXACAN']
-            structures = list(amd.CSDReader(refcode_families, families=True))
+            families = ['ACSALA', 'HXACAN']
+            structures = list(amd.CSDReader(families, refcode_families=True))
 
             # Get AMDs (k=100) for crystals in these families
             refcodes = ['ACSALA', 'HXACAN']
             amds = []
-            for periodic_set in amd.CSDReader(refcodes, families=True):
+            for periodic_set in amd.CSDReader(refcodes, refcode_families=True):
                 amds.append(amd.AMD(periodic_set, 100))
 
             # Giving the reader nothing reads from the whole CSD.
@@ -410,7 +425,7 @@ class CSDReader(_Reader):
     def __init__(
             self,
             refcodes: Optional[Union[str, List[str]]] = None,
-            families: bool = False,
+            refcode_families: bool = False,
             remove_hydrogens: bool = False,
             disorder: str = 'skip',
             heaviest_component: bool = False,
@@ -435,7 +450,7 @@ class CSDReader(_Reader):
         if isinstance(refcodes, str) and refcodes.lower() == 'csd':
             refcodes = None
         if refcodes is None:
-            families = False
+            refcode_families = False
         elif isinstance(refcodes, str):
             refcodes = [refcodes]
         elif isinstance(refcodes, list):
@@ -450,7 +465,7 @@ class CSDReader(_Reader):
                 f'strings, got {refcodes.__class__.__name__}'
             )
 
-        if families:
+        if refcode_families:
             all_refcodes = []
             for refcode in refcodes:
                 query = ccdc.search.TextNumericSearch()
@@ -533,7 +548,7 @@ def periodicset_from_gemmi_block(
     cellpar = [block.find_value(t) for t in _CIF_TAGS['cellpar']]
     if not all(isinstance(par, str) for par in cellpar):
         raise ParseError(f'{block.name} has missing cell data')
-    cellpar = np.array([gemmi.cif.as_number(par) for par in cellpar])
+    cellpar = np.array([str2float(par) for par in cellpar])
     if np.isnan(np.sum(cellpar)):
         raise ParseError(f'{block.name} has missing cell data')
     cell = cellpar_to_cell(cellpar)
@@ -556,7 +571,7 @@ def periodicset_from_gemmi_block(
     loop_dict = {tag: l for tag, l in zip(xyz_loop.tags, tablified_loop)}
     xyz_str = [loop_dict[t] for t in _CIF_TAGS['atom_site_fract']]
     asym_unit = np.transpose(np.array(
-        [[gemmi.cif.as_number(c) for c in xyz] for xyz in xyz_str]
+        [[str2float(c) for c in xyz] for xyz in xyz_str]
     ))
     asym_unit = np.mod(asym_unit, 1)
 
@@ -576,16 +591,31 @@ def periodicset_from_gemmi_block(
         symbols = []
         for s in loop_dict['_atom_site_type_symbol']:
             sym = gemmi.cif.as_string(s)
-            sym = re.search(r'([A-Z][a-z]?)', sym).group()
-            symbols.append(sym)
+            match = re.search(r'([A-Za-z][A-Za-z]?)', sym)
+            if match is not None:
+                sym = match.group()
+            else:
+                sym = ''
+            sym = list(sym)
+            if len(sym) > 0:
+                sym[0] = sym[0].upper()
+            if len(sym) > 1:
+                sym[1] = sym[1].lower()
+            symbols.append(''.join(sym))
     else:  # Get atomic types from label
-        symbols = _process_symbols(labels)
-    asym_types = [_ATOMIC_NUMBERS[s] for s in symbols]
+        symbols = _atomic_symbols_from_labels(labels)
+
+    asym_types = []
+    for s in symbols:
+        if s in _ATOMIC_NUMBERS:
+            asym_types.append(_ATOMIC_NUMBERS[s])
+        else:
+            asym_types.append(0)
 
     # Occupancies
     if '_atom_site_occupancy' in loop_dict:
         occs = [
-            gemmi.cif.as_number(oc) for oc in loop_dict['_atom_site_occupancy']
+            str2float(oc) for oc in loop_dict['_atom_site_occupancy']
         ]
         occupancies = [occ if not math.isnan(occ) else 1 for occ in occs]
     else:
@@ -720,13 +750,16 @@ def periodicset_from_ase_cifblock(
     import ase.spacegroup
 
     # Unit cell
-    cellpar = [block.get(tag) for tag in _CIF_TAGS['cellpar']]
+    cellpar = [str2float(str(block.get(tag))) for tag in _CIF_TAGS['cellpar']]
     if None in cellpar:
         raise ParseError(f'{block.name} has missing cell data')
     cell = cellpar_to_cell(np.array(cellpar))
 
     # Asymmetric unit coordinates. ase removes uncertainty brackets
-    asym_unit = [block.get(tag) for tag in _CIF_TAGS['atom_site_fract']]
+    asym_unit = [
+        [str2float(str(n)) for n in block.get(tag)]
+        for tag in _CIF_TAGS['atom_site_fract']
+    ]
     if None in asym_unit:
         asym_unit = [
             block.get(tag.lower()) for tag in _CIF_TAGS['atom_site_cartn']
@@ -748,10 +781,16 @@ def periodicset_from_ase_cifblock(
     # Atomic types
     asym_symbols = block.get('_atom_site_type_symbol')
     if asym_symbols is not None:
-        asym_symbols_ = _process_symbols(asym_symbols)
+        asym_symbols_ = _atomic_symbols_from_labels(asym_symbols)
     else:
         asym_symbols_ = [''] * len(asym_unit)
-    asym_types = [_ATOMIC_NUMBERS[s] for s in asym_symbols_]
+
+    asym_types = []
+    for s in asym_symbols_:
+        if s in _ATOMIC_NUMBERS:
+            asym_types.append(_ATOMIC_NUMBERS[s])
+        else:
+            asym_types.append(0)
 
     # Find where sites have disorder if necassary
     has_disorder = []
@@ -893,16 +932,19 @@ def periodicset_from_pymatgen_cifblock(
         found on any atom.
     """
 
-    from pymatgen.io.cif import str2float
-
     odict = block.data
 
     # Unit cell
     cellpar = [odict.get(tag) for tag in _CIF_TAGS['cellpar']]
     if any(par in (None, '?', '.') for par in cellpar):
         raise ParseError(f'{block.header} has missing cell data')
+
+    try:
+        cellpar = [str2float(v) for v in cellpar]
+    except ValueError:
+        raise ParseError(f'{block.header} could not be parsed')
     cell = cellpar_to_cell(
-        np.array([str2float(v) for v in cellpar], dtype=np.float64)
+        np.array(cellpar, dtype=np.float64)
     )
 
     # Asymmetric unit coordinates
@@ -918,7 +960,10 @@ def periodicset_from_pymatgen_cifblock(
                 'only _atom_site_fract_ is supported'
             )
     asym_unit = list(zip(*asym_unit))
-    asym_unit = [[str2float(coord) for coord in xyz] for xyz in asym_unit]
+    try:
+        asym_unit = [[str2float(coord) for coord in xyz] for xyz in asym_unit]
+    except ValueError:
+        raise ParseError(f'{block.header} could not be parsed')
 
     # Labels
     asym_labels = odict.get('_atom_site_label')
@@ -928,10 +973,16 @@ def periodicset_from_pymatgen_cifblock(
     # Atomic types
     asym_symbols = odict.get('_atom_site_type_symbol')
     if asym_symbols is not None:
-        asym_symbols_ = _process_symbols(asym_symbols)
+        asym_symbols_ = _atomic_symbols_from_labels(asym_symbols)
     else:
         asym_symbols_ = [''] * len(asym_unit)
-    asym_types = [_ATOMIC_NUMBERS[s] for s in asym_symbols_]
+    
+    asym_types = []
+    for s in asym_symbols_:
+        if s in _ATOMIC_NUMBERS:
+            asym_types.append(_ATOMIC_NUMBERS[s])
+        else:
+            asym_types.append(0)
 
     # Find where sites have disorder if necassary
     has_disorder = []
@@ -1150,12 +1201,30 @@ def periodicset_from_pymatgen_structure(
                 remove_inds.append(i)
         structure.remove_sites(remove_inds)
 
-    motif = structure.cart_coords
-    cell = structure.lattice.matrix
-    sym_structure = SpacegroupAnalyzer(structure).get_symmetrized_structure()
-    eq_inds = sym_structure.equivalent_indices
-    asym_inds = np.array([ix_list[0] for ix_list in eq_inds], dtype=np.int32)
-    wyc_muls = np.array([len(ix_list) for ix_list in eq_inds], dtype=np.int32)
+    spg = SpacegroupAnalyzer(structure)
+    # sym_struct = spg.get_symmetrized_structure()
+
+    # asym_inds = np.array([inds[0] for inds in sym_struct.equivalent_indices])
+    # wyc_muls = np.array([len(inds) for inds in sym_struct.equivalent_indices])
+    # types = np.array(sym_struct.atomic_numbers, dtype=np.uint8)
+    # motif = sym_struct.cart_coords
+    # cell = sym_struct.lattice.matrix
+    
+    # ops = spg.get_space_group_operations()
+    # rot = np.array([op.rotation_matrix for op in ops])
+    # trans = np.array([op.translation_vector for op in ops])
+    # frac_motif, invs = _expand_asym_unit(, rot, trans, _EQ_SITE_TOL)
+
+    # eq_inds = sym_structure.equivalent_indices
+    # asym_inds = np.array([ix_list[0] for ix_list in eq_inds], dtype=np.int32)
+    # wyc_muls = np.array([len(ix_list) for ix_list in eq_inds], dtype=np.int32)
+
+    sym_structure = spg.get_conventional_standard_structure()
+    motif = sym_structure.cart_coords
+    cell = sym_structure.lattice.matrix
+
+    asym_inds = np.arange(len(motif))
+    wyc_muls = np.ones((len(motif), ), dtype=np.int32)
     types = np.array(sym_structure.atomic_numbers, dtype=np.uint8)
 
     return PeriodicSet(
@@ -1391,7 +1460,7 @@ def memoize(f):
 
 
 @memoize
-def _parse_sitesym(sym: str) -> Tuple[np.ndarray, np.ndarray]:
+def _parse_sitesym(sym: str) -> Tuple[FloatArray, FloatArray]:
     """Parse a single symmetry as an xyz string and return a 3x3
     rotation matrix and a 3x1 translation vector.
     """
@@ -1438,7 +1507,7 @@ def _parse_sitesym(sym: str) -> Tuple[np.ndarray, np.ndarray]:
     return rot, trans
 
 
-def _parse_sitesyms(symmetries: List[str]) -> Tuple[np.ndarray, np.ndarray]:
+def _parse_sitesyms(symmetries: List[str]) -> Tuple[FloatArray, FloatArray]:
     """Parse a sequence of symmetries in xyz form and return rotation
     and translation arrays.
     """
@@ -1452,11 +1521,11 @@ def _parse_sitesyms(symmetries: List[str]) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def _expand_asym_unit(
-        asym_unit: np.ndarray,
-        rotations: np.ndarray,
-        translations: np.ndarray,
+        asym_unit: FloatArray,
+        rotations: FloatArray,
+        translations: FloatArray,
         tol: float
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> Tuple[FloatArray, IntArray]:
     """Expand the asymmetric unit by applying symmetries given by
     ``rotations`` and ``translations``.
     """
@@ -1475,8 +1544,8 @@ def _expand_asym_unit(
 
 @numba.njit(cache=True)
 def _expand_sites(
-        asym_unit: np.ndarray, rotations: np.ndarray, translations: np.ndarray
-) -> np.ndarray:
+        asym_unit: FloatArray, rotations: FloatArray, translations: FloatArray
+) -> FloatArray:
     """Expand the asymmetric unit by applying ``rotations`` and
     ``translations``, without yet removing points duplicated because
     they are invariant under a symmetry. Returns a 3D array shape
@@ -1496,8 +1565,8 @@ def _expand_sites(
 
 @numba.njit(cache=True)
 def _reduce_expanded_sites(
-        expanded_sites: np.ndarray, tol: float
-) -> Tuple[np.ndarray, np.ndarray]:
+        expanded_sites: FloatArray, tol: float
+) -> Tuple[FloatArray, IntArray]:
     """Reduce the asymmetric unit after being expended by symmetries by
     removing invariant points. This is the fast version which works in
     the case that no two sites in the asymmetric unit are equivalent.
@@ -1529,8 +1598,8 @@ def _reduce_expanded_sites(
 
 
 def _reduce_expanded_equiv_sites(
-        expanded_sites: np.ndarray, tol: float
-) -> Tuple[np.ndarray, np.ndarray]:
+        expanded_sites: FloatArray, tol: float
+) -> Tuple[FloatArray, IntArray]:
     """Reduce the asymmetric unit after being expended by symmetries by
     removing invariant points. This is the slower version, called after
     the fast version if we find equivalent motif points which need to be
@@ -1564,11 +1633,11 @@ def _reduce_expanded_equiv_sites(
             inverses.extend(i for _ in range(len(points)))
             frac_motif = np.concatenate((frac_motif, np.array(points)))
 
-    return frac_motif, np.array(inverses, dtype=np.int32)
+    return frac_motif, np.array(inverses, dtype=np.int64)
 
 
 @numba.njit(cache=True)
-def _unique_sites(asym_unit: np.ndarray, tol: float) -> np.ndarray:
+def _unique_sites(asym_unit: FloatArray, tol: float) -> npt.NDArray[np.bool_]:
     """Uniquify (within tol) a list of fractional coordinates,
     considering all points modulo 1. Return an array of bools such that
     asym_unit[_unique_sites(asym_unit, tol)] is the uniquified list.
@@ -1576,14 +1645,12 @@ def _unique_sites(asym_unit: np.ndarray, tol: float) -> np.ndarray:
 
     m, _ = asym_unit.shape
     where_unique = np.full(shape=(m, ), fill_value=True)
-
     for i in range(1, m):
         site_diffs1 = np.abs(asym_unit[:i, :] - asym_unit[i])
         site_diffs2 = np.abs(site_diffs1 - 1)
         sites_neq_mask = (site_diffs1 > tol) & (site_diffs2 > tol)
         if not np.all(np.sum(sites_neq_mask, axis=-1)):
             where_unique[i] = False
-
     return where_unique
 
 
@@ -1596,22 +1663,25 @@ def _has_disorder(label: str, occupancy) -> bool:
     return (occupancy < 1) or label.endswith('?')
 
 
-def _process_symbols(symbols):
-    """Remove extra parts from atom symbols (_atom_site_type_symbol),
-    e.g. charges, and replace unknown values with empty strings.
-    """
+def _atomic_symbols_from_labels(symbols: List[str]) -> List[str]:
     symbols_ = []
     for label in symbols:
         sym = ''
         if label and label not in ('.', '?'):
-            match = re.search(r'([A-Z][a-z]?)', label)
+            match = re.search(r'([A-Za-z][A-Za-z]?)', label)
             if match is not None:
-                sym = match.group() 
+                sym = match.group()
+            sym = list(sym)
+            if len(sym) > 0:
+                sym[0] = sym[0].upper()
+            if len(sym) > 1:
+                sym[1] = sym[1].lower()
+            sym = ''.join(sym)
         symbols_.append(sym)
     return symbols_
 
 
-def _get_syms_pymatgen(data: dict) -> Tuple[np.ndarray, np.ndarray]:
+def _get_syms_pymatgen(data: dict) -> Tuple[FloatArray, FloatArray]:
     """Parse symmetry operations given by data = block.data where block
     is a pymatgen CifBlock object. If the symops are not present the
     space group symbol/international number is parsed and symops are
@@ -1649,7 +1719,7 @@ def _get_syms_pymatgen(data: dict) -> Tuple[np.ndarray, np.ndarray]:
             for d in pymatgen.io.cif._get_cod_data():
                 if sg == re.sub(r'\s+', '', d['hermann_mauguin']):
                     return _parse_sitesyms(d['symops'])
-        except Exception:
+        except Exception:  # CHANGE
             continue
         if symops:
             break
@@ -1661,7 +1731,7 @@ def _get_syms_pymatgen(data: dict) -> Tuple[np.ndarray, np.ndarray]:
             if not num:
                 continue
             try:
-                i = int(pymatgen.io.cif.str2float(num))
+                i = int(str2float(num))
                 symops = SpaceGroup.from_int_number(i).symmetry_ops
                 break
             except ValueError:
@@ -1678,7 +1748,7 @@ def _get_syms_pymatgen(data: dict) -> Tuple[np.ndarray, np.ndarray]:
     return rotations, translations
 
 
-def _frac_molecular_centres_ccdc(crystal, tol: float) -> np.ndarray:
+def _frac_molecular_centres_ccdc(crystal, tol: float) -> FloatArray:
     """Return the geometric centres of molecules in the unit cell.
     Expects a ccdc Crystal object and returns fractional coordiantes.
     """
@@ -1715,7 +1785,21 @@ def _heaviest_component_ccdc(molecule):
     return molecule
 
 
-def _snap_small_prec_coords(frac_coords: np.ndarray, tol: float) -> np.ndarray:
+def str2float(string):
+    """Remove uncertainty brackets from strings and return the float."""
+    try:
+        return float(re.sub(r'\(.+\)*', '', string))
+    except TypeError:
+        if isinstance(string, list) and len(string) == 1:
+            return float(re.sub(r'\(.+\)*', '', string[0]))
+    except ValueError as e:
+        if string.strip() == '.':
+            return 0.
+        raise e
+    raise ParseError(f'{string} cannot be converted to float')
+
+
+def _snap_small_prec_coords(frac_coords: FloatArray, tol: float) -> FloatArray:
     """Find where frac_coords is within 1e-4 of 1/3 or 2/3, change to
     1/3 and 2/3. Recommended by pymatgen's CIF parser.
     """

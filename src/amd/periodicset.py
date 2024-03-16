@@ -12,12 +12,16 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
+import numpy.typing as npt
 
 from .utils import (
     cellpar_to_cell,
     cellpar_to_cell_2D,
     random_cell,
 )
+
+FloatArray = npt.NDArray[np.floating]
+IntArray = npt.NDArray[np.integer]
 
 __all__ = ['PeriodicSet']
 
@@ -60,12 +64,12 @@ class PeriodicSet:
 
     def __init__(
             self,
-            motif: np.ndarray,
-            cell: np.ndarray,
+            motif: FloatArray,
+            cell: FloatArray,
             name: Optional[str] = None,
-            asym_unit: Optional[np.ndarray] = None,
-            multiplicities: Optional[np.ndarray] = None,
-            types: Optional[np.ndarray] = None
+            asym_unit: Optional[IntArray] = None,
+            multiplicities: Optional[FloatArray] = None,
+            types: Optional[IntArray] = None
     ):
         self.motif = motif
         self.cell = cell
@@ -86,7 +90,6 @@ class PeriodicSet:
         return f'PeriodicSet({name_str}{m} point{m_pl} in {n} dimension{n_pl})'
 
     def __repr__(self) -> str:
-
         motif_str = str(self.motif).replace('\n ', '\n' + ' ' * 11)
         cell_str = str(self.cell).replace('\n ', '\n' + ' ' * 10)
         optional_attrs = []
@@ -105,8 +108,8 @@ class PeriodicSet:
         )
 
     def _equal_cell_and_motif(self, other: PeriodicSet) -> bool:
-        """Used for debugging/tests. True if both 1. the unit cells are
-        (close to) identical, and 2. the motifs are the same shape, and
+        """Used for debugging/tests. True if both 1) the unit cells are
+        (close to) identical, and 2) the motifs are the same shape, and
         every point in one motif has a (close to) identical point
         somewhere in the other, accounting for pbc.
         """
@@ -128,7 +131,6 @@ class PeriodicSet:
             (np.amin(diffs, axis=0) <= tol) | (np.amin(diffs, axis=-1) <= tol)
         ):
             return False
-
         return True
 
     @staticmethod

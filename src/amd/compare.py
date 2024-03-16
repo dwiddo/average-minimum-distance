@@ -1,14 +1,17 @@
 """Functions for comparing AMDs and PDDs of crystals.
 """
 
-from typing import List, Optional, Union, Tuple
+import inspect
+from typing import List, Optional, Union, Tuple, Callable, Sequence
 from functools import partial
 from itertools import combinations
 from pathlib import Path
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 from scipy.spatial.distance import cdist, pdist, squareform
+from sklearn.neighbors import NearestNeighbors
 from joblib import Parallel, delayed
 import tqdm
 
@@ -16,7 +19,9 @@ from .io import CifReader, CSDReader
 from .calculate import AMD, PDD
 from ._emd import network_simplex
 from .periodicset import PeriodicSet
-from .utils import neighbours_from_distance_matrix
+
+FloatArray = npt.NDArray[np.floating]
+IntArray = npt.NDArray[np.integer]
 
 __all__ = [
     'compare',
@@ -28,27 +33,18 @@ __all__ = [
     'emd'
 ]
 
+_SingleCompareInput = Union[PeriodicSet, str]
+CompareInput = Union[_SingleCompareInput, List[_SingleCompareInput]]
+
 
 def compare(
-        crystals,
-        crystals_=None,
+        crystals: CompareInput,
+        crystals_: Optional[CompareInput] = None,
         by: str = 'AMD',
         k: int = 100,
-        nearest: Optional[int] = None,
-        reader: str = 'gemmi',
-        remove_hydrogens: bool = False,
-        disorder: str = 'skip',
-        heaviest_component: bool = False,
-        molecular_centres: bool = False,
+        n_neighbors: Optional[int] = None,
         csd_refcodes: bool = False,
-        refcode_families: bool = False,
-        show_warnings: bool = True,
-        collapse_tol: float = 1e-4,
-        metric: str = 'chebyshev',
-        n_jobs: Optional[int] = None,
-        backend: str = 'multiprocessing',
-        verbose: bool = False,
-        low_memory: bool = False,
+        verbose: bool = True,
         **kwargs
 ) -> pd.DataFrame:
     r"""Given one or two sets of crystals, compare by AMD or PDD and
@@ -57,7 +53,7 @@ def compare(
     Given one or two paths to CIFs, periodic sets, CSD refcodes or lists
     thereof, compare by AMD or PDD and return a pandas DataFrame of the
     distance matrix. Default is to comapre by AMD with k = 100. Accepts
-    most keyword arguments accepted by
+    any keyword arguments accepted by
     :class:`CifReader <.io.CifReader>`,
     :class:`CSDReader <.io.CSDReader>` and functions from
     :mod:`.compare`.
@@ -73,69 +69,31 @@ def compare(
     by : str, default 'AMD'
         Use AMD or PDD to compare crystals.
     k : int, default 100
-        Parameter for AMD/PDD, the number of neighbour atoms to consider
+        Parameter for AMD/PDD, the number of neighbor atoms to consider
         for each atom in a unit cell.
-    nearest : int, deafult None
-        Find a number of nearest neighbours instead of a full distance
+    n_neighbors : int, deafult None
+        Find a number of nearest neighbors instead of a full distance
         matrix between crystals.
-    reader : str, optional
-        The backend package used to parse the CIF. The default is
-        :code:`gemmi`, :code:`pymatgen` and :code:`ase` are also
-        accepted, as well as :code:`ccdc` if csd-python-api is
-        installed. The ccdc reader should be able to read any format
-        accepted by :class:`ccdc.io.EntryReader`, though only CIFs have
-        been tested.
-    remove_hydrogens : bool, optional
-        Remove hydrogens from the crystals.
-    disorder : str, optional
-        Controls how disordered structures are handled. Default is
-        ``skip`` which skips any crystal with disorder, since disorder
-        conflicts with the periodic set model. To read disordered
-        structures anyway, choose either :code:`ordered_sites` to remove
-        atoms with disorder or :code:`all_sites` include all atoms
-        regardless of disorder.
-    heaviest_component : bool, optional, csd-python-api only
-        Removes all but the heaviest molecule in
-        the asymmeric unit, intended for removing solvents.
-    molecular_centres : bool, default False, csd-python-api only
-        Use the centres of molecules for comparison
-        instead of centres of atoms.
     csd_refcodes : bool, optional, csd-python-api only
         Interpret ``crystals`` and ``crystals_`` as CSD refcodes or
         lists thereof, rather than paths.
-    refcode_families : bool, optional, csd-python-api only
-        Read all entries whose refcode starts with
-        the given strings, or 'families' (e.g. giving 'DEBXIT' reads all
-        entries with refcodes starting with DEBXIT).
-    show_warnings : bool, optional
-        Controls whether warnings that arise during reading are printed.
-    collapse_tol: float, default 1e-4, ``by='PDD'`` only
-        If two PDD rows have all elements closer
-        than ``collapse_tol``, they are merged and weights are given to
-        rows in proportion to the number of times they appeared.
-    metric : str or callable, default 'chebyshev'
-        The metric to compare AMDs/PDDs with. AMDs are compared directly
-        with this metric. EMD is the metric used between PDDs, which
-        requires giving a metric to use between PDD rows. Chebyshev
-        (L-infinity) distance is the default. Accepts any metric
-        accepted by :func:`scipy.spatial.distance.cdist`.
-    n_jobs : int, default None, ``by='PDD'`` only
-        Maximum number of concurrent jobs for
-        parallel processing with :code:`joblib`. Set to -1 to use the
-        maximum. Using parallel processing may be slower for small
-        inputs.
-    backend : str, default 'multiprocessing', ``by='PDD'`` only
-        The parallelization backend implementation for PDD comparisons.
-        For a list of supported backends, see the backend argument of
-        :class:`joblib.Parallel`.
-    verbose : bool, default False
-        Prints a progress bar when reading crystals, calculating
-        AMDs/PDDs and comparing PDDs. If using parallel processing
-        (n_jobs > 1), the verbose argument of :class:`joblib.Parallel`
-        is used, otherwise uses ``tqdm``.
-    low_memory : bool, default False, ``by='AMD'`` only
-        Use a slower but more memory efficient
-        method for large collections of AMDs (metric 'chebyshev' only).
+    verbose: bool, optional
+        If True, prints a progress bar during reading, calculating and
+        comparing items.
+    **kwargs :
+        Any keyword arguments accepted by the ``amd.CifReader``,
+        ``amd.CSDReader``, ``amd.PDD`` and functions used to compare:
+        ``reader``, ``remove_hydrogens``, ``disorder``,
+        ``heaviest_component``, ``molecular_centres``,
+        ``show_warnings``, (from class:`CifReader <.io.CifReader>`),
+        ``refcode_families`` (from :class:`CSDReader <.io.CSDReader>`),
+        ``collapse_tol`` (from :func:`PDD <.calculate.PDD>`),
+        ``metric``, ``low_memory``
+        (from :func:`AMD_pdist <.compare.AMD_pdist>`), ``metric``,
+        ``backend``, ``n_jobs``, ``verbose``,
+        (from :func:`PDD_pdist <.compare.PDD_pdist>`), ``algorithm``,
+        ``leaf_size``, ``metric``, ``p``, ``metric_params``, ``n_jobs``
+        (from :func:`_nearest_items <.compare._nearest_items>`).
 
     Returns
     -------
@@ -172,6 +130,51 @@ def compare(
         df = amd.compare('DEBXIT', csd_refcodes=True, families=True)
     """
 
+    def _default_kwargs(func: Callable) -> dict:
+        """Get the default keyword arguments from ``func``, if any
+        arguments are in ``kwargs`` then replace with the value in
+        ``kwargs`` instead of the default.
+        """
+        return {
+            k: v.default for k, v in inspect.signature(func).parameters.items()
+            if v.default is not inspect.Parameter.empty
+        }
+
+    def _unwrap_refcode_list(
+            refcodes: List[str], **reader_kwargs
+    ) -> List[PeriodicSet]:
+        """Given string or list of strings, interpret as CSD refcodes
+        and return a list of ``PeriodicSet`` objects.
+        """
+        if not all(isinstance(refcode, str) for refcode in refcodes):
+            raise TypeError(
+                f'amd.compare(csd_refcodes=True) expects a string or list of '
+                'strings.'
+            )
+        return list(CSDReader(refcodes, **reader_kwargs))
+
+    def _unwrap_pset_list(
+            psets: List[Union[str, PeriodicSet]], **reader_kwargs
+    ) -> List[PeriodicSet]:
+        """Given a list of strings or ``PeriodicSet`` objects, interpret
+        strings as paths and unwrap all items into one list of
+        ``PeriodicSet``s.
+        """
+        ret = []
+        for item in psets:
+            if isinstance(item, PeriodicSet):
+                ret.append(item)
+            else:
+                try:
+                    path = Path(item)
+                except TypeError:
+                    raise ValueError(
+                        'amd.compare() expects strings or amd.PeriodicSets, '
+                        f'got {item.__class__.__name__}'
+                    )
+                ret.extend(CifReader(path, **reader_kwargs))
+        return ret
+
     by = by.upper()
     if by not in ('AMD', 'PDD'):
         raise ValueError(
@@ -179,115 +182,118 @@ def compare(
             f"'{by}')"
         )
 
-    if heaviest_component or molecular_centres:
-        reader = 'ccdc'
+    # Sort out keyword arguments
+    cifreader_kwargs = _default_kwargs(CifReader.__init__)
+    csdreader_kwargs = _default_kwargs(CSDReader.__init__)
+    csdreader_kwargs.pop('refcodes', None)
+    pdd_kwargs = _default_kwargs(PDD)
+    pdd_kwargs.pop('return_row_groups', None)
+    compare_amds_kwargs = _default_kwargs(AMD_pdist)    
+    compare_pdds_kwargs = _default_kwargs(PDD_pdist)
+    nearest_items_kwargs = _default_kwargs(_nearest_items)
+    nearest_items_kwargs.pop('XB', None)
+    cifreader_kwargs['verbose'] = verbose
+    csdreader_kwargs['verbose'] = verbose
+    compare_pdds_kwargs['verbose'] = verbose
 
-    if refcode_families:
-        csd_refcodes = True
+    for default_kwargs in (
+        cifreader_kwargs, csdreader_kwargs, pdd_kwargs, compare_amds_kwargs,
+        compare_pdds_kwargs, nearest_items_kwargs
+    ):
+        for kw in default_kwargs:
+            if kw in kwargs:
+                default_kwargs[kw] = kwargs[kw]
 
-    reader_kwargs = {
-        'reader': reader,
-        'families': refcode_families,
-        'remove_hydrogens': remove_hydrogens,
-        'disorder': disorder,
-        'heaviest_component': heaviest_component,
-        'molecular_centres': molecular_centres,
-        'show_warnings': show_warnings,
-        'verbose': verbose,
-    }
-
-    compare_kwargs = {
-        'metric': metric,
-        'n_jobs': n_jobs,
-        'backend': backend,
-        'verbose': verbose,
-        'low_memory': low_memory,
-        **kwargs
-    }
-
-    # Get list(s) of periodic sets from first input
+    # Get list of periodic sets from first input
+    if not isinstance(crystals, list):
+        crystals = [crystals]
     if csd_refcodes:
-        crystals = _unwrap_refcode_list(crystals, **reader_kwargs)
+        crystals = _unwrap_refcode_list(crystals, **csdreader_kwargs)
     else:
-        crystals = _unwrap_pset_list(crystals, **reader_kwargs)
-
+        crystals = _unwrap_pset_list(crystals, **cifreader_kwargs)
     if not crystals:
         raise ValueError(
             'First argument passed to amd.compare() contains no valid '
-            'crystals/periodic sets'
+            'crystals/periodic sets to compare.'
         )
     names = [s.name for s in crystals]
     if verbose:
-        container = tqdm.tqdm(crystals, desc='Calculating', delay=1)
-    else:
-        container = crystals
+        crystals = tqdm.tqdm(crystals, desc='Calculating', delay=1)
 
-    # Get list(s) of periodic sets from second input if given
+    # Get list of periodic sets from second input if given
     if crystals_ is None:
         names_ = names
-        container_ = None
     else:
+        if not isinstance(crystals_, list):
+            crystals_ = [crystals_]
         if csd_refcodes:
-            crystals_ = _unwrap_refcode_list(crystals_, **reader_kwargs)
+            crystals_ = _unwrap_refcode_list(crystals_, **csdreader_kwargs)
         else:
-            crystals_ = _unwrap_pset_list(crystals_, **reader_kwargs)
+            crystals_ = _unwrap_pset_list(crystals_, **cifreader_kwargs)
         if not crystals_:
             raise ValueError(
                 'Second argument passed to amd.compare() contains no '
-                'valid crystals/periodic sets'
+                'valid crystals/periodic sets to compare.'
             )
         names_ = [s.name for s in crystals_]
         if verbose:
-            container_ = tqdm.tqdm(crystals_, desc='Calculating', delay=1)
-        else:
-            container_ = crystals_
+            crystals_ = tqdm.tqdm(crystals_, desc='Calculating', delay=1)
 
     if by == 'AMD':
-        invs = [AMD(s, k) for s in container]
-        if isinstance(container, tqdm.tqdm):
-            container.close()
-        compare_kwargs.pop('n_jobs', None)
-        compare_kwargs.pop('backend', None)
-        compare_kwargs.pop('verbose', None)
+
+        amds = np.empty((len(names), k), dtype=np.float64)
+        for i, s in enumerate(crystals):
+            amds[i] = AMD(s, k)
 
         if crystals_ is None:
-            dm = AMD_pdist(invs, **compare_kwargs)
+            if n_neighbors is None:
+                dm = squareform(AMD_pdist(amds, **compare_amds_kwargs))
+                return pd.DataFrame(dm, index=names, columns=names_)
+            else:
+                nn_dm, inds = _nearest_items(
+                    n_neighbors, amds, **nearest_items_kwargs
+                )
+                return _nearest_neighbors_dataframe(nn_dm, inds, names, names_)
         else:
-            invs_ = [AMD(s, k) for s in container_]
-            dm = AMD_cdist(invs, invs_, **compare_kwargs)
+            amds_ = np.empty((len(names_), k), dtype=np.float64)
+            for i, s in enumerate(crystals_):
+                amds_[i] = AMD(s, k)
+
+            if n_neighbors is None:
+                dm = AMD_cdist(amds, amds_, **compare_amds_kwargs)
+                return pd.DataFrame(dm, index=names, columns=names_)
+            else:
+                nn_dm, inds = _nearest_items(
+                    n_neighbors, amds, amds_, **nearest_items_kwargs
+                )
+                return _nearest_neighbors_dataframe(nn_dm, inds, names, names_)
 
     elif by == 'PDD':
-        invs = [PDD(s, k, collapse_tol=collapse_tol) for s in container]
-        compare_kwargs.pop('low_memory', None)
+
+        pdds = [PDD(s, k, **pdd_kwargs) for s in crystals]
 
         if crystals_ is None:
-            dm = PDD_pdist(invs, **compare_kwargs)
+            dm = PDD_pdist(pdds, **compare_pdds_kwargs)
+            if n_neighbors is None:
+                dm = squareform(dm)
         else:
-            invs_ = [PDD(s, k, collapse_tol=collapse_tol) for s in container_]
-            dm = PDD_cdist(invs, invs_, **compare_kwargs)
+            pdds_ = [PDD(s, k, **pdd_kwargs) for s in crystals_]
+            dm = PDD_cdist(pdds, pdds_, **compare_pdds_kwargs)
 
-    if nearest:
-        nn_dm, inds = neighbours_from_distance_matrix(nearest, dm)
-        data = {}
-        for i in range(nearest):
-            data['ID ' + str(i+1)] = [names_[j] for j in inds[:, i]]
-            data['DIST ' + str(i+1)] = nn_dm[:, i]
-        df = pd.DataFrame(data, index=names)
-    else:
-        if dm.ndim == 1:
-            dm = squareform(dm)
-        df = pd.DataFrame(dm, index=names, columns=names_)
-
-    return df
+        if n_neighbors is None:
+            return pd.DataFrame(dm, index=names, columns=names_)
+        else:
+            nn_dm, inds = _neighbors_from_distance_matrix(n_neighbors, dm)
+            return _nearest_neighbors_dataframe(nn_dm, inds, names, names_)
 
 
 def EMD(
-        pdd: np.ndarray,
-        pdd_: np.ndarray,
+        pdd: FloatArray,
+        pdd_: FloatArray,
         metric: Optional[str] = 'chebyshev',
         return_transport: Optional[bool] = False,
         **kwargs
-) -> Union[float, Tuple[float, np.ndarray]]:
+) -> Union[float, Tuple[float, FloatArray]]:
     r"""Calculate the Earth mover's distance (EMD) between two PDDs, aka
     the Wasserstein metric.
 
@@ -333,7 +339,7 @@ def AMD_cdist(
         metric: str = 'chebyshev',
         low_memory: bool = False,
         **kwargs
-) -> np.ndarray:
+) -> FloatArray:
     r"""Compare two sets of AMDs with each other, returning a distance
     matrix. This function is essentially
     :func:`scipy.spatial.distance.cdist` with the default metric
@@ -346,26 +352,23 @@ def AMD_cdist(
     amds\_ : ArrayLike
         A list/array of AMDs.
     metric : str or callable, default 'chebyshev'
-        Usually AMDs are compared with the Chebyshev (L-infinitys) distance.
-        Accepts any metric accepted by :func:`scipy.spatial.distance.cdist`.
+        Usually AMDs are compared with the Chebyshev (L-infinitys)
+        distance. Accepts any metric accepted by
+        :func:`scipy.spatial.distance.cdist`.
     low_memory : bool, default False
-        Use a slower but more memory efficient method for large collections of
-        AMDs (metric 'chebyshev' only).
+        Use a slower but more memory efficient method for large
+        collections of AMDs (metric 'chebyshev' only).
+    **kwargs :
+        Extra arguments for ``metric``, passed to
+        :func:`scipy.spatial.distance.cdist`.
 
     Returns
     -------
     dm : :class:`numpy.ndarray`
-        A distance matrix shape ``(len(amds), len(amds_))``. ``dm[ij]`` is the
-        distance (given by ``metric``) between ``amds[i]`` and ``amds[j]``.
+        A distance matrix shape ``(len(amds), len(amds_))``. ``dm[ij]``
+        is the distance (given by ``metric``) between ``amds[i]`` and
+        ``amds[j]``.
     """
-
-    amds, amds_ = np.asarray(amds), np.asarray(amds_)
-
-    if len(amds.shape) == 1:
-        amds = np.array([amds])
-    if len(amds_.shape) == 1:
-        amds_ = np.array([amds_])
-
     if low_memory:
         if metric != 'chebyshev':
             raise ValueError(
@@ -377,7 +380,6 @@ def AMD_cdist(
             dm[i] = np.amax(np.abs(amds_ - amd_vec), axis=-1)
     else:
         dm = cdist(amds, amds_, metric=metric, **kwargs)
-
     return dm
 
 
@@ -386,7 +388,7 @@ def AMD_pdist(
         metric: str = 'chebyshev',
         low_memory: bool = False,
         **kwargs
-) -> np.ndarray:
+) -> FloatArray:
     """Compare a set of AMDs pairwise, returning a condensed distance
     matrix. This function is essentially
     :func:`scipy.spatial.distance.pdist` with the default metric
@@ -403,6 +405,9 @@ def AMD_pdist(
     low_memory : bool, default False
         Use a slower but more memory efficient method for large
         collections of AMDs (metric 'chebyshev' only).
+    **kwargs :
+        Extra arguments for ``metric``, passed to
+        :func:`scipy.spatial.distance.pdist`.
 
     Returns
     -------
@@ -412,12 +417,6 @@ def AMD_pdist(
         function :func:`squareform <scipy.spatial.distance.squareform>`
         from SciPy to convert to a symmetric square distance matrix.
     """
-
-    amds = np.asarray(amds)
-
-    if len(amds.shape) == 1:
-        amds = np.array([amds])
-
     if low_memory:
         m = len(amds)
         if metric != 'chebyshev':
@@ -433,19 +432,18 @@ def AMD_pdist(
             ind = ind_
     else:
         cdm = pdist(amds, metric=metric, **kwargs)
-
     return cdm
 
 
 def PDD_cdist(
-        pdds: List[np.ndarray],
-        pdds_: List[np.ndarray],
+        pdds: List[FloatArray],
+        pdds_: List[FloatArray],
         metric: str = 'chebyshev',
         backend: str = 'multiprocessing',
         n_jobs: Optional[int] = None,
         verbose: bool = False,
         **kwargs
-) -> np.ndarray:
+) -> FloatArray:
     r"""Compare two sets of PDDs with each other, returning a distance
     matrix. Supports parallel processing via joblib. If using
     parallelisation, make sure to include an if __name__ == '__main__'
@@ -473,6 +471,9 @@ def PDD_cdist(
         Prints a progress bar. If using parallel processing
         (n_jobs > 1), the verbose argument of :class:`joblib.Parallel`
         is used, otherwise uses tqdm.
+    **kwargs :
+        Extra arguments for ``metric``, passed to
+        :func:`scipy.spatial.distance.cdist`.
 
     Returns
     -------
@@ -514,13 +515,13 @@ def PDD_cdist(
 
 
 def PDD_pdist(
-        pdds: List[np.ndarray],
+        pdds: List[FloatArray],
         metric: str = 'chebyshev',
         backend: str = 'multiprocessing',
         n_jobs: Optional[int] = None,
         verbose: bool = False,
         **kwargs
-) -> np.ndarray:
+) -> FloatArray:
     """Compare a set of PDDs pairwise, returning a condensed distance
     matrix. Supports parallelisation via joblib. If using
     parallelisation, make sure to include a if __name__ == '__main__'
@@ -546,6 +547,9 @@ def PDD_pdist(
         Prints a progress bar. If using parallel processing
         (n_jobs > 1), the verbose argument of :class:`joblib.Parallel`
         is used, otherwise uses tqdm.
+    **kwargs :
+        Extra arguments for ``metric``, passed to
+        :func:`scipy.spatial.distance.cdist`.
 
     Returns
     -------
@@ -588,56 +592,124 @@ def PDD_pdist(
 
 
 def emd(
-        pdd: np.ndarray, pdd_: np.ndarray, **kwargs
-) -> Union[float, Tuple[float, np.ndarray]]:
+        pdd: FloatArray, pdd_: FloatArray, **kwargs
+) -> Union[float, Tuple[float, FloatArray]]:
     """Alias for :func:`EMD() <.compare.EMD>`."""
     return EMD(pdd, pdd_, **kwargs)
 
 
-def _unwrap_refcode_list(refcodes, **reader_kwargs):
-    """Given string or list of strings, interpret as CSD refcodes and
-    return a list of PeriodicSets.
+def _neighbors_from_distance_matrix(
+        n: int, dm: FloatArray
+) -> Tuple[FloatArray, IntArray]:
+    """Given a distance matrix, find the n nearest neighbors of each
+    item.
+
+    Parameters
+    ----------
+    n : int
+        Number of nearest neighbors to find for each item.
+    dm : :class:`numpy.ndarray`
+        2D distance matrix or 1D condensed distance matrix.
+
+    Returns
+    -------
+    (nn_dm, inds) : tuple of :class:`numpy.ndarray` s
+        ``nn_dm[i][j]`` is the distance from item :math:`i` to its
+        :math:`j+1` st nearest neighbor, and ``inds[i][j]`` is the
+        index of this neighbor (:math:`j+1` since index 0 is the first
+        nearest neighbor).
     """
 
-    reader_kwargs.pop('reader', None)
-    if isinstance(refcodes, list):
-        if not all(isinstance(refcode, str) for refcode in refcodes):
-            raise TypeError(
-                f'amd.compare(refcodes=True) expects a string or list of '
-                'strings.'
-            )
-    elif not isinstance(refcodes, str):
-        raise TypeError(
-            f'amd.compare(refcodes=True) expects a string or list of '
-            f'strings, got {refcodes.__class__.__name__}'
+    inds = None
+    if len(dm.shape) == 2:
+        inds = np.array(
+            [np.argpartition(row, n)[:n] for row in dm], dtype=np.int64
         )
-    return list(CSDReader(refcodes, **reader_kwargs))
+    elif len(dm.shape) == 1:
+        dm = squareform(dm)
+        inds = []
+        for i, row in enumerate(dm):
+            inds_row = np.argpartition(row, n+1)[:n+1]
+            inds_row = inds_row[inds_row != i][:n]
+            inds.append(inds_row)
+        inds = np.array(inds, dtype=np.int64)
+    else:
+        ValueError(
+            'amd.neighbors_from_distance_matrix() accepts a distance matrix, '
+            'either a 2D distance matrix or a condensed distance matrix as '
+            'returned by scipy.spatial.distance.pdist().'
+        )
+
+    nn_dm = np.take_along_axis(dm, inds, axis=-1)
+    sorted_inds = np.argsort(nn_dm, axis=-1)
+    inds = np.take_along_axis(inds, sorted_inds, axis=-1)
+    nn_dm = np.take_along_axis(nn_dm, sorted_inds, axis=-1)
+    return nn_dm, inds
 
 
-def _unwrap_pset_list(psets, **reader_kwargs):
-    """Given a valid input for amd.compare(), return a list of
-    PeriodicSets. Accepts paths, PeriodicSets, tuples or lists
-    thereof."""
+def _nearest_items(
+        n_neighbors: int,
+        XA: FloatArray,
+        XB: Optional[FloatArray] = None,
+        algorithm: str = 'kd_tree',
+        leaf_size: int = 5,
+        metric: str = 'chebyshev',
+        n_jobs=None,
+        **kwargs
+) -> Tuple[FloatArray, IntArray]:
+    """Find nearest neighbor distances and indices between all
+    items/observations/rows in ``XA`` and ``XB``. If ``XB`` is None,
+    find neighbors in ``XA`` for all items in ``XA``.
+    """
 
-    def _extract_periodicsets(item, **reader_kwargs):
-        """Given a path, PeriodicSet or tuple, return a list of the
-        PeriodicSet(s)."""
+    if XB is None:
+        XB_ = XA
+        _n_neighbors = n_neighbors + 1
+    else:
+        XB_ = XB
+        _n_neighbors = n_neighbors
 
-        if isinstance(item, PeriodicSet):
-            return [item]
-        if isinstance(item, Tuple):
-            return [PeriodicSet(item[0], item[1])]
-        try:
-            path = Path(item)
-        except TypeError:
-            raise ValueError(
-                'amd.compare() expects a string, amd.PeriodicSet or tuple, '
-                f'got {item.__class__.__name__}'
-            )
-        return list(CifReader(path, **reader_kwargs))
+    dists, inds = NearestNeighbors(
+        n_neighbors=_n_neighbors,
+        algorithm=algorithm,
+        leaf_size=leaf_size,
+        metric=metric,
+        n_jobs=n_jobs,
+        **kwargs
+    ).fit(XB_).kneighbors(XA)
 
-    reader_kwargs.pop('families', None)
-    if isinstance(psets, list):
-        return [s for i in psets
-                for s in _extract_periodicsets(i, **reader_kwargs)]
-    return _extract_periodicsets(psets, **reader_kwargs)
+    if XB is not None:
+        return dists, inds
+
+    final_shape = (dists.shape[0], n_neighbors)
+    dists_ = np.empty(final_shape, dtype=np.float64)
+    inds_ = np.empty(final_shape, dtype=np.int64)
+
+    for i, (d_row, ind_row) in enumerate(zip(dists, inds)):
+        i_ = 0
+        for d, j in zip(d_row, ind_row):
+            if i == j:
+                continue
+            dists_[i, i_] = d
+            inds_[i, i_] = j
+            i_ += 1
+            if i_ == n_neighbors:
+                break
+    return dists_, inds_
+
+
+def _nearest_neighbors_dataframe(nn_dm, inds, names, names_=None):
+    """Make ``pandas.DataFrame`` from distances to and indices of
+    nearest neighbors from one set to another (as returned by
+    neighbors_from_distance_matrix() or _nearest_items()).
+    DataFrame has columns ID 1, DIST1, ID 2, DIST 2..., and names as
+    indices.
+    """
+
+    if names_ is None:
+        names_ = names
+    data = {}
+    for i in range(nn_dm.shape[-1]):
+        data['ID ' + str(i+1)] = [names_[j] for j in inds[:, i]]
+        data['DIST ' + str(i+1)] = nn_dm[:, i]
+    return pd.DataFrame(data, index=names)

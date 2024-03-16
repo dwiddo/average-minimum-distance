@@ -12,5 +12,5 @@ def test_PDD_pdist(data_dir, reference_data):
         cdm = amd.PDD_pdist(pdds)
         loaded = np.load(str(data_dir / f'{name}_cdm.npz'))
         reference_cdm = loaded['cdm']
-        if not np.amax(np.abs(cdm - reference_cdm)) < 1e-6:
+        if not np.amax(np.abs(cdm - reference_cdm)) < 1e-8:
             pytest.fail('PDD_pdist disagrees with reference.')

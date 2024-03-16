@@ -18,7 +18,7 @@ def test_CSDReader(reference_data, refcode_families, ccdc_enabled):
     read_in = amd.CSDReader(
         refcode_families,
         show_warnings=False,
-        families=True
+        refcode_families=True
     ).read()
 
     if (not len(references) == len(read_in)) or len(read_in) == 0:

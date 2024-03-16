@@ -2,11 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 23/02/2024
+
+### Changed
+
+- Earth Mover's distance changed to calculate to 8 decimal places.
+
 ## [1.4.1] - 26/05/2023
 
 ### Changed
 
-- ``nearest_neighbours_data()`` algorithm made more like ``nearest_neighbours()``, improving performance ~10x.
+- ``nearest_neighbours_data()`` changed in line with ``nearest_neighbours()``.
 
 - Improved docs and formatting.
 

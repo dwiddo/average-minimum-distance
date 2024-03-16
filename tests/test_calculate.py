@@ -69,7 +69,7 @@ def test_PDD_finite():
     trap_pdd = amd.PDD_finite(trapezium)
     kite_pdd = amd.PDD_finite(kite)
     dist = amd.EMD(trap_pdd, kite_pdd)
-    if not abs(dist - 0.874032) < 1e-8:
+    if not abs(dist - 0.874032045) < 1e-8:
         pytest.fail(
             'PDDs of finite sets trapezium and kite are different than '
             'expected.'
