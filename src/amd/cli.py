@@ -114,7 +114,7 @@ def main():
     )
     parser.add_argument(
         '--verbose', default=False, action='store_true',
-        help='(int) Print an ETA to the terminal when comparing PDDs. Passed '
+        help='(flag) Print an ETA to the terminal when comparing PDDs. Passed '
              'to joblib.Parallel if using multiprocessing.'
     )
     parser.add_argument(

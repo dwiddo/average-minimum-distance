@@ -688,7 +688,8 @@ def periodicset_from_gemmi_block(
         rot = np.array([np.array(o.rot) / o.DEN for o in spg.operations()])
         trans = np.array([np.array(o.tran) / o.DEN for o in spg.operations()])
 
-    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
+    reduce_sites = (disorder != 'all_sites')
+    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL, reduce_sites)
     _, wyc_muls = np.unique(invs, return_counts=True)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
@@ -875,7 +876,8 @@ def periodicset_from_ase_cifblock(
             sitesym = [sitesym]
         rot, trans = _parse_sitesyms(sitesym)
 
-    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
+    reduce_sites = (disorder != 'all_sites')
+    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL, reduce_sites)
     _, wyc_muls = np.unique(invs, return_counts=True)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
@@ -1055,7 +1057,8 @@ def periodicset_from_pymatgen_cifblock(
 
     # Apply symmetries to asymmetric unit
     rot, trans = _get_syms_pymatgen(odict)
-    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
+    reduce_sites = (disorder != 'all_sites')
+    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL, reduce_sites)
     _, wyc_muls = np.unique(invs, return_counts=True)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
@@ -1128,7 +1131,7 @@ def periodicset_from_ase_atoms(
     # do differently! get_basis determines a reduced asym unit from the atoms;
     # surely this is not needed!
     asym_unit = get_basis(atoms, spacegroup=spg, tol=_EQ_SITE_TOL)
-    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
+    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL, True)
     _, wyc_muls = np.unique(invs, return_counts=True)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
@@ -1432,7 +1435,8 @@ def periodicset_from_ccdc_crystal(
 
     # Apply symmetries to asymmetric unit
     rot, trans = _parse_sitesyms(sitesym)
-    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL)
+    reduce_sites = (disorder != 'all_sites')
+    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, _EQ_SITE_TOL, reduce_sites)
     _, wyc_muls = np.unique(invs, return_counts=True)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.int32)
     asym_inds[1:] = np.cumsum(wyc_muls)[:-1]
@@ -1524,7 +1528,8 @@ def _expand_asym_unit(
         asym_unit: FloatArray,
         rotations: FloatArray,
         translations: FloatArray,
-        tol: float
+        tol: float,
+        uniquify_sites: bool
 ) -> Tuple[FloatArray, IntArray]:
     """Expand the asymmetric unit by applying symmetries given by
     ``rotations`` and ``translations``.
@@ -1536,8 +1541,9 @@ def _expand_asym_unit(
     expanded_sites = _expand_sites(asym_unit, rotations, translations)
     frac_motif, invs = _reduce_expanded_sites(expanded_sites, tol)
 
-    if not all(_unique_sites(frac_motif, tol)):
-        frac_motif, invs = _reduce_expanded_equiv_sites(expanded_sites, tol)
+    if uniquify_sites: 
+        if not all(_unique_sites(frac_motif, tol)):
+            frac_motif, invs = _reduce_expanded_equiv_sites(expanded_sites, tol)
 
     return frac_motif, invs
 
@@ -1793,7 +1799,7 @@ def str2float(string):
         if isinstance(string, list) and len(string) == 1:
             return float(re.sub(r'\(.+\)*', '', string[0]))
     except ValueError as e:
-        if string.strip() == '.':
+        if string.strip() in ('.', '?'):
             return 0.
         raise e
     raise ParseError(f'{string} cannot be converted to float')

@@ -128,14 +128,13 @@ def PDD(
         are merged and weights are given to rows in proportion to the
         number of times they appeared.
     return_row_groups: bool, default False
-        If True, return a tuple ``(pdd, groups)`` where ``groups``
-        contains information about which rows in ``pdd`` correspond to
-        which points. If ``pset.asym_unit`` is None, then
-        ``groups[i]`` contains indices of points in
-        ``pset.motif`` corresponding to ``pdd[i]``. Otherwise,
-        PDD rows correspond to points in the asymmetric unit, and
-        ``groups[i]`` contains indices of points in
-        ``pset.motif[pset.asym_unit]``.
+        Return a tuple ``(pdd, groups)`` where ``groups`` contain
+        information about which rows in ``pdd`` correspond to which
+        points. If ``pset.asym_unit`` is None, then ``groups[i]``
+        contains indices of points in ``pset.motif`` corresponding to
+        ``pdd[i]``. Otherwise, PDD rows correspond to points in the
+        asymmetric unit, and ``groups[i]`` contains indices pointing to
+        ``pset.asym_unit``.
 
     Returns
     -------
