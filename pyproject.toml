@@ -3,7 +3,6 @@ name = "average-minimum-distance"
 description = "Descriptors of crystals based on geometry (isometry invariants)."
 readme = "README.md"
 requires-python = ">=3.9"
-license = "CC-BY-NC-SA-4.0"
 dynamic = ["version", "dependencies"]
 keywords = [
     "isometry invariant", "geometric data science", "crystal", "amd", "pdd",
