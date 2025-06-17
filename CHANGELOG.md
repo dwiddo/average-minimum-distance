@@ -1,6 +1,34 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## [1.6.0] - 13/02/2025
+
+### Added
+
+- Changes have been made to the handling of disorder. ``PeriodicSet`` now has the attribute ``.disorder``, a list containing disorder assemblies if any disorder is present. The PDD of a disordered structure is a concatenation of the PDDs of all disorder configurations, which retains invariance and continuity. Note that if there are too many disorder configurations (set by ``.calculate.MAX_DISORDER_CONFIGS``, default 100) then PDD and AMD will default to using the majority occupancy configuration.
+
+- Added 'normalised' invariants `amd.PDA()` and `amd.ADA()`, which are the differences between PDD/AMD and their asymptotic curves.
+
+- The ``PeriodicSet`` object now has the methods ``density`` and ``formula`` returning the physical density (g/cm3) and reduced formula of a crystal respectively, as well as ``to_cif_str`` and ``to_pymatgen_structure``.
+
+- Minor improvements to the PDD algorithm.
+
+### Changed
+
+- Overlapping sites are no longer removed with ``CifReader``, ``CSDReader`` or any function for converting to ``PeriodicSet`` in ``amd.io``. Geometry of a structure will be as it is found in a CIF file.
+
+- The ``disorder`` option of ``CifReader`` and ``CSDReader`` has been replaced with ``skip_disorder``. Disordered structures are skipped if True, otherwise disorder is handled in the way described above.
+
+- ``amd.PPC`` has been moved to be a method of the periodic set, ``amd.periodicset.PeriodicSet.PPC``.
+
+- ``amd.PeriodicSet``'s ``.types`` attribute now contains the atomic types of the asymmetric unit instead of the motif.
+
+- Minimum Python version is now 3.9.
+
+### Removed
+
+- ``amd.compare`` and the corresponding cli have been temporarily removed.
+
+- Pymatgen and ase backends for ``CifReader`` have been temporarily disabled, as well as ``periodicset_from_pymatgen_structure``, ``periodicset_from_ase_atoms``, ``periodicset_from_pymatgen_cifblock`` and ``periodicset_from_ase_cifblock``.
 
 ## [1.5.0] - 23/02/2024
 

@@ -14,18 +14,19 @@ import os
 import re
 import sys
 import mock
-sys.path.insert(0, os.path.abspath(r'../../src'))
+
+sys.path.insert(0, os.path.abspath(r"../../src"))
 
 # -- Project information -----------------------------------------------------
 
-project = 'average-minimum-distance'
-copyright = '2023, Daniel Widdowson'
-author = 'Daniel Widdowson'
+project = "average-minimum-distance"
+copyright = "2025, Daniel Widdowson"
+author = "Daniel Widdowson"
 
-with open(r'../../src/amd/__init__.py') as f:
-    version = re.search("__version__ = '(.*)'", f.read()).group(1)
+with open(r"../../src/amd/__init__.py") as f:
+    version = re.search('__version__ = "(.*)"', f.read()).group(1)
 
-for mod_name in ['ccdc', 'ccdc.io', 'ccdc.search']:
+for mod_name in ["ccdc", "ccdc.io", "ccdc.search"]:
     sys.modules[mod_name] = mock.Mock()
 
 # -- General configuration ---------------------------------------------------
@@ -34,38 +35,38 @@ for mod_name in ['ccdc', 'ccdc.io', 'ccdc.search']:
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.coverage',
-    'sphinx.ext.napoleon',
-    'sphinx.ext.intersphinx',
-    'sphinx_rtd_theme',
-    'sphinx_rtd_dark_mode',
-    'sphinx_mdinclude',
+    "sphinx.ext.autodoc",
+    "sphinx.ext.coverage",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.intersphinx",
+    "sphinx_rtd_theme",
+    "sphinx_rtd_dark_mode",
+    "sphinx_mdinclude",
 ]
 
 intersphinx_mapping = {
-    'numpy':    ('https://numpy.org/doc/stable/', None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
     # 'numba':    ('https://numba.pydata.org/numba-doc/latest/', None),
-    'scipy':    ('https://docs.scipy.org/doc/scipy/', None),
-    'pandas':   ('https://pandas.pydata.org/docs/', None),
-    'gemmi':    ('https://gemmi.readthedocs.io/en/latest/', None),
-    'pymatgen': ('https://pymatgen.org/', None),
-    'ase':      ('https://wiki.fysik.dtu.dk/ase/', None),
-    'joblib':   ('https://joblib.readthedocs.io/en/latest/', None),
+    "scipy": ("https://docs.scipy.org/doc/scipy/", None),
+    "pandas": ("https://pandas.pydata.org/docs/", None),
+    "gemmi": ("https://gemmi.readthedocs.io/en/latest/", None),
+    "pymatgen": ("https://pymatgen.org/", None),
+    "ase": ("https://wiki.fysik.dtu.dk/ase/", None),
+    "joblib": ("https://joblib.readthedocs.io/en/latest/", None),
     # 'tqdm':     ('https://tqdm.github.io/', None),
-    'ccdc':     ('https://downloads.ccdc.cam.ac.uk/documentation/API/', None),
+    "ccdc": ("https://downloads.ccdc.cam.ac.uk/documentation/API/", None),
 }
 
 # autodoc_typehints = "description"
-source_suffix = ['.rst', '.md']
+source_suffix = [".rst", ".md"]
 
 # Puts functions in order of source instead of alphabetical
-autodoc_member_order = 'bysource'
+autodoc_member_order = "bysource"
 # autodoc_default_flags = ['members']
 # autosummary_generate = True
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -77,16 +78,11 @@ exclude_patterns = []
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 
-html_theme = 'sphinx_rtd_theme'
+html_theme = "sphinx_rtd_theme"
 default_dark_mode = True
 
 html_sidebars = {
-    '**': [
-        'globaltoc.html',
-        'relations.html',
-        'sourcelink.html',
-        'searchbox.html'
-    ]
+    "**": ["globaltoc.html", "relations.html", "sourcelink.html", "searchbox.html"]
 }
 
 # # Add any paths that contain custom static files (such as style sheets) here,

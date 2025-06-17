@@ -1,12 +1,12 @@
 Miscellaneous
 =============
 
-Fingerprints of finite point sets
-----------------------------------
-AMDs and PDDs also work for finite point sets. :func:`amd.AMD_finite() <amd.calculate.AMD_finite>` and
-:func:`amd.PDD_finite() <amd.calculate.PDD_finite>` accept a NumPy array containing the points and return the AMD/PDD. 
-Unlike :func:`amd.AMD() <amd.calculate.AMD>` and :func:`amd.PDD() <amd.calculate.PDD>` no integer ``k`` is passed; instead the distances to all
-neighbours are found (number of columns = no of points - 1).
+Invariants of finite point sets
+-------------------------------
+Pointwise distance distributions are also defined for finite point sets. :func:`amd.PDD_finite() <amd.calculate.PDD_finite>`
+and :func:`amd.AMD_finite() <amd.calculate.AMD_finite>` accept a NumPy array containing the points and return the PDD/AMD respectively. 
+Unlike :func:`amd.PDD() <amd.calculate.PDD>` and :func:`amd.AMD() <amd.calculate.AMD>`, no integer ``k`` is passed; instead the distances to all
+neighbours are found (number of columns = number of points - 1).
 
 ::
 
@@ -21,9 +21,9 @@ neighbours are found (number of columns = no of points - 1).
 
 Reconstruction of a periodic set from its PDD
 ---------------------------------------------
-It is possible to reconstruct a periodic set up to isometry from its PDD if the periodic set 
+It is possible to reconstruct a periodic set up to isometry from its PDD if the periodic set
 satisfies certain conditions (a 'general position') and the PDD has enough columns. This is 
-implemented via the functions :func:`amd.PDD_reconstructable() <amd.calculate.PDD_reconstructable>`, which returns the PDD 
-of a periodic set with enough columns, and :func:`amd.reconstruct.reconstruct() <amd.reconstruct.reconstruct>` which returns 
-the motif given the PDD and unit cell. Reconstruction is not optimised and very slow for 
-most real crystals, it's also not well tested and may not work for some crystals.
+implemented via the functions :func:`amd.PDD_reconstructable() <amd.calculate.PDD_reconstructable>`,
+which returns the PDD of a periodic set with enough columns to reconstruct, and
+:func:`amd.reconstruct.reconstruct() <amd.reconstruct.reconstruct>` which returns 
+the motif given the PDD and unit cell. Reconstruction is not well optimised or tested.

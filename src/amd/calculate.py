@@ -1,59 +1,258 @@
-"""Functions for calculating the average minimum distance (AMD) and
-point-wise distance distribution (PDD) isometric invariants of
-periodic crystals and finite sets.
-"""
+"""Calculation of isometry invariants from periodic sets."""
 
+import warnings
 import collections
 from typing import Tuple, Union
+import itertools
 
 import numpy as np
 import numpy.typing as npt
 import numba
 from scipy.spatial.distance import pdist, squareform
-from scipy.special import factorial
 
-from .periodicset import PeriodicSet
+from ._types import FloatArray
 from ._nearest_neighbors import nearest_neighbors, nearest_neighbors_minval
+from .periodicset import PeriodicSet
 from .utils import diameter
+from .globals_ import MAX_DISORDER_CONFIGS
 
-FloatArray = npt.NDArray[np.floating]
 
 __all__ = [
-    'AMD',
-    'PDD',
-    'PDD_to_AMD',
-    'AMD_finite',
-    'PDD_finite',
-    'PDD_reconstructable',
-    'PPC',
-    'AMD_estimate'
+    "PDD",
+    "AMD",
+    "ADA",
+    "PDA",
+    "PDD_to_AMD",
+    "AMD_finite",
+    "PDD_finite",
+    "PDD_reconstructable",
+    "AMD_estimate",
 ]
 
 
-def AMD(pset: PeriodicSet, k: int) -> FloatArray:
-    """Return the average minimum distance (AMD) of a periodic set
-    (crystal).
+def PDD(
+    pset: PeriodicSet,
+    k: int,
+    lexsort: bool = True,
+    collapse: bool = True,
+    collapse_tol: float = 1e-4,
+    return_row_data: bool = False,
+) -> Union[FloatArray, Tuple[FloatArray, list]]:
+    """Return the pointwise distance distribution (PDD) of a periodic
+    set (usually representing a crystal).
 
-    The AMD of a periodic set is a geometry based descriptor independent
-    of choice of motif and unit cell. It is a vector, the (weighted)
-    average of the :func:`PDD <.calculate.PDD>` matrix, which has one
-    row for each (unique) point in the unit cell containing distances to
-    k nearest neighbors.
+    The PDD is a geometry based descriptor independent of choice of
+    motif and unit cell. It is a matrix with each row corresponding to a
+    point in the motif, starting with a weight followed by distances to
+    the k nearest neighbors of the point.
 
     Parameters
     ----------
     pset : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
-        A periodic set (crystal) consisting of a unit cell and motif of
-        points.
+        A periodic set (crystal).
     k : int
-        The number of neighboring points (atoms) considered for each
-        point in the unit cell.
+        Number of neighbors considered for each point in a unit cell.
+        The output has k + 1 columns with the first column containing
+        weights.
+    lexsort : bool, default True
+        Lexicographically order rows.
+    collapse: bool, default True
+        Collapse duplicate rows (within ``collapse_tol`` in the
+        Chebyshev metric).
+    collapse_tol: float, default 1e-4
+        If two rows are closer than ``collapse_tol`` in the Chebyshev
+        metric, they are merged and weights are given to rows in
+        proportion to their frequency.
+    return_row_data: bool, default False
+        Return a tuple ``(pdd, groups)`` where ``groups`` contains
+        information about which rows in ``pdd`` correspond to which
+        points. If ``pset.asym_unit`` is None, then ``groups[i]``
+        contains indices of points in ``pset.motif`` corresponding to
+        ``pdd[i]``. Otherwise, PDD rows correspond to points in the
+        asymmetric unit, and ``groups[i]`` contains indices pointing to
+        ``pset.asym_unit``.
+
+    Returns
+    -------
+    pdd : :class:`numpy.ndarray`
+        The PDD of ``pset``, a :class:`numpy.ndarray` with ``k+1``
+        columns. If ``return_row_data`` is True, returns a tuple
+        (:class:`numpy.ndarray`, list).
+
+    Examples
+    --------
+    Make list of PDDs with ``k=100`` for crystals in data.cif::
+
+        pdds = []
+        for periodic_set in amd.CifReader('data.cif'):
+            pdd = amd.PDD(periodic_set, 100)
+            pdds.append(pdd)
+
+    Make list of PDDs with ``k=10`` for crystals in these CSD refcode
+    families (requires csd-python-api)::
+
+        pdds = []
+        for periodic_set in amd.CSDReader(['HXACAN', 'ACSALA'], families=True):
+            pdds.append(amd.PDD(periodic_set, 10))
+
+    Manually create a periodic set as a tuple (motif, cell)::
+
+        # simple cubic lattice
+        motif = np.array([[0,0,0]])
+        cell = np.array([[1,0,0], [0,1,0], [0,0,1]])
+        periodic_set = amd.PeriodicSet(motif, cell)
+        cubic_pdd = amd.PDD(periodic_set, 100)
+    """
+
+    if not isinstance(pset, PeriodicSet):
+        raise ValueError(
+            f"Expected {PeriodicSet.__name__}, got {pset.__class__.__name__}"
+        )
+
+    weights, dists, groups = _PDD(
+        pset, k, lexsort=lexsort, collapse=collapse, collapse_tol=collapse_tol
+    )
+    pdd = np.empty(shape=(len(dists), k + 1), dtype=np.float64)
+    pdd[:, 0] = weights
+    pdd[:, 1:] = dists
+    if return_row_data:
+        return pdd, groups
+    return pdd
+
+
+def _PDD(
+    pset: PeriodicSet,
+    k: int,
+    lexsort: bool = True,
+    collapse: bool = True,
+    collapse_tol: float = 1e-4,
+) -> Tuple[FloatArray, FloatArray, list[list[int]]]:
+    """See PDD() for documentation. This core function always returns a
+    tuple (weights, dists, groups), with weights and dists to be merged
+    by PDD() and groups to be optionally returned.
+    """
+
+    asym_unit = pset.motif[pset.asym_unit]
+    weights = pset.multiplicities / pset.motif.shape[0]
+
+    # Disordered structures
+    subs_disorder_info = {}  # i: [inds masked] where i is sub disordered
+
+    if pset.disorder:
+        # Gather which disorder assemblies must be considered
+        _asym_mask = np.full((asym_unit.shape[0], ), fill_value=True)
+        asm_sizes = {}
+        for i, asm in enumerate(pset.disorder):
+            grps = asm.groups
+
+            # Ignore assmeblies with 1 group
+            if len(grps) < 2:
+                continue
+
+            # For substitutional disorder, mask all but one atom
+            elif asm.is_substitutional:
+                mask_inds = [grps[j].indices[0] for j in range(1, len(grps))]
+                keep = grps[0].indices[0]
+                subs_disorder_info[keep] = mask_inds
+                _asym_mask[mask_inds] = False
+
+            else:
+                asm_sizes[i] = len(grps)
+
+        asm_sizes_arr = np.array(list(asm_sizes.values()))
+        if _array_product_exceeds(asm_sizes_arr, MAX_DISORDER_CONFIGS):
+            warnings.warn(
+                f"Disorder configs exceeds limit "
+                f"amd.globals_.MAX_DISORDER_CONFIGS={MAX_DISORDER_CONFIGS}, "
+                "defaulting to majority occupancy config"
+            )
+            configs = [[]]
+            for asm in pset.disorder:
+                i, _ = max(enumerate(asm.groups), key=lambda g: g[1].occupancy)
+                configs[0].append(i)
+        else:
+            configs = itertools.product(*(range(t) for t in asm_sizes.values()))
+
+        # One PDD for each disorder configuration
+        dists_list, inds_list = [], []
+        for config_inds in configs:
+
+            # Mask groups not selected
+            asym_mask = _asym_mask.copy()
+            motif_mask = np.full((pset.motif.shape[0], ), fill_value=True)
+            for i, asm_ind in enumerate(asm_sizes.keys()):
+                for j, grp in enumerate(pset.disorder[asm_ind].groups):
+                    if j != config_inds[i]:
+                        for t in grp.indices:
+                            asym_mask[t] = False
+                            m_i = pset.asym_unit[t]
+                            mul = pset.multiplicities[t]
+                            motif_mask[m_i : m_i + mul] = False
+
+            dists = nearest_neighbors(
+                pset.motif[motif_mask], pset.cell, asym_unit[asym_mask], k + 1
+            )
+            dists_list.append(dists[:, 1:])
+            inds_list.append(np.where(asym_mask)[0])
+
+        dists = np.vstack(dists_list)
+        inds = list(np.concatenate(inds_list))
+        weights = np.concatenate([weights[i] for i in inds_list])
+        weights /= np.sum(weights)
+
+    else:
+        dists = nearest_neighbors(pset.motif, pset.cell, asym_unit, k + 1)
+        dists = dists[:, 1:]
+        inds = list(range(len(dists)))
+
+    # Collapse rows within tolerance
+    groups = None
+    if collapse:
+        weights, dists, group_labs = _merge_pdd_rows(weights, dists, collapse_tol)
+        if dists.shape[0] != len(group_labs):
+            groups = [[] for _ in range(weights.shape[0])]
+            for old_ind, new_ind in enumerate(group_labs):
+                groups[new_ind].append(int(inds[old_ind]))
+
+    if groups is None:
+        groups = [[int(i)] for i in inds]
+
+    # Add back substitutionally disordered sites to group info
+    if subs_disorder_info:
+        for i, masked_inds in subs_disorder_info.items():
+            for grp in groups:
+                if i in grp:
+                    grp.extend(masked_inds)
+
+    if lexsort:
+        lex_ordering = np.lexsort(dists.T[::-1])
+        weights = weights[lex_ordering]
+        dists = dists[lex_ordering]
+        groups = [groups[i] for i in lex_ordering]
+
+    return weights, dists, groups
+
+
+def AMD(pset: PeriodicSet, k: int) -> FloatArray:
+    """Return the average minimum distance (AMD) of a periodic set
+    (usually representing a crystal).
+
+    The AMD is the centroid or average of the PDD (pointwise distance
+    distribution) and hence is also a independent of choice of motif and
+    unit cell. It is a vector containing average distances from points
+    to k neighbouring points.
+
+    Parameters
+    ----------
+    pset : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
+        A periodic set (crystal).
+    k : int
+        Number of neighbors considered for each point in a unit cell.
 
     Returns
     -------
     :class:`numpy.ndarray`
-        A :class:`numpy.ndarray` shape ``(k, )``, the AMD of
-        ``pset`` up to k.
+        The AMD of ``pset``, a :class:`numpy.ndarray` shape ``(k, )``.
 
     Examples
     --------
@@ -77,159 +276,33 @@ def AMD(pset: PeriodicSet, k: int) -> FloatArray:
         periodic_set = amd.PeriodicSet(motif, cell)
         cubic_amd = amd.AMD(periodic_set, 100)
     """
-
-    if not isinstance(pset, PeriodicSet):
-        raise ValueError(
-            f'Expected {PeriodicSet.__name__}, got {pset.__class__.__name__}'
-        )
-
-    if pset.asym_unit is None or pset.multiplicities is None:
-        asym_unit = pset.motif
-        weights = np.ones((asym_unit.shape[0], ), dtype=np.float64)
-    else:
-        asym_unit = pset.motif[pset.asym_unit]
-        weights = pset.multiplicities
-
-    dists = nearest_neighbors(pset.motif, pset.cell, asym_unit, k + 1)
-    return _average_columns_except_first(dists, weights)
+    weights, dists, _ = _PDD(pset, k, lexsort=False, collapse=False)
+    return np.average(dists, weights=weights, axis=0)
 
 
-def PDD(
-        pset: PeriodicSet,
-        k: int,
-        lexsort: bool = True,
-        collapse: bool = True,
-        collapse_tol: float = 1e-4,
-        return_row_groups: bool = False
-) -> Union[FloatArray, Tuple[FloatArray, list]]:
-    """Return the point-wise distance distribution (PDD) of a periodic
-    set (crystal).
-
-    The PDD of a periodic set is a geometry based descriptor independent
-    of choice of motif and unit cell. It is a matrix where each row
-    corresponds to a point in the motif, containing a weight followed by
-    distances to the k nearest neighbors of the point.
-
-    Parameters
-    ----------
-    pset : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
-        A periodic set (crystal) consisting of a unit cell and motif of
-        points.
-    k : int
-        The number of neighbors considered for each atom (point) in the
-        unit cell. The returned matrix has k + 1 columns, the first
-        column for weights of rows.
-    lexsort : bool, default True
-        Lexicographically order the rows.
-    collapse: bool, default True
-        Collapse repeated rows (within tolerance ``collapse_tol``).
-    collapse_tol: float, default 1e-4
-        If two rows have all elements closer than ``collapse_tol``, they
-        are merged and weights are given to rows in proportion to the
-        number of times they appeared.
-    return_row_groups: bool, default False
-        Return a tuple ``(pdd, groups)`` where ``groups`` contain
-        information about which rows in ``pdd`` correspond to which
-        points. If ``pset.asym_unit`` is None, then ``groups[i]``
-        contains indices of points in ``pset.motif`` corresponding to
-        ``pdd[i]``. Otherwise, PDD rows correspond to points in the
-        asymmetric unit, and ``groups[i]`` contains indices pointing to
-        ``pset.asym_unit``.
-
-    Returns
-    -------
-    pdd : :class:`numpy.ndarray`
-        A :class:`numpy.ndarray` with k+1 columns, the PDD of
-        ``pset`` up to k. The first column contains the weights
-        of rows. If ``return_row_groups`` is True, returns a tuple with
-        types (:class:`numpy.ndarray`, list).
-
-    Examples
-    --------
-    Make list of PDDs with ``k=100`` for crystals in data.cif::
-
-        pdds = []
-        for periodic_set in amd.CifReader('data.cif'):
-            # do not lexicographically order rows
-            pdds.append(amd.PDD(periodic_set, 100, lexsort=False))
-
-    Make list of PDDs with ``k=10`` for crystals in these CSD refcode
-    families::
-
-        pdds = []
-        for periodic_set in amd.CSDReader(['HXACAN', 'ACSALA'], families=True):
-            # do not collapse rows
-            pdds.append(amd.PDD(periodic_set, 10, collapse=False))
-
-    Manually create a periodic set as a tuple (motif, cell)::
-
-        # simple cubic lattice
-        motif = np.array([[0,0,0]])
-        cell = np.array([[1,0,0], [0,1,0], [0,0,1]])
-        periodic_set = amd.PeriodicSet(motif, cell)
-        cubic_amd = amd.PDD(periodic_set, 100)
-    """
-
-    if not isinstance(pset, PeriodicSet):
-        raise ValueError(
-            f'Expected {PeriodicSet.__name__}, got {pset.__class__.__name__}'
-        )
-
-    m = pset.motif.shape[0]
-    if pset.asym_unit is None or pset.multiplicities is None:
-        asym_unit = pset.motif
-        weights = np.full((m, ), 1 / m, dtype=np.float64)
-    else:
-        asym_unit = pset.motif[pset.asym_unit]
-        weights = pset.multiplicities / m
-
-    dists = nearest_neighbors(pset.motif, pset.cell, asym_unit, k + 1)
-    dists = dists[:, 1:]
-    groups = [[i] for i in range(len(dists))]
-
-    if collapse:
-        overlapping = pdist(dists, metric='chebyshev') <= collapse_tol
-        if overlapping.any():
-            groups = _collapse_into_groups(overlapping)
-            weights = np.array([np.sum(weights[group]) for group in groups])
-            dists = np.array(
-                [np.average(dists[group], axis=0) for group in groups],
-                dtype=np.float64
-            )
-
-    pdd = np.empty(shape=(len(dists), k + 1), dtype=np.float64)
-
-    if lexsort:
-        lex_ordering = np.lexsort(np.rot90(dists))
-        pdd[:, 0] = weights[lex_ordering]
-        pdd[:, 1:] = dists[lex_ordering]
-        if return_row_groups:
-            groups = [groups[i] for i in lex_ordering]
-    else:
-        pdd[:, 0] = weights
-        pdd[:, 1:] = dists
-
-    if return_row_groups:
-        return pdd, groups
-    return pdd
-
-
+@numba.njit(cache=True, fastmath=True)
 def PDD_to_AMD(pdd: FloatArray) -> FloatArray:
-    """Calculate an AMD from a PDD. Faster than computing both from
+    """Calculate an AMD from a PDD, faster than computing both from
     scratch.
 
     Parameters
     ----------
     pdd : :class:`numpy.ndarray`
-        The PDD of a periodic set, so ``amd.PDD_to_AMD(amd.PDD(pset))``
-        equals ``amd.AMD(pset)``.
-
+        The PDD of a periodic set as given by :class:`PDD() <.PDD>`.
     Returns
     -------
     :class:`numpy.ndarray`
-        The AMD of the periodic set.
+        The AMD of the periodic set, so that
+        ``amd.PDD_to_AMD(amd.PDD(pset)) == amd.AMD(pset)``
     """
-    return np.average(pdd[:, 1:], weights=pdd[:, 0], axis=0)
+
+    amd_ = np.empty((pdd.shape[-1] - 1,), dtype=np.float64)
+    for col in range(amd_.shape[0]):
+        v = 0
+        for row in range(pdd.shape[0]):
+            v += pdd[row, 0] * pdd[row, col + 1]
+        amd_[col] = v
+    return amd_
 
 
 def AMD_finite(motif: FloatArray) -> FloatArray:
@@ -243,12 +316,12 @@ def AMD_finite(motif: FloatArray) -> FloatArray:
     Returns
     -------
     :class:`numpy.ndarray`
-        A vector shape (motif.shape[0] - 1, ), the AMD of ``motif``.
+        The AMD of ``motif``, a vector shape ``(motif.shape[0] - 1, )``.
 
     Examples
     --------
     The (L-infinity) AMD distance between finite trapezium and kite
-    point sets::
+    point sets, which have the same list of inter-point distances::
 
         trapezium = np.array([[0,0],[1,1],[3,1],[4,0]])
         kite      = np.array([[0,0],[1,1],[1,-1],[4,0]])
@@ -264,28 +337,28 @@ def AMD_finite(motif: FloatArray) -> FloatArray:
 
 
 def PDD_finite(
-        motif: FloatArray,
-        lexsort: bool = True,
-        collapse: bool = True,
-        collapse_tol: float = 1e-4,
-        return_row_groups: bool = False
+    motif: FloatArray,
+    lexsort: bool = True,
+    collapse: bool = True,
+    collapse_tol: float = 1e-4,
+    return_row_data: bool = False,
 ) -> Union[FloatArray, Tuple[FloatArray, list]]:
     """Return the PDD of a finite m-point set up to k = m - 1.
 
     Parameters
     ----------
     motif : :class:`numpy.ndarray`
-        Coordinates of a set of points.
+        Collection of points.
     lexsort : bool, default True
-        Whether or not to lexicographically order the rows.
+        Lexicographically order rows.
     collapse: bool, default True
-        Whether or not to collapse repeated rows (within tolerance
-        ``collapse_tol``).
+        Collapse duplicate rows (within ``collapse_tol`` in the
+        Chebyshev metric).
     collapse_tol: float, default 1e-4
-        If two rows have all elements closer than ``collapse_tol``, they
-        are merged and weights are given to rows in proportion to the
-        number of times they appeared.
-    return_row_groups: bool, default False
+        If two rows are closer than ``collapse_tol`` in the Chebyshev
+        metric, they are merged and weights are given to rows in
+        proportion to their frequency.
+    return_row_data: bool, default False
         If True, return a tuple ``(pdd, groups)`` where ``groups[i]``
         contains indices of points in ``motif`` corresponding to
         ``pdd[i]``.
@@ -293,13 +366,14 @@ def PDD_finite(
     Returns
     -------
     pdd : :class:`numpy.ndarray`
-        A :class:`numpy.ndarray` with m columns (where m is the number
-        of points), the PDD of ``motif``. The first column contains the
-        weights of rows.
+        The PDD of ``motif``, a :class:`numpy.ndarray` with ``k+1``
+        columns. If ``return_row_data`` is True, returns a tuple
+        (:class:`numpy.ndarray`, list).
 
     Examples
     --------
-    Find PDD distance between finite trapezium and kite point sets::
+    The PDD distance between finite trapezium and kite point sets, which
+    have the same list of inter-point distances::
 
         trapezium = np.array([[0,0],[1,1],[3,1],[4,0]])
         kite      = np.array([[0,0],[1,1],[1,-1],[4,0]])
@@ -312,17 +386,18 @@ def PDD_finite(
 
     m = motif.shape[0]
     dists = np.sort(squareform(pdist(motif)), axis=-1)[:, 1:]
-    weights = np.full((m, ), 1 / m)
+    weights = np.full((m,), 1 / m)
     groups = [[i] for i in range(len(dists))]
 
+    # TODO: use _merge_pdd_rows
     if collapse:
-        overlapping = pdist(dists, metric='chebyshev') <= collapse_tol
+        overlapping = pdist(dists, metric="chebyshev") <= collapse_tol
         if overlapping.any():
             groups = _collapse_into_groups(overlapping)
             weights = np.array([np.sum(weights[group]) for group in groups])
-            dists = np.array([
-                np.average(dists[group], axis=0) for group in groups
-            ], dtype=np.float64)
+            dists = np.array(
+                [np.average(dists[group], axis=0) for group in groups], dtype=np.float64
+            )
 
     pdd = np.empty(shape=(len(weights), m), dtype=np.float64)
 
@@ -330,29 +405,29 @@ def PDD_finite(
         lex_ordering = np.lexsort(np.rot90(dists))
         pdd[:, 0] = weights[lex_ordering]
         pdd[:, 1:] = dists[lex_ordering]
-        if return_row_groups:
+        if return_row_data:
             groups = [groups[i] for i in lex_ordering]
     else:
         pdd[:, 0] = weights
         pdd[:, 1:] = dists
 
-    if return_row_groups:
+    if return_row_data:
         return pdd, groups
     return pdd
 
 
 def PDD_reconstructable(pset: PeriodicSet, lexsort: bool = True) -> FloatArray:
-    """Return the PDD of a periodic set with `k` (number of columns)
+    """Return the PDD of a periodic set with ``k`` (number of columns)
     large enough such that the periodic set can be reconstructed from
-    the PDD.
+    the PDD with :func:`amd.reconstruct.reconstruct`. Does NOT return
+    weights or collapse rows.
 
     Parameters
     ----------
     pset : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
-        A periodic set (crystal) consisting of a unit cell and motif of
-        points.
+        A periodic set (crystal).
     lexsort : bool, default True
-        Whether or not to lexicographically order the rows.
+        Lexicographically order rows.
 
     Returns
     -------
@@ -363,99 +438,198 @@ def PDD_reconstructable(pset: PeriodicSet, lexsort: bool = True) -> FloatArray:
 
     if not isinstance(pset, PeriodicSet):
         raise ValueError(
-            f'Expected {PeriodicSet.__name__}, got {pset.__class__.__name__}'
+            f"Expected {PeriodicSet.__name__}, got {pset.__class__.__name__}"
         )
 
-    dims = pset.cell.shape[0]
-    if dims not in (2, 3):
+    if pset.ndim not in (2, 3):
         raise ValueError(
-            'Reconstructing from PDD is only possible for 2 and 3 dimensions.'
+            "Reconstructing from PDD is only possible for 2 and 3 dimensions."
         )
     min_val = diameter(pset.cell) * 2
     pdd, _, _ = nearest_neighbors_minval(pset.motif, pset.cell, min_val)
     if lexsort:
-        lex_ordering = np.lexsort(np.rot90(pdd))
+        lex_ordering = np.lexsort(pdd.T[::-1])
         pdd = pdd[lex_ordering]
     return pdd
 
 
-def PPC(pset: PeriodicSet) -> float:
-    r"""Return the point packing coefficient (PPC) of ``pset``.
-
-    The PPC is a constant of any periodic set determining the
-    asymptotic behaviour of its AMD and PDD. As
-    :math:`k \rightarrow \infty`, the ratio
-    :math:`\text{AMD}_k / \sqrt[n]{k}` converges to the PPC, as does any
-    row of its PDD.
-
-    For a unit cell :math:`U` and :math:`m` motif points in :math:`n`
-    dimensions,
-
-    .. math::
-
-        \text{PPC} = \sqrt[n]{\frac{\text{Vol}[U]}{m V_n}}
-
-    where :math:`V_n` is the volume of a unit sphere in :math:`n`
-    dimensions.
-
-    Parameters
-    ----------
-    pset : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
-        A periodic set (crystal) consisting of a unit cell and motif of
-        points.
-
-    Returns
-    -------
-    ppc : float
-        The PPC of ``pset``.
-    """
-
-    if not isinstance(pset, PeriodicSet):
-        raise ValueError(
-            f'Expected {PeriodicSet.__name__}, got {pset.__class__.__name__}'
-        )
-
-    m, n = pset.motif.shape
-    t = int(n // 2)
-    if n % 2 == 0:
-        sphere_vol = (np.pi ** t) / factorial(t)
-    else:
-        sphere_vol = (2 * factorial(t) * (4 * np.pi) ** t) / factorial(n)
-    return (np.abs(np.linalg.det(pset.cell)) / (m * sphere_vol)) ** (1.0 / n)
-
-
 def AMD_estimate(pset: PeriodicSet, k: int) -> FloatArray:
-    r"""Calculate an estimate of AMD based on the PPC.
+    r"""Calculate an estimate of :class:`AMD <.AMD>` based on the
+    :class:`PPC <.periodicset.PeriodicSet.PPC>` of ``pset``.
 
     Parameters
     ----------
     pset : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
-        A periodic set (crystal) consisting of a unit cell and motif of
-        points.
+        A periodic set (crystal).
 
     Returns
     -------
     amd_est : :class:`numpy.ndarray`
         An array shape (k, ), where ``amd_est[i]``
-        :math:`= \text{PPC} \sqrt[n]{k}` in n dimensions.
+        :math:`= \text{PPC} \sqrt[n]{k}` in n dimensions, whose ratio
+        with AMD has been shown to converge to 1.
     """
 
     if not isinstance(pset, PeriodicSet):
         raise ValueError(
-            f'Expected {PeriodicSet.__name__}, got {pset.__class__.__name__}'
+            f"Expected {PeriodicSet.__name__}, got {pset.__class__.__name__}"
         )
-    n = pset.cell.shape[0]
-    return PPC(pset) * np.power(np.arange(1, k + 1, dtype=np.float64), 1.0 / n)
+    arange = np.arange(1, k + 1, dtype=np.float64)
+    return pset.PPC() * np.power(arange, 1.0 / pset.ndim)
+
+
+def PDA(
+    pset: PeriodicSet,
+    k: int,
+    lexsort: bool = True,
+    collapse: bool = True,
+    collapse_tol: float = 1e-4,
+    return_row_data: bool = False,
+) -> Union[FloatArray, Tuple[FloatArray, list]]:
+    """Return the pointwise deviation from asymptotic distribution,
+    essentially a normalisation of the pointwise distance distribution
+    of ``pset``. The PDA records how much the distances in the PDD
+    deviate from what is expected based on the asymptotic estimate.
+
+    The PDD of ``pset`` is a geometry based descriptor independent of
+    choice of motif and unit cell. Its asymptotic behaviour is well
+    understood and depends on the point density of the periodic set.
+    The PDA is the difference between the PDD and its asymptotic curve.
+
+    Parameters
+    ----------
+    pset : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
+        A periodic set (crystal).
+    k : int
+        Number of neighbors considered for each point in a unit cell.
+        The output has k + 1 columns with the first column containing
+        weights.
+    lexsort : bool, default True
+        Lexicographically order rows.
+    collapse: bool, default True
+        Collapse duplicate rows (within ``collapse_tol`` in the
+        Chebyshev metric).
+    collapse_tol: float, default 1e-4
+        If two rows are closer than ``collapse_tol`` in the Chebyshev
+        metric, they are merged and weights are given to rows in
+        proportion to their frequency.
+    return_row_data: bool, default False
+        Return a tuple ``(pda, groups)`` where ``groups`` contains
+        information about which rows in ``pda`` correspond to which
+        points. If ``pset.asym_unit`` is None, then ``groups[i]``
+        contains indices of points in ``pset.motif`` corresponding to
+        ``pda[i]``. Otherwise, PDA rows correspond to points in the
+        asymmetric unit, and ``groups[i]`` contains indices pointing to
+        ``pset.asym_unit``.
+
+    Returns
+    -------
+    pda : :class:`numpy.ndarray`
+        The PDA of ``pset``, a :class:`numpy.ndarray` with ``k+1``
+        columns. If ``return_row_data`` is True, returns a tuple
+        (:class:`numpy.ndarray`, list).
+    """
+    pdd, grps = PDD(
+        pset,
+        k,
+        collapse=collapse,
+        collapse_tol=collapse_tol,
+        lexsort=lexsort,
+        return_row_data=True,
+    )
+    pdd[:, 1:] -= AMD_estimate(pset, k)
+    if return_row_data:
+        return pdd, grps
+    return pdd
+
+
+def ADA(pset: PeriodicSet, k: int) -> FloatArray:
+    """Return the average deviation from asymptotic, essentially a
+    normalisation of the average minimum distance of ``pset``. The ADA
+    records how much the distances in the AMD deviate from what is
+    expected based on the asymptotic estimate.
+
+    The AMD of ``pset`` is a geometry based descriptor independent of
+    choice of motif and unit cell. Its asymptotic behaviour is well
+    understood and depends on the point density of the periodic set.
+    The ADA is the difference between the AMD and its asymptotic curve.
+
+    Parameters
+    ----------
+    pset : :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`
+        A periodic set (crystal).
+    k : int
+        Number of neighbors considered for each point in a unit cell.
+
+    Returns
+    -------
+    :class:`numpy.ndarray`
+        The ADA of ``pset``, a :class:`numpy.ndarray` shape ``(k, )``.
+    """
+    return AMD(pset, k) - AMD_estimate(pset, k)
 
 
 @numba.njit(cache=True, fastmath=True)
-def _average_columns_except_first(dists, weights):
-    m, k = dists.shape
-    result = np.zeros((k - 1, ), dtype=np.float64)
-    for i in range(m):
-        for j in range(1, k):
-            result[j - 1] += dists[i, j] * weights[i]
-    return result / np.sum(weights)
+def _array_product_exceeds(values, limit):
+    """Returns False if np.prod(values) > limit."""
+    tot = 1
+    for i in range(len(values)):
+        tot *= values[i]
+        if tot > limit:
+            return True
+    return False
+
+
+@numba.njit(cache=True, fastmath=True)
+def _merge_pdd_rows(weights, dists, collapse_tol):
+    """Collpases weights & rows of a PDD, and return an array of group
+    labels (new indices of old rows)."""
+
+    n, k = dists.shape
+    group_labels = np.empty((n,), dtype=np.int64)
+    done = set()
+    group = 0
+
+    for i in range(n):
+        if i in done:
+            continue
+
+        group_labels[i] = group
+
+        for j in range(i + 1, n):
+            if j in done:
+                continue
+
+            grouped = True
+            for i_ in range(k):
+                v = np.abs(dists[i, i_] - dists[j, i_])
+                if v > collapse_tol:
+                    grouped = False
+                    break
+
+            if grouped:
+                group_labels[j] = group
+                done.add(j)
+
+        group += 1
+
+    if group == n:
+        return weights, dists, group_labels
+
+    weights_ = np.zeros((group,), dtype=np.float64)
+    dists_ = np.zeros((group, k), dtype=np.float64)
+    group_counts = np.zeros((group,), dtype=np.int64)
+
+    for i in range(n):
+        row = group_labels[i]
+        weights_[row] += weights[i]
+        dists_[row] += dists[i]
+        group_counts[row] += 1
+
+    for i in range(group):
+        dists_[i] /= group_counts[i]
+
+    return weights_, dists_, group_labels
 
 
 def _collapse_into_groups(overlapping: npt.NDArray[np.bool_]) -> list:
@@ -472,7 +646,6 @@ def _collapse_into_groups(overlapping: npt.NDArray[np.bool_]) -> list:
         if i not in group_nums:
             group_nums[i] = group
             group += 1
-
             for j in np.argwhere(row).T[0]:
                 if j not in group_nums:
                     group_nums[j] = group_nums[i]
@@ -480,6 +653,5 @@ def _collapse_into_groups(overlapping: npt.NDArray[np.bool_]) -> list:
     groups = collections.defaultdict(list)
     for row_ind, group_num in sorted(group_nums.items()):
         groups[group_num].append(row_ind)
-    groups = list(groups.values())
 
-    return groups
+    return list(groups.values())

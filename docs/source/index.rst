@@ -3,12 +3,12 @@
    :maxdepth: 2
    :caption: Using amd
 
-   Getting_Started
    Description_of_AMD_PDD
    Reading_cifs
    Reading_from_the_CSD
-   Using_AMDs
-   Using_PDDs
+   Using_PDD
+   Using_AMD
+   Disorder
    Miscellaneous
 
 .. toctree::

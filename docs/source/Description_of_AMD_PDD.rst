@@ -1,8 +1,9 @@
-Description of AMD/PDD
-======================
+Description of PDD and AMD
+==========================
 
-AMD and PDD are geometry-based descriptors of crystals. For a crystal :math:`S`,
-:math:`\text{PDD}(S)_{ik}` is the distance between an atom corresponding to row
+The pointwise distance distribution (PDD) is a geometry-based descriptor of a crystal
+represented by a periodic set. For a crystal :math:`S`, :math:`\text{PDD}(S)_{ik}` is
+the distance between an atom corresponding to row
 :math:`i` and its :math:`k`-th nearest neighbour in the infinite crystal.
 So the PDD is a matrix of distances between atoms, each row corresponding to an
 atom and having a weight as not all atoms are considered equal. The
@@ -24,7 +25,7 @@ A much more detailed description can be found in our papers:
 Comparing by AMD/PDD
 ********************
 
-AMDs are just vectors which can be compared with any metric, as long as k (length of the AMD) is the same. 
+AMDs are just vectors which can be compared with any metric, as long as k is the same. 
 The default metric used in this package is L-infinity (aka Chebyshev), 
 since it does not so much accumulate differences in distances across many neighbours. 
 PDDs are matrices with weighted rows; the appropriate metric to compare them is the `Earth mover's distance <https://en.wikipedia.org/wiki/Earth_mover%27s_distance>`_ (aka Wasserstein metric), 

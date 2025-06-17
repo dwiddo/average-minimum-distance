@@ -3,18 +3,17 @@
 from typing import Tuple
 
 import numpy as np
-import numpy.typing as npt
 import numba
 
-FloatArray = npt.NDArray[np.floating]
+from ._types import FloatArray
 
 __all__ = [
-    'diameter',
-    'cellpar_to_cell',
-    'cellpar_to_cell_2D',
-    'cell_to_cellpar',
-    'cell_to_cellpar_2D',
-    'random_cell'
+    "diameter",
+    "cellpar_to_cell",
+    "cellpar_to_cell_2D",
+    "cell_to_cellpar",
+    "cell_to_cellpar_2D",
+    "random_cell",
 ]
 
 
@@ -44,12 +43,12 @@ def diameter(cell: FloatArray) -> float:
         diagonals[1] = (cell[0] - cell[1]) ** 2
     elif dims == 3:
         diagonals = np.empty((4, 3), dtype=np.float64)
-        diagonals[0] = ( cell[0] + cell[1] + cell[2]) ** 2
-        diagonals[1] = ( cell[0] + cell[1] - cell[2]) ** 2
-        diagonals[2] = ( cell[0] - cell[1] + cell[2]) ** 2
+        diagonals[0] = (cell[0] + cell[1] + cell[2]) ** 2
+        diagonals[1] = (cell[0] + cell[1] - cell[2]) ** 2
+        diagonals[2] = (cell[0] - cell[1] + cell[2]) ** 2
         diagonals[3] = (-cell[0] + cell[1] + cell[2]) ** 2
     else:
-        raise ValueError('amd.diameter only implemented for dimensions <= 3')
+        raise ValueError("amd.diameter only implemented for dimensions <= 3")
 
     return np.sqrt(np.amax(np.sum(diagonals, axis=-1)))
 
@@ -88,9 +87,9 @@ def cellpar_to_cell(cellpar: FloatArray) -> FloatArray:
         sin_gamma = np.sin(np.deg2rad(ga))
 
     cy = (cos_alpha - cos_beta * cos_gamma) / sin_gamma
-    cz_sqr = 1.0 - cos_beta ** 2 - cy ** 2
+    cz_sqr = 1.0 - cos_beta**2 - cy**2
     if cz_sqr < 0:
-        raise ValueError('Could not create a unit cell from given parameters.')
+        raise ValueError("Could not create a unit cell from given parameters.")
 
     cell = np.zeros((3, 3), dtype=np.float64)
     cell[0, 0] = a
@@ -148,19 +147,19 @@ def cell_to_cellpar(cell: FloatArray) -> FloatArray:
         a,b,c,α,β,γ.
     """
 
-    cellpar = np.empty((6, ), dtype=np.float64)
+    cellpar = np.empty((6,), dtype=np.float64)
     cellpar[0] = np.linalg.norm(cell[0])
     cellpar[1] = np.linalg.norm(cell[1])
     cellpar[2] = np.linalg.norm(cell[2])
-    cellpar[3] = np.rad2deg(np.arccos(
-        np.dot(cell[1], cell[2]) / (cellpar[1] * cellpar[2])
-    ))
-    cellpar[4] = np.rad2deg(np.arccos(
-        np.dot(cell[0], cell[2]) / (cellpar[0] * cellpar[2])
-    ))
-    cellpar[5] = np.rad2deg(np.arccos(
-        np.dot(cell[0], cell[1]) / (cellpar[0] * cellpar[1])
-    ))
+    cellpar[3] = np.rad2deg(
+        np.arccos(np.dot(cell[1], cell[2]) / (cellpar[1] * cellpar[2]))
+    )
+    cellpar[4] = np.rad2deg(
+        np.arccos(np.dot(cell[0], cell[2]) / (cellpar[0] * cellpar[2]))
+    )
+    cellpar[5] = np.rad2deg(
+        np.arccos(np.dot(cell[0], cell[1]) / (cellpar[0] * cellpar[1]))
+    )
     return cellpar
 
 
@@ -182,19 +181,19 @@ def cell_to_cellpar_2D(cell: FloatArray) -> FloatArray:
         Vector with 3 elements, containing 3 unit cell parameters.
     """
 
-    cellpar = np.empty((3, ), dtype=np.float64)
+    cellpar = np.empty((3,), dtype=np.float64)
     cellpar[0] = np.linalg.norm(cell[0])
     cellpar[1] = np.linalg.norm(cell[1])
-    cellpar[2] = np.rad2deg(np.arccos(
-        np.dot(cell[0], cell[1]) / (cellpar[0] * cellpar[1])
-    ))
+    cellpar[2] = np.rad2deg(
+        np.arccos(np.dot(cell[0], cell[1]) / (cellpar[0] * cellpar[1]))
+    )
     return cellpar
 
 
 def random_cell(
-        length_bounds: Tuple = (1.0, 2.0),
-        angle_bounds: Tuple = (60.0, 120.0),
-        dims: int = 3
+    length_bounds: Tuple = (1.0, 2.0),
+    angle_bounds: Tuple = (60.0, 120.0),
+    dims: int = 3,
 ) -> FloatArray:
     """Return a random unit cell with uniformally chosen length and
     angle parameters between bounds. Dimensions 2 and 3 only.
@@ -203,7 +202,11 @@ def random_cell(
     ll, lu = length_bounds
     al, au = angle_bounds
 
-    if dims == 3:
+    if dims == 2:
+        cellpar = [np.random.uniform(low=ll, high=lu) for _ in range(2)]
+        cellpar.append(np.random.uniform(low=al, high=au))
+        cell = cellpar_to_cell_2D(np.array(cellpar))
+    elif dims == 3:
         while True:
             lengths = [np.random.uniform(low=ll, high=lu) for _ in range(dims)]
             angles = [np.random.uniform(low=al, high=au) for _ in range(dims)]
@@ -213,13 +216,9 @@ def random_cell(
                 break
             except RuntimeError:
                 continue
-    elif dims == 2:
-        cellpar = [np.random.uniform(low=ll, high=lu) for _ in range(2)]
-        cellpar.append(np.random.uniform(low=al, high=au))
-        cell = cellpar_to_cell_2D(np.array(cellpar))
     else:
         raise NotImplementedError(
-            'amd.random_cell() only implemented for dimensions 2 and 3, '
-            f'passed {dims}'
+            "amd.random_cell() only implemented for dimensions 2 and 3, "
+            f"passed {dims}"
         )
     return cell

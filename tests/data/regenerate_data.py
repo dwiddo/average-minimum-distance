@@ -19,27 +19,22 @@ def regenerate(name, generator):
     data = []
     for s in generator:
         pdd = amd.PDD(s, 100, lexsort=False)  # No lexsort to avoid FP problems
-        data.append(
-            {
-                'PeriodicSet': s,
-                'AMD100': amd.PDD_to_AMD(pdd),
-                'PDD100': pdd
-            }
-        )
+        data.append({"PeriodicSet": s, "AMD100": amd.PDD_to_AMD(pdd), "PDD100": pdd})
 
-    with open(str(_parent / f'{name}.pkl'), 'wb') as f:
+    with open(str(_parent / f"{name}.pkl"), "wb") as f:
         pickle.dump(data, f)
+
     if len(data) > 1:
-        cdm = amd.PDD_pdist([d['PDD100'] for d in data])
-        np.savez_compressed(str(_parent / f'{name}_cdm.npz'), cdm=cdm)
+        cdm = amd.PDD_pdist([d["PDD100"] for d in data])
+        np.savez_compressed(str(_parent / f"{name}_cdm.npz"), cdm=cdm)
 
 
 def regenerate_cifs_test_data():
     """Regenerate and overwrite all test data using cifs in tests/data.
     Does not apply to test data extracted with ``csd-python-api``.
     """
-    for name in ('cubic', 'T2_experimental'):
-        path = _parent / f'{name}.cif'
+    for name in ("cubic", "T2_experimental"):
+        path = _parent / f"{name}.cif"
         regenerate(name, amd.CifReader(path, show_warnings=False))
 
 
@@ -47,11 +42,11 @@ def regenerate_CSD_families_test_data():
     """Regenerate and overwrite all test data for 'CSD_families' using
     ``csd-python-api``.
     """
-    csd_families = ['DEBXIT', 'GLYCIN', 'HXACAN', 'ACSALA']
+    csd_families = ["DEBXIT", "GLYCIN", "HXACAN", "ACSALA"]
     reader = amd.CSDReader(csd_families, refcode_families=True, show_warnings=False)
-    regenerate('CSD_families', reader)
+    regenerate("CSD_families", reader)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     regenerate_cifs_test_data()
     regenerate_CSD_families_test_data()

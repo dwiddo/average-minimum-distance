@@ -5,7 +5,6 @@ PDD. This is possible 'in a general position', see our papers for more.
 from itertools import combinations, permutations, product
 
 import numpy as np
-import numpy.typing as npt
 import numba
 from scipy.spatial.distance import cdist
 from scipy.spatial import KDTree
@@ -13,9 +12,9 @@ from scipy.spatial import KDTree
 from ._nearest_neighbors import generate_concentric_cloud
 from .utils import diameter
 
-FloatArray = npt.NDArray[np.floating]
+from ._types import FloatArray
 
-__all__ = ['reconstruct']
+__all__ = ["reconstruct"]
 
 
 def reconstruct(pdd: FloatArray, cell: FloatArray) -> FloatArray:
@@ -53,10 +52,10 @@ def reconstruct(pdd: FloatArray, cell: FloatArray) -> FloatArray:
     dims = cell.shape[0]
     if dims not in (2, 3):
         raise ValueError(
-            'Reconstructing from PDD only implemented for 2 and 3 dimensions'
+            "Reconstructing from PDD only implemented for 2 and 3 dimensions"
         )
     diam = diameter(cell)
-    motif = [np.zeros((dims, ))]
+    motif = [np.zeros((dims,))]
     if pdd.shape[0] == 1:
         return np.array(motif)
 
@@ -92,7 +91,7 @@ def reconstruct(pdd: FloatArray, cell: FloatArray) -> FloatArray:
 
     q = _find_second_point(shared_dists, bases, cloud, PREC)
     if q is None:
-        raise RuntimeError('Second point of motif could not be found.')
+        raise RuntimeError("Second point of motif could not be found.")
     motif.append(q)
 
     if pdd.shape[0] == 2:
@@ -104,11 +103,9 @@ def reconstruct(pdd: FloatArray, cell: FloatArray) -> FloatArray:
         shared_dists2 = _shared_vals(row2_reduced, row_reduced, PREC)
         shared_dists1 = _unique_within_tol(shared_dists1, PREC)
         shared_dists2 = _unique_within_tol(shared_dists2, PREC)
-        q_ = _find_further_point(
-            shared_dists1, shared_dists2, bases, cloud, q, PREC
-        )
+        q_ = _find_further_point(shared_dists1, shared_dists2, bases, cloud, q, PREC)
         if q_ is None:
-            raise RuntimeError('Further point of motif could not be found.')
+            raise RuntimeError("Further point of motif could not be found.")
         motif.append(q_)
 
     motif = np.array(motif)
@@ -161,7 +158,7 @@ def _neighbor_set(cell, prec):
 
     k_ = 5
     coeffs = np.array(list(product((-1, 0, 1), repeat=cell.shape[0])))
-    coeffs = coeffs[coeffs.any(axis=-1)]    # remove (0,0,0)
+    coeffs = coeffs[coeffs.any(axis=-1)]  # remove (0,0,0)
 
     # half of all combinations of basis vectors
     vecs = []
@@ -178,9 +175,7 @@ def _neighbor_set(cell, prec):
 
     while not np.allclose(dists, dists_, atol=0, rtol=1e-12):
         dists = dists_
-        cloud = np.vstack(
-            (cloud, next(cloud_generator), next(cloud_generator))
-        )
+        cloud = np.vstack((cloud, next(cloud_generator), next(cloud_generator)))
         tree = KDTree(cloud, compact_nodes=False, balanced_tree=False)
         dists_, inds = tree.query(vecs, k=k_)
 
@@ -221,8 +216,8 @@ def _bilaterate(p1, p2, r1, r2, abs_val, prec):
     if d == 0 and r1 == r2:
         return None
 
-    a = (r1 ** 2 - r2 ** 2 + d ** 2) / (2 * d)
-    h = np.sqrt(r1 ** 2 - a ** 2)
+    a = (r1**2 - r2**2 + d**2) / (2 * d)
+    h = np.sqrt(r1**2 - a**2)
     x2 = p1[0] + a * v[0]
     y2 = p1[1] + a * v[1]
     x3 = x2 + h * v[1]
@@ -232,9 +227,9 @@ def _bilaterate(p1, p2, r1, r2, abs_val, prec):
     q1 = np.array((x3, y3))
     q2 = np.array((x4, y4))
 
-    if np.abs(np.sqrt(x3 ** 2 + y3 ** 2) - abs_val) < prec:
+    if np.abs(np.sqrt(x3**2 + y3**2) - abs_val) < prec:
         return q1
-    if np.abs(np.sqrt(x4 ** 2 + y4 ** 2) - abs_val) < prec:
+    if np.abs(np.sqrt(x4**2 + y4**2) - abs_val) < prec:
         return q2
     return None
 

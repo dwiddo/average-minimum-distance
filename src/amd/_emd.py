@@ -1,7 +1,7 @@
 """An implementation of the Wasserstein metric (Earth Mover's distance)
 between two weighted distributions, used as the metric for comparing two
 pointwise distance distributions (PDDs), see
-:func:`amd.PDD <.calculate.PDD>`
+:func:`PDD() <.calculate.PDD>`
 
 Copyright (C) 2020 Cameron Hargreaves. This code is adapted from the
 Element Movers Distance project https://github.com/lrcfmd/ElMD.
@@ -11,18 +11,15 @@ from typing import Tuple
 
 import numba
 import numpy as np
-import numpy.typing as npt
 
-FloatArray = npt.NDArray[np.floating]
+from ._types import FloatArray
 
-__all__ = ['network_simplex']
+__all__ = ["network_simplex"]
 
 
 @numba.njit(cache=True)
 def network_simplex(
-        source_demands: FloatArray,
-        sink_demands: FloatArray,
-        network_costs: FloatArray
+    source_demands: FloatArray, sink_demands: FloatArray, network_costs: FloatArray
 ) -> Tuple[float, FloatArray]:
     """Calculate the Earth mover's distance (Wasserstien metric) between
     two weighted distributions given by two sets of weights and a cost
@@ -99,7 +96,7 @@ def network_simplex(
 
     # Create costs and capacities for the arcs between nodes
     network_costs = (network_costs.ravel() * fp_multiplier).astype(np.int64)
-    network_capac = np.empty(shape=(e, ), dtype=np.int64)
+    network_capac = np.empty(shape=(e,), dtype=np.int64)
     ind = 0
     for i in range(n_sources):
         for j in range(n_sinks):
@@ -109,12 +106,15 @@ def network_simplex(
             ind += 1
 
     # In amd network_costs are always positive, otherwise take abs here
-    faux_inf = np.int64(3 * max(
-        np.sum(network_costs),
-        np.sum(network_capac),
-        np.amax(source_d_int),
-        np.amax(sink_d_int)
-    ))
+    faux_inf = np.int64(
+        3
+        * max(
+            np.sum(network_costs),
+            np.sum(network_capac),
+            np.amax(source_d_int),
+            np.amax(sink_d_int),
+        )
+    )
 
     costs = np.empty(e + n, dtype=np.int64)
     costs[:e] = network_costs
@@ -126,18 +126,18 @@ def network_simplex(
 
     flows = np.empty(e + n, dtype=np.int64)
     flows[:e] = 0
-    flows[e:e+n_sources] = source_d_int
-    flows[e+n_sources:] = sink_d_int
+    flows[e : e + n_sources] = source_d_int
+    flows[e + n_sources :] = sink_d_int
 
     potentials = np.empty(n, dtype=np.int64)
     demands_neg_mask = demands <= 0
     potentials[demands_neg_mask] = faux_inf
     potentials[~demands_neg_mask] = -faux_inf
 
-    parent = np.full(shape=(n + 1, ), fill_value=-1, dtype=np.int64)
+    parent = np.full(shape=(n + 1,), fill_value=-1, dtype=np.int64)
     parent[-1] = -2
 
-    size = np.full(shape=(n + 1, ), fill_value=1, dtype=np.int64)
+    size = np.full(shape=(n + 1,), fill_value=1, dtype=np.int64)
     size[-1] = n + 1
 
     next_node = np.arange(1, n + 2, dtype=np.int64)
@@ -156,6 +156,7 @@ def network_simplex(
         i, p, q, f = _find_entering_edges(
             B, e, f, tails, heads, costs, potentials, flows
         )
+
         # If no entering edges then the optimal score is found
         if p == -1:
             break
@@ -200,15 +201,6 @@ def network_simplex(
 
 
 @numba.njit(cache=True)
-def _reduced_cost(i, costs, potentials, tails, heads, flows):
-    """Return the reduced cost of an edge i."""
-    c = costs[i] - potentials[tails[i]] + potentials[heads[i]]
-    if flows[i] == 0:
-        return c
-    return -c
-
-
-@numba.njit(cache=True)
 def _find_entering_edges(B, e, f, tails, heads, costs, potentials, flows):
     """Yield entering edges until none can be found. Entering edges are
     found by combining Dantzig's rule and Bland's rule. The edges are
@@ -229,15 +221,22 @@ def _find_entering_edges(B, e, f, tails, heads, costs, potentials, flows):
             for i, v in enumerate(range(f, e)):
                 edge_inds[i] = v
             for i in range(l):
-                edge_inds[e-f+i] = i
+                edge_inds[e - f + i] = i
 
         # Find the first edge with the lowest reduced cost.
         f = l
         i = edge_inds[0]
-        c = _reduced_cost(i, costs, potentials, tails, heads, flows)
+
+        c = potentials[tails[i]] - costs[i] - potentials[heads[i]]
+        if flows[i] == 0:
+            c *= -1
 
         for j in edge_inds[1:]:
-            cost = _reduced_cost(j, costs, potentials, tails, heads, flows)
+
+            cost = potentials[tails[j]] - costs[j] - potentials[heads[j]]
+            if flows[j] == 0:
+                cost *= -1
+
             if cost < c:
                 c = cost
                 i = j
@@ -274,9 +273,11 @@ def _find_apex(p, q, size, parent):
         while size_p < size_q:
             p = parent[p]
             size_p = size[p]
+
         while size_p > size_q:
             q = parent[q]
             size_q = size[q]
+
         if size_p == size_q:
             if p != q:
                 p = parent[p]
@@ -319,9 +320,9 @@ def _find_cycle(i, p, q, size, edge, parent):
     cycle_nodes_ = np.empty(len_cycle_nodes + add_to_c_nodes, dtype=np.int64)
 
     for j in range(len_cycle_nodes):
-        cycle_nodes_[j] = cycle_nodes[-(j+1)]
+        cycle_nodes_[j] = cycle_nodes[-(j + 1)]
     for j in range(add_to_c_nodes):
-        cycle_nodes_[len_cycle_nodes+j] = cycle_nodes_rev[j]
+        cycle_nodes_[len_cycle_nodes + j] = cycle_nodes_rev[j]
 
     len_cycle_edges = len(cycle_edges)
     len_cycle_edges_ = len_cycle_edges + len(cycle_edges_rev)
@@ -332,7 +333,7 @@ def _find_cycle(i, p, q, size, edge, parent):
         cycle_edges_ = np.empty(len_cycle_edges_, dtype=np.int64)
 
     for j in range(len_cycle_edges):
-        cycle_edges_[j] = cycle_edges[-(j+1)]
+        cycle_edges_[j] = cycle_edges[-(j + 1)]
     for j in range(1, len(cycle_edges_rev) + 1):
         cycle_edges_[-j] = cycle_edges_rev[-j]
 
@@ -369,14 +370,17 @@ def _remove_edge(s, t, size, prev, last, next_node, parent, edge):
     prev_t = prev[t]
     last_t = last[t]
     next_last_t = next_node[last_t]
+
     # Remove (s, t)
     parent[t] = -2
     edge[t] = -2
+
     # Remove the subtree rooted at t from the depth-first thread
     next_node[prev_t] = next_last_t
     prev[next_last_t] = prev_t
     next_node[last_t] = t
     prev[t] = last_t
+
     # Update the subtree sizes & last descendants of the (old) ancestors of t
     while s != -2:
         size[s] -= size_t
@@ -390,6 +394,7 @@ def _make_root(q, parent, size, last, prev, next_node, edge):
     """Make a node q the root of its containing subtree."""
 
     ancestors = []
+
     # -2 means node is checked
     while q != -2:
         ancestors.insert(0, q)
@@ -397,12 +402,13 @@ def _make_root(q, parent, size, last, prev, next_node, edge):
 
     for i in range(len(ancestors) - 1):
         p = ancestors[i]
-        q = ancestors[i+1]
+        q = ancestors[i + 1]
         size_p = size[p]
         last_p = last[p]
         prev_q = prev[q]
         last_q = last[q]
         next_last_q = next_node[last_q]
+
         # Make p a child of q
         parent[p] = q
         parent[q] = -2
@@ -410,6 +416,7 @@ def _make_root(q, parent, size, last, prev, next_node, edge):
         edge[q] = -2
         size[p] = size_p - size[q]
         size[q] = size_p
+
         # Remove the subtree rooted at q from the depth-first thread
         next_node[prev_q] = next_last_q
         prev[next_last_q] = prev_q
@@ -418,6 +425,7 @@ def _make_root(q, parent, size, last, prev, next_node, edge):
         if last_p == last_q:
             last[p] = prev_q
             last_p = prev_q
+
         # Add the remaining parts of the subtree rooted at p as a subtree of q
         # in the depth-first thread
         prev[p] = last_q
@@ -437,14 +445,17 @@ def _add_edge(i, p, q, next_node, prev, last, size, parent, edge):
     next_last_p = next_node[last_p]
     size_q = size[q]
     last_q = last[q]
+
     # Make q a child of p
     parent[q] = p
     edge[q] = i
+
     # Insert the subtree rooted at q into the depth-first thread
     next_node[last_p] = q
     prev[q] = last_p
     prev[next_last_p] = last_q
     next_node[last_q] = next_last_p
+
     # Update the subtree sizes and last descendants of the (new) ancestors of q
     while p != -2:
         size[p] += size_q
@@ -454,9 +465,7 @@ def _add_edge(i, p, q, next_node, prev, last, size, parent, edge):
 
 
 @numba.njit(cache=True)
-def _update_potentials(
-        i, p, q, heads, potentials, costs, last_node, next_node
-):
+def _update_potentials(i, p, q, heads, potentials, costs, last_node, next_node):
     """Update the potentials of the nodes in the subtree rooted at a
     node q connected to its parent p by an edge i.
     """
@@ -465,8 +474,10 @@ def _update_potentials(
         d = potentials[p] - costs[i] - potentials[q]
     else:
         d = potentials[p] + costs[i] - potentials[q]
+
     potentials[q] += d
     l = last_node[q]
+
     while q != l:
         q = next_node[q]
         potentials[q] += d
