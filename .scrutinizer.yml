@@ -5,8 +5,8 @@ checks:
 
 build:
     environment:
-            python:
-                version: 3.9
+        python:
+            version: "3.9"
     dependencies:
         override:
             - "pip install -r requirements.txt"
