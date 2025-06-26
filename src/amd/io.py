@@ -229,6 +229,7 @@ class CifReader(_Reader):
 
         # cannot handle some characters (�) in cifs
         if reader == "gemmi":
+            
             import gemmi
 
             extensions = {"cif"}
@@ -931,8 +932,9 @@ def periodicset_from_ccdc_crystal(
         for asm in crystal.disorder.assemblies:
             for grp in asm.groups:
                 for atom in grp.atoms:
-                    assemblies[atom.index] = asm.id
-                    groups[atom.index] = grp.id
+                    if atom.index < len(asym_unit): # fix: asym unit not giving all atoms
+                        assemblies[atom.index] = str(asm.id)
+                        groups[atom.index] = str(grp.id)
 
     disorder = _disorder_assemblies(
         asym_unit, wyc_muls, cell, assemblies, groups, asym_occs, eq_site_tol
@@ -1487,10 +1489,11 @@ def str2float(string):
     except ValueError as e:
         if string.strip() in (".", "?"):
             return np.nan
-        raise e
+        raise ParseError("String could not be converted to float")
 
 
 def _get_cif_tags(block, cif_tags):
+
     import gemmi
 
     data = {}

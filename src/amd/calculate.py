@@ -143,21 +143,20 @@ def _PDD(
         _asym_mask = np.full((asym_unit.shape[0], ), fill_value=True)
         asm_sizes = {}
         for i, asm in enumerate(pset.disorder):
-            grps = asm.groups
 
             # Ignore assmeblies with 1 group
-            if len(grps) < 2:
+            if len(asm.groups) < 2:
                 continue
 
             # For substitutional disorder, mask all but one atom
             elif asm.is_substitutional:
-                mask_inds = [grps[j].indices[0] for j in range(1, len(grps))]
-                keep = grps[0].indices[0]
+                mask_inds = [asm.groups[j].indices[0] for j in range(1, len(asm.groups))]
+                keep = asm.groups[0].indices[0]
                 subs_disorder_info[keep] = mask_inds
                 _asym_mask[mask_inds] = False
 
             else:
-                asm_sizes[i] = len(grps)
+                asm_sizes[i] = len(asm.groups)
 
         asm_sizes_arr = np.array(list(asm_sizes.values()))
         if _array_product_exceeds(asm_sizes_arr, MAX_DISORDER_CONFIGS):
@@ -173,13 +172,24 @@ def _PDD(
         else:
             configs = itertools.product(*(range(t) for t in asm_sizes.values()))
 
+        # Mask atoms already masked (substitututional disorder)
+        _motif_mask = np.full((pset.motif.shape[0], ), fill_value=True)
+        if not np.all(_asym_mask):
+            for i in range(len(asym_unit)):
+                if not _asym_mask[i]:
+                    m_i = pset.asym_unit[i]
+                    mul = pset.multiplicities[i]
+                    _motif_mask[m_i : m_i + mul] = False
+
         # One PDD for each disorder configuration
         dists_list, inds_list = [], []
         for config_inds in configs:
 
             # Mask groups not selected
             asym_mask = _asym_mask.copy()
-            motif_mask = np.full((pset.motif.shape[0], ), fill_value=True)
+            motif_mask = _motif_mask.copy()
+
+            # Mask groups not selected in this config
             for i, asm_ind in enumerate(asm_sizes.keys()):
                 for j, grp in enumerate(pset.disorder[asm_ind].groups):
                     if j != config_inds[i]:
