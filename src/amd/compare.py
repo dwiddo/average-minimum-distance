@@ -75,14 +75,14 @@ def _EMD(
 
     Parameters
     ----------
-    dist : :class:`numpy.ndarray`
-        ``(n, d)`` array of items in the first distribution.
-    dist_ : :class:`numpy.ndarray`
-        ``(m, d)`` array of items in the second distribution.
     weights : :class:`numpy.ndarray`
         Weights of items in ``dist``.
     weights\_ : :class:`numpy.ndarray`
         Weights of items in ``dist\_``.
+    dist : :class:`numpy.ndarray`
+        ``(n, d)`` array of items in the first distribution.
+    dist_ : :class:`numpy.ndarray`
+        ``(m, d)`` array of items in the second distribution.
     metric : str or callable, default 'chebyshev'
         Metric used as the base distance between items in ``dist`` and
         ``dist\_``. For a list of accepted metrics see

@@ -142,17 +142,17 @@ def _PDD(
         # Gather which disorder assemblies must be considered
         _asym_mask = np.full((asym_unit.shape[0], ), fill_value=True)
         asm_sizes = {}
+
         for i, asm in enumerate(pset.disorder):
 
-            # Ignore assmeblies with 1 group
-            if len(asm.groups) < 2:
-                continue
+            # # Ignore assmeblies with 1 group
+            # if len(asm.groups) < 2:
+            #     continue
 
             # For substitutional disorder, mask all but one atom
-            elif asm.is_substitutional:
+            if asm.is_substitutional:
                 mask_inds = [asm.groups[j].indices[0] for j in range(1, len(asm.groups))]
-                keep = asm.groups[0].indices[0]
-                subs_disorder_info[keep] = mask_inds
+                subs_disorder_info[asm.groups[0].indices[0]] = mask_inds
                 _asym_mask[mask_inds] = False
 
             else:
@@ -210,6 +210,7 @@ def _PDD(
         weights = np.concatenate([weights[i] for i in inds_list])
         weights /= np.sum(weights)
 
+    # Non-disordered structures
     else:
         dists = nearest_neighbors(pset.motif, pset.cell, asym_unit, k + 1)
         dists = dists[:, 1:]

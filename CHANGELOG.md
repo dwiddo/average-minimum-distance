@@ -1,6 +1,22 @@
 # Changelog
 
-## [1.6.0] - 13/02/2025
+## [1.6.1] - 17/11/2025
+
+### Added
+
+- ``CifReader`` now recursively goes through all subdirectories of an input directory.
+
+- ``CifReader`` and ``CifReader`` now accept parameter ``reduce_cell``.
+
+### Fixed
+
+- Improved the handling of disorder.
+
+- Fixed bug in calculating PPC for disordered structures.
+
+- Improved ``PeriodicSet.formula``.
+
+## [1.6.0] - 17/06/2025
 
 ### Added
 

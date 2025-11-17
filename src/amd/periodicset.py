@@ -196,7 +196,8 @@ class PeriodicSet:
         ppc : float
             The PPC of ``self``.
         """
-        m, n = self.motif.shape
+        _, n = self.motif.shape
+        m = np.sum(self.occupancies * self.multiplicities)
         t = int(n // 2)
         if n % 2 == 0:
             ball_vol = (np.pi ** t) / factorial(t)
@@ -232,7 +233,7 @@ class PeriodicSet:
         cell_vol = np.linalg.det(self.cell)
         return (cell_mass / cell_vol) * 1.66053907
 
-    def formula(self):
+    def formula(self, sep="", latex=False):
         """Return the reduced formula of the PeriodicSet representing a
         crystal.
 
@@ -243,9 +244,22 @@ class PeriodicSet:
         """
         counter = self._formula_dict()
         counter = {ATOMIC_NUMBERS_TO_SYMS[n]: count for n, count in counter.items()}
-        return "".join(
-            f"{lab}{num:.3g}" if num != 1 else lab for lab, num in counter.items()
-        )
+        if latex:
+            pieces = []
+            for lab, num in counter.items():
+                if num == 1:
+                    pieces.append(lab)
+                elif num % 1 == 0 and num < 10:  # single digit
+                    pieces.append(f"{lab}{int(num)}")
+                else:
+                    pieces.append(f"{lab}_{{{num:.3g}}}")
+            return sep.join(pieces)
+
+        else:
+            return sep.join(
+                f"{lab}{num:.3g}" if num != 1 else lab 
+                for lab, num in counter.items()
+            )
 
     def _formula_dict(self):
         """Return a dictionary of atomic types in the form
@@ -268,16 +282,15 @@ class PeriodicSet:
         if gcd == 0:
             gcd = 1
 
+        c_h = (6, 1)
         counter_ = {}
-        if 6 in counter:
-            counter_[6] = counter[6] / gcd
-            del counter[6]
-        if 1 in counter:
-            counter_[1] = counter[1] / gcd
-            del counter[1]
+        for n in c_h:
+            if n in counter:
+                counter_[n] = counter[n] / gcd
 
-        for n, count in sorted(counter.items(), key=lambda x: x[0]):
-            counter_[int(n)] = count / gcd
+        for n, count in sorted(counter.items(), key=lambda x: ATOMIC_NUMBERS_TO_SYMS[x[0]]):
+            if n not in c_h:
+                counter_[n] = count / gcd
 
         return counter_
 

@@ -78,6 +78,11 @@ __all__ = [
 ]
 
 
+class ParseError(ValueError):
+    """Raised when an item cannot be parsed into a periodic set."""
+    pass
+
+
 class _Reader(collections.abc.Iterator):
     """Base reader class."""
 
@@ -161,17 +166,26 @@ class CifReader(_Reader):
         Remove Hydrogens from the crystals.
     skip_disorder : bool
         Do not read disordered structures.
+    missing_coords : str
+        Action to take upon finding missing coordinates. "warn" (default) will
+        emit a warning when a structure has missing coordinates, and the sites
+        will be removed. "skip" will not read structures with missing coords.
+    eq_site_tol : float, default 0.001
+        Tolerance below which two sites are considered to be at the same
+        position. 
+    reduce_cell : bool, default False
+        Reduce the unit cell (Lenstra-Lenstra-Lovasz lattice basis reduction).
+    show_warnings : bool
+        Print warnings that arise during reading.
+    verbose : bool, default False
+        If True, prints a progress bar showing the number of items
+        processed.
     heaviest_component : bool
         csd-python-api only. Removes all but the heaviest molecule in
         the asymmeric unit, intended for removing solvents.
     molecular_centres : bool, default False
         csd-python-api only. Extract the centres of molecules in the
         unit cell and store in the attribute molecular_centres.
-    show_warnings : bool
-        Controls whether warnings that arise during reading are printed.
-    verbose : bool, default False
-        If True, prints a progress bar showing the number of items
-        processed.
 
     Yields
     ------
@@ -207,6 +221,7 @@ class CifReader(_Reader):
         skip_disorder: bool = False,
         missing_coords: str = "warn",
         eq_site_tol: float = 1e-3,
+        reduce_cell: bool = False,
         show_warnings: bool = True,
         verbose: bool = False,
         heaviest_component: bool = False,
@@ -240,6 +255,7 @@ class CifReader(_Reader):
                 skip_disorder=skip_disorder,
                 missing_coords=missing_coords,
                 eq_site_tol=eq_site_tol,
+                reduce_cell=reduce_cell
             )
 
         # elif reader in ("ase", "pycodcif"):
@@ -279,8 +295,11 @@ class CifReader(_Reader):
                 periodicset_from_ccdc_entry,
                 remove_hydrogens=remove_hydrogens,
                 skip_disorder=skip_disorder,
-                molecular_centres=molecular_centres,
+                missing_coords=missing_coords,
+                eq_site_tol=eq_site_tol,
                 heaviest_component=heaviest_component,
+                molecular_centres=molecular_centres,
+                reduce_cell=reduce_cell
             )
 
         else:
@@ -301,22 +320,20 @@ class CifReader(_Reader):
 
     @staticmethod
     def _dir_generator(
-        path: Path, file_parser: Callable, extensions: Iterable
+        directory: Path, file_parser: Callable, extensions: set[str]
     ) -> Iterator:
         """Generate items from all files with extensions in
         ``extensions`` from a directory ``path``."""
-        for file_path in path.iterdir():
-            if not file_path.is_file():
-                continue
-            if file_path.suffix[1:].lower() not in extensions:
-                continue
-            try:
-                yield from file_parser(str(file_path))
-            except Exception as e:
-                warnings.warn(
-                    f'Error parsing "{str(file_path)}", skipping file. '
-                    f"Exception: {repr(e)}"
-                )
+
+        for path in directory.rglob('*'):
+            if path.is_file() and path.suffix[1:].lower() in extensions:
+                try:
+                    yield from file_parser(str(path))
+                except Exception as e:
+                    warnings.warn(
+                        f'Error parsing "{str(path)}", skipping file. '
+                        f"Exception: {repr(e)}"
+                    )
 
 
 class CSDReader(_Reader):
@@ -335,17 +352,26 @@ class CSDReader(_Reader):
         Remove hydrogens from the crystals.
     skip_disorder : bool
         Do not read disordered structures.
+    missing_coords : str
+        Action to take upon finding missing coordinates. "warn" (default) will
+        emit a warning when a structure has missing coordinates, and the sites
+        will be removed. "skip" will not read structures with missing coords.
+    eq_site_tol : float, default 0.001
+        Tolerance below which two sites are considered to be at the same
+        position. 
+    reduce_cell : bool, default False
+        Reduce the unit cell (Lenstra-Lenstra-Lovasz lattice basis reduction).
+    show_warnings : bool
+        Print warnings that arise during reading.
+    verbose : bool, default False
+        If True, prints a progress bar showing the number of items
+        processed.
     heaviest_component : bool, optional
         Removes all but the heaviest molecule in the asymmeric unit,
         intended for removing solvents.
     molecular_centres : bool, default False
         Extract the centres of molecules in the unit cell and store in
         attribute molecular_centres.
-    show_warnings : bool, optional
-        Controls whether warnings that arise during reading are printed.
-    verbose : bool, default False
-        If True, prints a progress bar showing the number of items
-        processed.
 
     Yields
     ------
@@ -387,6 +413,7 @@ class CSDReader(_Reader):
         skip_disorder: bool = False,
         missing_coords: str = "warn",
         eq_site_tol: float = 1e-3,
+        reduce_cell: bool = False,
         show_warnings: bool = True,
         verbose: bool = False,
         heaviest_component: bool = False,
@@ -437,6 +464,7 @@ class CSDReader(_Reader):
             skip_disorder=skip_disorder,
             missing_coords=missing_coords,
             eq_site_tol=eq_site_tol,
+            reduce_cell=reduce_cell,
             heaviest_component=heaviest_component,
             molecular_centres=molecular_centres,
         )
@@ -521,18 +549,13 @@ class CSDReader(_Reader):
 #         return periodic_set
 
 
-class ParseError(ValueError):
-    """Raised when an item cannot be parsed into a periodic set."""
-
-    pass
-
-
 def periodicset_from_gemmi_block(
     block,
     remove_hydrogens: bool = False,
     skip_disorder: bool = False,
     missing_coords: str = "warn",
     eq_site_tol: float = 1e-3,
+    reduce_cell: bool = False
 ) -> PeriodicSet:
     """Convert a :class:`gemmi.cif.Block` object to a
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
@@ -547,6 +570,15 @@ def periodicset_from_gemmi_block(
         Remove Hydrogens from the crystal.
     skip_disorder : bool
         Do not read disordered structures.
+    missing_coords : str
+        Action to take upon finding missing coordinates. "warn" (default) will
+        emit a warning when a structure has missing coordinates, and the sites
+        will be removed. "skip" will not read structures with missing coords.
+    eq_site_tol : float, default 0.001
+        Tolerance below which two sites are considered to be at the same
+        position. 
+    reduce_cell : bool, default False
+        Reduce the unit cell (Lenstra-Lenstra-Lovasz lattice basis reduction).
 
     Returns
     -------
@@ -726,17 +758,26 @@ def periodicset_from_gemmi_block(
     wyc_muls = np.array(wyc_muls, dtype=np.uint64)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.uint64)
     asym_inds[1:] = np.cumsum(wyc_muls, dtype=np.uint64)[:-1]
+
     motif = np.matmul(frac_motif, cell)
     
+    # for i, (type, occ, lab, asm, grp) in zip(asym_types, asym_occs, asym_labels, assemblies, groups):
+    #     if i not in remove_sites:
+
     asym_types = [s for i, s in enumerate(asym_types) if i not in remove_sites]
     asym_occs = [s for i, s in enumerate(asym_occs) if i not in remove_sites]
     asym_labels = [s for i, s in enumerate(asym_labels) if i not in remove_sites]
     assemblies = [s for i, s in enumerate(assemblies) if i not in remove_sites]
     groups = [s for i, s in enumerate(groups) if i not in remove_sites]
+
     disorder = _disorder_assemblies(
         asym_unit, wyc_muls, cell, assemblies, groups, asym_occs, eq_site_tol
     )
     asym_types = np.array(asym_types, dtype=np.uint64)
+
+    if reduce_cell:
+        cell = lll_reduce(cell)
+        motif = np.mod(motif @ np.linalg.inv(cell), 1) @ cell
 
     return PeriodicSet(
         motif=motif,
@@ -756,8 +797,9 @@ def periodicset_from_ccdc_entry(
     skip_disorder: bool = False,
     missing_coords: str = "warn",
     eq_site_tol: float = 1e-3,
+    reduce_cell: bool = False,
     heaviest_component: bool = False,
-    molecular_centres: bool = False,
+    molecular_centres: bool = False
 ) -> PeriodicSet:
     """Convert a :class:`ccdc.entry.Entry` object to a
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
@@ -771,6 +813,15 @@ def periodicset_from_ccdc_entry(
         Remove Hydrogens from the crystal.
     skip_disorder : bool
         Do not read disordered structures.
+    missing_coords : str
+        Action to take upon finding missing coordinates. "warn" (default) will
+        emit a warning when a structure has missing coordinates, and the sites
+        will be removed. "skip" will not read structures with missing coords.
+    eq_site_tol : float, default 0.001
+        Tolerance below which two sites are considered to be at the same
+        position. 
+    reduce_cell : bool, default False
+        Reduce the unit cell (Lenstra-Lenstra-Lovasz lattice basis reduction).
     heaviest_component : bool, optional
         Removes all but the heaviest molecule in the asymmeric unit,
         intended for removing solvents.
@@ -814,6 +865,7 @@ def periodicset_from_ccdc_entry(
         eq_site_tol=eq_site_tol,
         heaviest_component=heaviest_component,
         molecular_centres=molecular_centres,
+        reduce_cell=reduce_cell
     )
 
 
@@ -823,8 +875,9 @@ def periodicset_from_ccdc_crystal(
     skip_disorder: bool = False,
     missing_coords: str = "warn",
     eq_site_tol: float = 1e-3,
+    reduce_cell: bool = False,
     heaviest_component: bool = False,
-    molecular_centres: bool = False,
+    molecular_centres: bool = False
 ) -> PeriodicSet:
     """Convert a :class:`ccdc.crystal.Crystal` object to a
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
@@ -838,6 +891,15 @@ def periodicset_from_ccdc_crystal(
         Remove Hydrogens from the crystal.
     skip_disorder : bool
         Do not read disordered structures.
+    missing_coords : str
+        Action to take upon finding missing coordinates. "warn" (default) will
+        emit a warning when a structure has missing coordinates, and the sites
+        will be removed. "skip" will not read structures with missing coords.
+    eq_site_tol : float, default 0.001
+        Tolerance below which two sites are considered to be at the same
+        position. 
+    reduce_cell : bool, default False
+        Reduce the unit cell (Lenstra-Lenstra-Lovasz lattice basis reduction).
     heaviest_component : bool, optional
         Removes all but the heaviest molecule in the asymmeric unit,
         intended for removing solvents.
@@ -940,6 +1002,10 @@ def periodicset_from_ccdc_crystal(
         asym_unit, wyc_muls, cell, assemblies, groups, asym_occs, eq_site_tol
     )
 
+    if reduce_cell:
+        cell = lll_reduce(cell)
+        motif = np.mod(motif @ np.linalg.inv(cell), 1) @ cell
+
     return PeriodicSet(
         motif=motif,
         cell=cell,
@@ -959,14 +1025,10 @@ def _parse_sitesyms(symmetries: List[str]) -> Tuple[FloatArray, FloatArray]:
     n = len(symmetries)
     rotations = np.empty((n, 3, 3), dtype=np.float64)
     translations = np.empty((n, 3), dtype=np.float64)
-    # rotations = []
-    # translations = []
     for i, sym in enumerate(symmetries):
         rot, trans = _parse_sitesym(sym)
         rotations[i] = rot
         translations[i] = trans
-        # rotations.append(rot)
-        # translations.append(trans)
     return rotations, translations
 
 
@@ -1169,11 +1231,94 @@ def _unique_sites(asym_unit: FloatArray, tol: float) -> npt.NDArray[np.bool_]:
     return where_unique
 
 
+def lll_reduce(cell, delta: float = 0.75) -> npt.NDArray[np.float64]:
+    """Perform a Lenstra-Lenstra-Lovasz lattice basis reduction to obtain a
+    c-reduced basis. This method returns a basis which is as "good" as
+    possible, with "good" defined by orthogonality of the lattice vectors.
+    This basis is used for all the periodic boundary condition calculations.
+
+    Parameters
+    ----------
+        delta (float): Reduction parameter. Default of 0.75 is usually fine.
+
+    Returns
+    -------
+        Reduced lattice matrix, mapping to get to that lattice.
+    """
+
+    a = cell.T
+    b = np.zeros((3, 3))  # Vectors after the Gram-Schmidt process
+    u = np.zeros((3, 3))  # Gram-Schmidt coefficients
+    m = np.zeros(3)  # These are the norm squared of each vec
+
+    b[:, 0] = a[:, 0]
+    m[0] = np.dot(b[:, 0], b[:, 0])
+    for i in range(1, 3):
+        u[i, :i] = np.dot(a[:, i].T, b[:, :i]) / m[:i]
+        b[:, i] = a[:, i] - np.dot(b[:, :i], u[i, :i].T)
+        m[i] = np.dot(b[:, i], b[:, i])
+
+    k = 2
+    mapping = np.identity(3, dtype=np.float64)
+    while k <= 3:
+        # Size reduction
+        for i in range(k - 1, 0, -1):
+            q = round(u[k - 1, i - 1])
+            if q != 0:
+                # Reduce the k-th basis vector
+                a[:, k - 1] -= q * a[:, i - 1]
+                mapping[:, k - 1] -= q * mapping[:, i - 1]
+                uu = list(u[i - 1, 0 : (i - 1)])
+                uu.append(1)
+                # Update the GS coefficients
+                u[k - 1, 0:i] -= q * np.array(uu)
+
+        # Check the Lovasz condition
+        if np.dot(b[:, k - 1], b[:, k - 1]) >= (delta - abs(u[k - 1, k - 2]) ** 2) * np.dot(
+            b[:, (k - 2)], b[:, (k - 2)]
+        ):
+            # Increment k if the Lovasz condition holds
+            k += 1
+        else:
+            # If the Lovasz condition fails, swap the k-th and (k-1)-th basis vector
+            v = a[:, k - 1].copy()
+            a[:, k - 1] = a[:, k - 2].copy()
+            a[:, k - 2] = v
+
+            v_m = mapping[:, k - 1].copy()
+            mapping[:, k - 1] = mapping[:, k - 2].copy()
+            mapping[:, k - 2] = v_m
+
+            # Update the Gram-Schmidt coefficients
+            for s in range(k - 1, k + 1):
+                u[s - 1, : (s - 1)] = np.dot(a[:, s - 1].T, b[:, : (s - 1)]) / m[: (s - 1)]
+                b[:, s - 1] = a[:, s - 1] - np.dot(b[:, : (s - 1)], u[s - 1, : (s - 1)].T)
+                m[s - 1] = np.dot(b[:, s - 1], b[:, s - 1])
+
+            if k > 2:
+                k -= 1
+            else:
+                # We have to do p/q, so do lstsq(q.T, p.T).T instead
+                q = np.diag(m[(k - 2) : k])
+                p = np.dot(a[:, k:3].T, b[:, (k - 2) : k])
+                result = np.linalg.lstsq(q.T, p.T, rcond=None)[0].T
+                # result = np.linalg.inv(q.T) @ p.T  # if invertibility guaranteed
+                u[k:3, (k - 2) : k] = result
+
+    return a.T
+
+
 def _disorder_assemblies(
-        asym_unit, multiplicities, cell, assemblies, groups, asym_occs, eq_site_tol
+        asym_unit,
+        multiplicities,
+        cell,
+        assemblies,
+        groups,
+        asym_occs,
+        eq_site_tol
 ):
 
-    disorder = {}
+    disorder = {}  # asm_name: {grp_name: [inds...], ...}
 
     # Follow given assemblies and groups
     for i, (asmbly, grp) in enumerate(zip(assemblies, groups)):
@@ -1274,15 +1419,23 @@ def _disorder_assemblies(
 
     # Check multiplicities ?
     assemblies = []
-    for k, asm_ in disorder.items():
-        if k is None:
+    for asm_name, asm_ in disorder.items():
+        
+        if asm_name is None:
             continue
+
+        if len(asm_) < 2 and asym_occs[list(asm_.values())[0][0]] >= 1:
+            continue
+
+        # normalise if occupancies sum to > 1
+        occ_sum = sum(asym_occs[grp[0]] for grp in asm_.values())
+        norm = max(1, occ_sum)
         assemblies.append(DisorderAssembly(
             groups=[
-                DisorderGroup(indices=grp, occupancy=asym_occs[grp[0]])
+                DisorderGroup(indices=grp, occupancy=asym_occs[grp[0]] / norm)
                 for grp in asm_.values()
             ],
-            is_substitutional=k.startswith("sub")
+            is_substitutional=(asm_name.startswith("sub") and occ_sum >= 1)
         ))
 
     if not assemblies:

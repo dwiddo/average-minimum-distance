@@ -20,7 +20,7 @@ Module                 Description
 ===================    ===================================================
 """
 
-__version__ = "1.6.0"
+__version__ = "1.6.1"
 __author__ = "Daniel Widdowson"
 __maintainer__ = "Daniel Widdowson"
 __email__ = "D.E.Widdowson@liverpool.ac.uk"
