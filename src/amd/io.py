@@ -147,7 +147,7 @@ class _Reader(collections.abc.Iterator):
         return items
 
 
-class CifReader(_Reader):
+class CifReader(_Reader, Iterator[PeriodicSet]):
     """Read all structures in a .cif file or all files in a folder
     with ase or csd-python-api (if installed), yielding
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` s.
@@ -318,6 +318,9 @@ class CifReader(_Reader):
 
         super().__init__(iterable, converter, show_warnings, verbose)
 
+    def __iter__(self) -> Iterator[PeriodicSet]:
+        return self
+
     @staticmethod
     def _dir_generator(
         directory: Path, file_parser: Callable, extensions: set[str]
@@ -336,7 +339,7 @@ class CifReader(_Reader):
                     )
 
 
-class CSDReader(_Reader):
+class CSDReader(_Reader, Iterator[PeriodicSet]):
     """Read structures from the CSD with csd-python-api, yielding
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>` s.
 
@@ -477,6 +480,8 @@ class CSDReader(_Reader):
 
         super().__init__(iterable, converter, show_warnings, verbose)
 
+    def __iter__(self) -> Iterator[PeriodicSet]:
+        return self
 
 # class MPReader(_Reader):
 #     """Read structures from the Materials Project API, yielding
@@ -753,7 +758,7 @@ def periodicset_from_gemmi_block(
         rot = np.array([np.array(o.rot) / o.DEN for o in spg.operations()])
         trans = np.array([np.array(o.tran) / o.DEN for o in spg.operations()])
 
-    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, eq_site_tol)
+    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, eq_site_tol, uniquify_sites=False)
     _, wyc_muls = np.unique(invs, return_counts=True)
     wyc_muls = np.array(wyc_muls, dtype=np.uint64)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.uint64)
@@ -956,10 +961,12 @@ def periodicset_from_ccdc_crystal(
         raise ParseError(f"{crystal.identifier} has no unit cell")
     cell = cellpar_to_cell(np.array(cellpar))
 
+    c_pset = None
     if molecular_centres:
         frac_centres = _frac_molecular_centres_ccdc(crystal, eq_site_tol)
         mol_centres = np.matmul(frac_centres, cell)
-        return PeriodicSet(mol_centres, cell, name=crystal.identifier)
+        c_pset = PeriodicSet(mol_centres, cell, name=crystal.identifier)
+        return c_pset
 
     asym_atoms = molecule.atoms
     asym_unit = np.array([tuple(a.fractional_coordinates) for a in asym_atoms])
@@ -967,7 +974,7 @@ def periodicset_from_ccdc_crystal(
     if asym_unit.shape[0] == 0:
         raise ParseError(f"{crystal.identifier} has no coordinates")
 
-    asym_unit = np.mod(asym_unit, 1)
+    # asym_unit = np.mod(asym_unit, 1)
 
     # Symmetry operations
     sitesym = crystal.symmetry_operators
@@ -1110,7 +1117,7 @@ def _expand_asym_unit(
 
     if uniquify_sites:
         if not all(_unique_sites(frac_motif, tol)):
-            frac_motif, invs = _reduce_expanded_equiv_sites(expanded_sites, tol)
+            return _reduce_expanded_equiv_sites(expanded_sites, tol)
 
     return frac_motif, invs
 
@@ -1182,6 +1189,7 @@ def _reduce_expanded_equiv_sites(
     unique_inds = _unique_sites(sites, tol)
     frac_motif = sites[unique_inds]
     inverses = [0] * len(frac_motif)
+    asym_inds = []
 
     for i in range(1, len(expanded_sites)):
         sites = expanded_sites[i]
@@ -1204,8 +1212,9 @@ def _reduce_expanded_equiv_sites(
         if points:
             inverses.extend(i for _ in range(len(points)))
             frac_motif = np.concatenate((frac_motif, np.array(points)))
+            asym_inds.append(i)
 
-    return frac_motif, np.array(inverses, dtype=np.uint64)
+    return frac_motif, np.array(inverses, dtype=np.uint64), np.array(asym_inds)
 
 
 @numba.njit(cache=True)
@@ -1598,11 +1607,14 @@ def _frac_molecular_centres_ccdc(crystal, tol: float) -> FloatArray:
     """Return the geometric centres of molecules in the unit cell.
     Expects a ccdc Crystal object and returns fractional coordiantes.
     """
-
     frac_centres = []
-    for comp in crystal.packing(inclusion="CentroidIncluded").components:
+    for comp in crystal.packing(inclusion="AnyAtomIncluded").components:
+        # if len(comp.atoms) < 2:  # Temporary: delete single atoms
+        #     continue
         coords = [a.fractional_coordinates for a in comp.atoms]
         frac_centres.append([sum(ax) / len(coords) for ax in zip(*coords)])
+    if not frac_centres:
+        raise ValueError("No molecules with > 1 atom found")
     frac_centres = np.mod(np.array(frac_centres, dtype=np.float64), 1)
     return frac_centres[_unique_sites(frac_centres, tol)]
 

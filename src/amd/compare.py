@@ -97,7 +97,13 @@ def _EMD(
         Matrix of optimal flows between the two distributions.
     """
 
-    dm = cdist(dist, dist_, metric=metric, **kwargs)
+    _metric = metric
+    divide_by = 1
+    if metric.upper() == "RMS":
+        _metric = "euclidean"
+        divide_by = np.sqrt(dist.shape[-1])
+
+    dm = cdist(dist, dist_, metric=_metric, **kwargs) / divide_by
     return network_simplex(weights, weights_, dm)
 
 
