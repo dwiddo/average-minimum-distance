@@ -457,7 +457,7 @@ def PDD_reconstructable(pset: PeriodicSet, lexsort: bool = True) -> FloatArray:
             "Reconstructing from PDD is only possible for 2 and 3 dimensions."
         )
     min_val = diameter(pset.cell) * 2
-    pdd, _, _ = nearest_neighbors_minval(pset.motif, pset.cell, min_val)
+    pdd, _, _ = nearest_neighbors_minval(pset.motif, pset.cell, pset.motif, min_val)
     if lexsort:
         lex_ordering = np.lexsort(pdd.T[::-1])
         pdd = pdd[lex_ordering]

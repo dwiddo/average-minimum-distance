@@ -14,6 +14,13 @@ from .utils import lll_reduce
 
 __all__ = ["nearest_neighbors", "nearest_neighbors_data", "nearest_neighbors_minval"]
 
+# Value used to pad the buffers of squared distances below before they
+# have been filled. It stands in for infinity, but is finite because the
+# kernels are compiled with fastmath (which allows assuming operands are
+# not infinite) and is far larger than any squared distance that can
+# arise, including after a square root and squaring again.
+_SQDIST_MAX = 1e150
+
 
 def _reduced_cell(cell: FloatArray) -> FloatArray:
     """Return an LLL-reduced basis of the lattice given by ``cell``.
@@ -54,6 +61,41 @@ def _layer_dist_factor(cell: FloatArray) -> float:
     to know when no further layer can hold a neighbor.
     """
     return float(np.linalg.svd(cell, compute_uv=False).min())
+
+
+def _motif_bounding_sphere(
+    motif: FloatArray, x: FloatArray
+) -> Tuple[FloatArray, float]:
+    """Return ``x`` shifted so the motif's centre is the origin, and a
+    radius ``r`` with ``|p - centre| <= r`` for every motif point ``p``.
+
+    The searches use this to skip a lattice point ``l`` outright: every
+    point of the translated motif ``l + motif`` is at least
+    ``|(x - centre) - l| - r`` away from ``x``, so if that already
+    exceeds the current worst neighbor distance, none of the ``m``
+    points behind ``l`` can be a neighbor and all ``m`` distance
+    computations can be skipped.
+    """
+
+    centre = motif.mean(axis=0)
+    offsets = motif - centre
+    radius = float(np.sqrt(np.einsum("ij,ij->i", offsets, offsets).max()))
+    return x - centre, radius
+
+
+def _seed_translates(lat_seed: int, n_lat: int, m: int, k: int) -> int:
+    """How many translates of the motif to measure in full before the
+    rest of the first batch is scanned with a threshold to prune by.
+
+    ``lat_seed`` translates (all layers of the batch but the last) are
+    enough to hold more than k points, but a threshold taken from barely
+    more than k points rules almost nothing out, and scanning the rest
+    against it then costs more than simply selecting from the whole
+    batch in one go. So the batch is only split when the seed holds
+    comfortably more points than the k asked for.
+    """
+
+    return lat_seed if lat_seed * m >= 2 * k else n_lat
 
 
 def nearest_neighbors(
@@ -102,21 +144,27 @@ def nearest_neighbors(
     m, dims = motif.shape
 
     # Get an initial collection of points and a generator for more
-    int_lattice, int_lat_generator = _integer_lattice_batches(dims, m, k)
+    int_lattice, lat_seed, int_lat_generator = _integer_lattice_batches(dims, m, k)
+    lat_seed = _seed_translates(lat_seed, len(int_lattice), m, k)
     layer = _n_layers(int_lattice)
     layer_dist = _layer_dist_factor(cell)
-    cloud = _lattice_to_cloud(motif, int_lattice @ cell)
+    xc, motif_radius = _motif_bounding_sphere(motif, x)
+    motif_t = np.ascontiguousarray(motif.T)
+    motif_diam = np.sqrt(_cdist_sqeulcidean(x, motif).max())
 
-    # Squared distances to k nearest neighbors
-    sqdists = _cdist_sqeulcidean(x, cloud)
-    motif_diam = np.sqrt(sqdists[:, :m].max())
-    sqdists.partition(k - 1)
-    sqdists = sqdists[:, :k]
-    sqdists.sort()
+    # Squared distances to the k nearest neighbors of each point of x.
+    # The points of the periodic set are never materialised: each batch
+    # of lattice points is folded straight into the buffers.
+    buf, thresh = _sqdist_buffers(x.shape[0], k)
+    init_lattice = int_lattice @ cell
+    _init_sqdist_buffers(buf, thresh, x, motif_t, init_lattice, lat_seed, k)
+    _update_sqdist_buffers(
+        buf, thresh, x, xc, motif_t, init_lattice, motif_radius, k, lat_seed
+    )
 
     # If a lattice point l has |l| >= max|p-p'| + max_d for p ∈ x, p' ∈ motif
     # then |p-(l+p')| >= max_d for all p, p' and l can be discarded.
-    max_sqd = sqdists[:, -1].max()
+    max_sqd = thresh.max()
     radius = np.sqrt(max_sqd) + motif_diam
 
     # Every point not yet generated lies in layer ``layer`` or later, so
@@ -127,7 +175,9 @@ def nearest_neighbors(
     # the integer lattice need not grow outwards steadily once mapped
     # into Cartesian space.
     while layer_dist * (layer - 1) < radius:
-        # Get next layer of lattice and prune distant lattice points
+        # Get next layer of lattice and prune distant lattice points.
+        # This bound holds for every point of x at once, so it is worth
+        # applying before the sharper per-point one inside the kernel.
         lattice = next(int_lat_generator) @ cell
         layer += 1
 
@@ -135,25 +185,14 @@ def nearest_neighbors(
         if lattice.size == 0:  # None are close enough
             continue
 
-        # Squared distances to new points
-        cloud = _lattice_to_cloud(motif, lattice)
-        sqdists_ = _cdist_sqeulcidean(x, cloud)
-        where_close = (sqdists_ < max_sqd).any(axis=0)
-        if not np.any(where_close):  # None are close enough
-            continue
-
-        # Squared distances to up to k nearest new points
-        sqdists_ = sqdists_[:, where_close]
-        if sqdists_.shape[-1] > k:
-            sqdists_.partition(k - 1)
-            sqdists_ = sqdists_[:, :k]
-        sqdists_.sort()
-
-        # Merge existing and new distances
-        sqdists = _merge_sorted_arrays(sqdists, sqdists_)
-        max_sqd = sqdists[:, -1].max()
+        _update_sqdist_buffers(
+            buf, thresh, x, xc, motif_t, lattice, motif_radius, k, 0
+        )
+        max_sqd = thresh.max()
         radius = np.sqrt(max_sqd) + motif_diam
 
+    sqdists = buf[:, :k]
+    sqdists.sort()
     return np.sqrt(sqdists)
 
 
@@ -215,22 +254,32 @@ def nearest_neighbors_data(
     # still refer to neighbors of the points passed in.
     cell = _reduced_cell(cell)
 
-    int_lattice, int_lat_generator = _integer_lattice_batches(dims, m, k)
+    int_lattice, lat_seed, int_lat_generator = _integer_lattice_batches(dims, m, k)
+    lat_seed = _seed_translates(lat_seed, len(int_lattice), m, k)
     layer = _n_layers(int_lattice)
     layer_dist = _layer_dist_factor(cell)
-    cloud = _lattice_to_cloud(motif, int_lattice @ cell)
+    xc, motif_radius = _motif_bounding_sphere(motif, x)
+    motif_t = np.ascontiguousarray(motif.T)
+    motif_diam = np.sqrt(_cdist_sqeulcidean(x, motif).max())
+
+    lattice = int_lattice @ cell
+    cloud = _lattice_to_cloud(motif, lattice)
     full_cloud.append(cloud)
     cloud_ind_offset = len(cloud)
 
-    sqdists = _cdist_sqeulcidean(x, cloud)
-    motif_diam = np.sqrt(sqdists[:, :m].max())
-    part_inds = np.argpartition(sqdists, k - 1)[:, :k]
-    part_sqdists = np.take_along_axis(sqdists, part_inds, axis=-1)[:, :k]
-    part_sort_inds = np.argsort(part_sqdists)
-    inds = np.take_along_axis(part_inds, part_sort_inds, axis=-1)
-    sqdists = np.take_along_axis(part_sqdists, part_sort_inds, axis=-1)
+    # Buffers of squared distances per point of x (see _sqdist_buffers),
+    # with the index in the cloud each distance came from alongside
+    buf, thresh = _sqdist_buffers(x.shape[0], k)
+    buf_inds = np.zeros(buf.shape, dtype=np.int64)
+    _init_sqdist_buffers_with_inds(
+        buf, buf_inds, thresh, x, motif_t, lattice, lat_seed, k
+    )
+    _update_sqdist_buffers_with_inds(
+        buf, buf_inds, thresh, x, xc, motif_t, lattice, motif_radius, k,
+        lat_seed, 0,
+    )
 
-    max_sqd = sqdists[:, -1].max()
+    max_sqd = thresh.max()
     radius = np.sqrt(max_sqd) + motif_diam
 
     while layer_dist * (layer - 1) < radius:
@@ -241,24 +290,23 @@ def nearest_neighbors_data(
             continue
 
         cloud = _lattice_to_cloud(motif, lattice)
-        sqdists_ = _cdist_sqeulcidean(x, cloud)
-        close = sqdists_ < max_sqd
-        if not np.any(close):
+        n_kept = _update_sqdist_buffers_with_inds(
+            buf, buf_inds, thresh, x, xc, motif_t, lattice, motif_radius, k,
+            0, cloud_ind_offset,
+        )
+        if n_kept == 0:  # No point of this batch is a neighbor
             continue
 
-        argpart_upto = min(k - 1, sqdists_.shape[-1] - 1)
-        part_inds = np.argpartition(sqdists_, argpart_upto)[:, :k]
-        part_sqdists = np.take_along_axis(sqdists_, part_inds, axis=-1)[:, :k]
-        part_sort_inds = np.argsort(part_sqdists)
-        inds_ = np.take_along_axis(part_inds, part_sort_inds, axis=-1)
-        sqdists_ = np.take_along_axis(part_sqdists, part_sort_inds, axis=-1)
-        inds_ += cloud_ind_offset
         cloud_ind_offset += len(cloud)
         full_cloud.append(cloud)
-
-        sqdists, inds = _merge_sorted_arrays_and_inds(sqdists, sqdists_, inds, inds_)
-        max_sqd = sqdists[:, -1].max()
+        max_sqd = thresh.max()
         radius = np.sqrt(max_sqd) + motif_diam
+
+    # The buffers hold the right k distances, but in no particular order
+    sqdists, inds = buf[:, :k], buf_inds[:, :k]
+    order = np.argsort(sqdists, axis=-1)
+    sqdists = np.take_along_axis(sqdists, order, axis=-1)
+    inds = np.take_along_axis(inds, order, axis=-1)
 
     return np.sqrt(sqdists), np.concatenate(full_cloud), inds
 
@@ -270,13 +318,13 @@ def _integer_lattice_batches_cache(func: Callable) -> Callable:
     is passed to the cache. One cache is kept for each dimension.
     """
 
-    cache = {}  # (dims, n_layers): (layers, generator)
+    cache = {}  # (dims, n_layers): [int_lattice, generator, n_seed]
     npoints_cache = {}  # dims: [num points accumulated in layers 1,2,...]
 
     @functools.wraps(func)
     def wrapper(
         dims: int, m: int, k: int
-    ) -> Tuple[List[FloatArray], Iterator[FloatArray]]:
+    ) -> Tuple[FloatArray, int, Iterator[FloatArray]]:
         if dims not in npoints_cache:
             npoints_cache[dims] = []
 
@@ -296,11 +344,15 @@ def _integer_lattice_batches_cache(func: Callable) -> Callable:
             # If more layers were made than seen so far, update npoints_cache
             if len(npoints_cache[dims]) < n_layers:
                 npoints_cache[dims] = list(accumulate(len(i) for i in layers))
-            cache[(dims, n_layers)] = [np.concatenate(layers), generator]
+            # Points of every layer but the last, which is the extra
+            # one _integer_lattice_batches appends; depends only on dims
+            # and n_layers, so it is shared by every entry of the cache
+            n_seed = sum(len(i) for i in layers[:-1])
+            cache[(dims, n_layers)] = [np.concatenate(layers), generator, n_seed]
 
-        layers, generator = cache[(dims, n_layers)]
+        int_lattice, generator, n_seed = cache[(dims, n_layers)]
         cache[(dims, n_layers)][1], ret_generator = tee(generator)
-        return layers, ret_generator
+        return int_lattice, n_seed, ret_generator
 
     return wrapper
 
@@ -311,6 +363,12 @@ def _integer_lattice_batches(
 ) -> Tuple[List[FloatArray], Iterator[FloatArray]]:
     """Return an initial batch of integer lattice points (number
     according to k & m) and a generator for more distant points.
+
+    Decorated by ``_integer_lattice_batches_cache``, so the batch comes
+    back as one array, along with how many of its points come from all
+    but the last layer. Those alone already carry more than k points of
+    the periodic set, which the searches use to get a threshold before
+    scanning the rest.
 
     Parameters
     ----------
@@ -330,6 +388,8 @@ def _integer_lattice_batches(
         A collection of integer lattice points. Consists of the first
         few layers generated by ``integer_lattice_generator`` (number of
         layers depends on m, k).
+    n_seed : int
+        How many of those points come from all but the last layer.
     integer_lattice_generator
         A generator for integer lattice points more distant than those
         in ``initial_integer_lattice``.
@@ -494,111 +554,422 @@ def _where_sq_sum_lt_bound(XA, bound):
 
 
 @numba.njit(cache=True, fastmath=True)
-def _merge_sorted_arrays(dists: FloatArray, dists_: FloatArray) -> FloatArray:
-    """Merge two 2D arrays with sorted rows into one sorted array with
-    same number of columns as ``dists``. Optimised assuming that only a
-    few elements at the end of each row of ``dists`` needs to be
-    changed.
+def _select_kth(a: FloatArray, n: int, kth: int) -> float:
+    """Reorder ``a[:n]`` in place so that ``a[:kth + 1]`` holds its
+    ``kth + 1`` smallest values and ``a[kth]`` is the largest of them,
+    which is returned. Quickselect with a median-of-three pivot.
     """
 
-    m, n_new_points = dists_.shape
-    n_points = dists.shape[-1]
-    ret = np.copy(dists)
-    if n_new_points == 0:
-        return ret
+    lo, hi = 0, n - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if a[mid] < a[lo]:
+            a[mid], a[lo] = a[lo], a[mid]
+        if a[hi] < a[lo]:
+            a[hi], a[lo] = a[lo], a[hi]
+        if a[hi] < a[mid]:
+            a[hi], a[mid] = a[mid], a[hi]
+        pivot = a[mid]
 
-    for i in range(m):
-        # Traverse dists[i] backwards until value smaller than dists_[i, 0],
-        # stopping at the start of the row if there is no such value
-        j = -1
-        dp_ = 0
-        dist_ = dists_[i, dp_]
-        while j > -n_points and dists[i, j] > dist_:
-            j -= 1
-        if dists[i, j] <= dist_:
-            j += 1
-        # Otherwise every value in dists[i] is larger than dists_[i, 0]
-        # and the whole row is rewritten (j == -n_points).
+        i, j = lo, hi
+        while i <= j:
+            while a[i] < pivot:
+                i += 1
+            while a[j] > pivot:
+                j -= 1
+            if i <= j:
+                a[i], a[j] = a[j], a[i]
+                i += 1
+                j -= 1
 
-        # If dists_[i, 0] >= dists[i, -1], no need to insert
-        if j == 0:
-            continue
+        if kth <= j:
+            hi = j
+        elif kth >= i:
+            lo = i
+        else:
+            return a[kth]
 
-        # dp points to dists[i], dp_ points to dists_[i], j points to ret[i]
-        # Fill ret with the larger value, increment pointers and repeat
-        dp = j
-        dist = dists[i, dp]
-
-        while j < 0:
-            if dist <= dist_:
-                ret[i, j] = dist
-                dp += 1
-                dist = dists[i, dp]
-            else:
-                ret[i, j] = dist_
-                dp_ += 1
-                if dp_ < n_new_points:
-                    dist_ = dists_[i, dp_]
-                else:  # ran out of points in dists_
-                    dist_ = np.inf
-            j += 1
-
-    return ret
+    return a[kth]
 
 
 @numba.njit(cache=True, fastmath=True)
-def _merge_sorted_arrays_and_inds(
-    dists: FloatArray, dists_: FloatArray, inds: UIntArray, inds_: UIntArray
-) -> Tuple[FloatArray, UIntArray]:
-    """Similar to _merge_sorted_arrays, but also merges two arrays
-    ``inds`` and ``inds_`` with the same pattern for
-    ``nearest_neighbors_data``.
+def _select_kth_with_inds(
+    a: FloatArray, inds: UIntArray, n: int, kth: int
+) -> float:
+    """``_select_kth`` which permutes ``inds[:n]`` alongside ``a[:n]``."""
+
+    lo, hi = 0, n - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if a[mid] < a[lo]:
+            a[mid], a[lo] = a[lo], a[mid]
+            inds[mid], inds[lo] = inds[lo], inds[mid]
+        if a[hi] < a[lo]:
+            a[hi], a[lo] = a[lo], a[hi]
+            inds[hi], inds[lo] = inds[lo], inds[hi]
+        if a[hi] < a[mid]:
+            a[hi], a[mid] = a[mid], a[hi]
+            inds[hi], inds[mid] = inds[mid], inds[hi]
+        pivot = a[mid]
+
+        i, j = lo, hi
+        while i <= j:
+            while a[i] < pivot:
+                i += 1
+            while a[j] > pivot:
+                j -= 1
+            if i <= j:
+                a[i], a[j] = a[j], a[i]
+                inds[i], inds[j] = inds[j], inds[i]
+                i += 1
+                j -= 1
+
+        if kth <= j:
+            hi = j
+        elif kth >= i:
+            lo = i
+        else:
+            return a[kth]
+
+    return a[kth]
+
+
+def _sqdist_buffers(n_x: int, k: int) -> Tuple[FloatArray, FloatArray]:
+    """Allocate the state the searches below keep for each point of
+    ``x``: a buffer of squared distances and the current threshold.
+
+    Each row of ``buf`` holds the k smallest squared distances found so
+    far in ``buf[i, :k]``, followed by room to append new candidates.
+    ``thresh[i]`` is the largest of the k, so a point is only worth
+    keeping if it is closer than that. Both start out as ``_SQDIST_MAX``
+    so that every point is a candidate until k of them are found.
     """
 
-    m, n_new_points = dists_.shape
-    n_points = dists.shape[-1]
-    ret_dists = np.copy(dists)
-    ret_inds = np.copy(inds)
-    if n_new_points == 0:
-        return ret_dists, ret_inds
+    # Candidates are appended rather than inserted, and the k smallest
+    # re-selected only once the room runs out, which costs O(k) per
+    # ``k // 8`` candidates instead of O(log k) per candidate. The
+    # threshold then lags by at most that many candidates, which only
+    # weakens the pruning below slightly and never the result.
+    buf = np.full((n_x, k + max(16, k // 8)), _SQDIST_MAX)
+    return buf, np.full(n_x, _SQDIST_MAX)
 
-    for i in range(m):
-        j = -1
-        dp_ = 0
-        dist_ = dists_[i, dp_]
-        p_ = inds_[i, dp_]
 
-        while j > -n_points and dists[i, j] > dist_:
-            j -= 1
-        if dists[i, j] <= dist_:
-            j += 1
+@numba.njit(cache=True, fastmath=True)
+def _init_sqdist_buffers(
+    buf: FloatArray,
+    thresh: FloatArray,
+    x: FloatArray,
+    motif_t: FloatArray,
+    lattice: FloatArray,
+    lat_seed: int,
+    k: int,
+) -> None:
+    """Seed the buffers of ``_sqdist_buffers`` with the k nearest
+    points of the first ``lat_seed`` translates of the motif, which
+    between them hold more than k points.
 
-        if j == 0:
-            continue
+    Until k points have been found there is no threshold to prune with,
+    and a running threshold would be beaten by most of them anyway. So
+    just enough translates to hold k points are measured into a scratch
+    array, one point of ``x`` at a time, and the k smallest selected in
+    a single pass; the caller folds in the remaining translates, which a
+    now exact threshold prunes properly. Only the scratch array is ever
+    materialised, not the (len(x), batch size) matrix of all distances.
+    """
 
-        dp = j
-        dist = dists[i, dp]
-        p = inds[i, dp]
+    n_x, dims = x.shape
+    m = motif_t.shape[-1]
+    n_pairs = m * lat_seed
+    n = max(n_pairs, k)
+    scratch = np.empty(n, dtype=np.float64)
 
-        while j < 0:
-            if dist <= dist_:
-                ret_dists[i, j] = dist
-                ret_inds[i, j] = p
-                dp += 1
-                dist = dists[i, dp]
-                p = inds[i, dp]
-            else:
-                ret_dists[i, j] = dist_
-                ret_inds[i, j] = p_
-                dp_ += 1
-                if dp_ < n_new_points:
-                    dist_ = dists_[i, dp_]
-                    p_ = inds_[i, dp_]
-                else:
-                    dist_ = np.inf
-            j += 1
+    for i in range(n_x):
+        for lat_i in range(lat_seed):
+            off = lat_i * m
+            xl_d = x[i, 0] - lattice[lat_i, 0]
+            for mot_i in range(m):
+                diff = xl_d - motif_t[0, mot_i]
+                scratch[off + mot_i] = diff * diff
+            for d in range(1, dims):
+                xl_d = x[i, d] - lattice[lat_i, d]
+                for mot_i in range(m):
+                    diff = xl_d - motif_t[d, mot_i]
+                    scratch[off + mot_i] += diff * diff
 
-    return ret_dists, ret_inds
+        # Only if the whole batch holds fewer than k points, which the
+        # sizing in _integer_lattice_batches rules out for a periodic set
+        for j in range(n_pairs, n):
+            scratch[j] = _SQDIST_MAX
+
+        thresh[i] = _select_kth(scratch, n, k - 1)
+        for j in range(k):
+            buf[i, j] = scratch[j]
+
+
+@numba.njit(cache=True, fastmath=True)
+def _init_sqdist_buffers_with_inds(
+    buf: FloatArray,
+    buf_inds: UIntArray,
+    thresh: FloatArray,
+    x: FloatArray,
+    motif_t: FloatArray,
+    lattice: FloatArray,
+    lat_seed: int,
+    k: int,
+) -> None:
+    """``_init_sqdist_buffers`` which also records which point of the
+    cloud each distance came from. Point ``n`` of the scratch array is
+    point ``n`` of ``_lattice_to_cloud(motif, lattice)``.
+    """
+
+    n_x, dims = x.shape
+    m = motif_t.shape[-1]
+    n_pairs = m * lat_seed
+    n = max(n_pairs, k)
+    scratch = np.empty(n, dtype=np.float64)
+    scratch_inds = np.empty(n, dtype=np.int64)
+
+    for i in range(n_x):
+        for lat_i in range(lat_seed):
+            off = lat_i * m
+            xl_d = x[i, 0] - lattice[lat_i, 0]
+            for mot_i in range(m):
+                diff = xl_d - motif_t[0, mot_i]
+                scratch[off + mot_i] = diff * diff
+            for d in range(1, dims):
+                xl_d = x[i, d] - lattice[lat_i, d]
+                for mot_i in range(m):
+                    diff = xl_d - motif_t[d, mot_i]
+                    scratch[off + mot_i] += diff * diff
+
+        for j in range(n_pairs, n):
+            scratch[j] = _SQDIST_MAX
+        # Reset every row: the selection below permutes both arrays
+        for j in range(n):
+            scratch_inds[j] = j
+
+        thresh[i] = _select_kth_with_inds(scratch, scratch_inds, n, k - 1)
+        for j in range(k):
+            buf[i, j] = scratch[j]
+            buf_inds[i, j] = scratch_inds[j]
+
+
+@numba.njit(cache=True, fastmath=True)
+def _update_sqdist_buffers(
+    buf: FloatArray,
+    thresh: FloatArray,
+    x: FloatArray,
+    xc: FloatArray,
+    motif_t: FloatArray,
+    lattice: FloatArray,
+    motif_radius: float,
+    k: int,
+    lat_start: int,
+) -> None:
+    """Offer every point of ``lattice[lat_start:] + motif`` to the
+    buffers of the k smallest squared distances from each point of ``x``
+    (see ``_sqdist_buffers``). ``motif_t`` is the motif transposed, one
+    row per dimension.
+
+    The points are never materialised: the translates of the motif are
+    walked one lattice point at a time, and a whole translate is
+    rejected by a single distance computation whenever its bounding
+    sphere lies further away than the current threshold (see
+    ``_motif_bounding_sphere``). On return each ``thresh[i]`` is again
+    exactly the k-th smallest squared distance to ``x[i]`` found so far.
+    """
+
+    n_x, dims = x.shape
+    m = motif_t.shape[-1]
+    n_lat = lattice.shape[0]
+    cap = buf.shape[-1]
+    xl = np.empty(dims, dtype=np.float64)
+    sqdists = np.empty(m, dtype=np.float64)
+
+    for i in range(n_x):
+        row = buf[i]
+        t = thresh[i]
+        n_buf = 0
+        bound = np.sqrt(t) + motif_radius
+        bound_sq = bound * bound
+
+        for lat_i in range(lat_start, n_lat):
+            # Distance to the centre of this translate of the motif; no
+            # point of it is within sqrt(t) of x[i] if this is too big
+            sq = 0.0
+            for d in range(dims):
+                diff = xc[i, d] - lattice[lat_i, d]
+                sq += diff * diff
+            if sq > bound_sq:
+                continue
+
+            for d in range(dims):
+                xl[d] = x[i, d] - lattice[lat_i, d]
+
+            # Squared distances to the whole translate, accumulated one
+            # dimension at a time. Kept apart from the comparisons below
+            # so these loops stay contiguous, branchless and vectorised,
+            # and so ``sqdists`` stays small enough to live in cache.
+            xl_d = xl[0]
+            for mot_i in range(m):
+                diff = xl_d - motif_t[0, mot_i]
+                sqdists[mot_i] = diff * diff
+            for d in range(1, dims):
+                xl_d = xl[d]
+                for mot_i in range(m):
+                    diff = xl_d - motif_t[d, mot_i]
+                    sqdists[mot_i] += diff * diff
+
+            for mot_i in range(m):
+                sq = sqdists[mot_i]
+                if sq < t:
+                    row[k + n_buf] = sq
+                    n_buf += 1
+                    if k + n_buf == cap:  # Out of room, re-select
+                        t = _select_kth(row, cap, k - 1)
+                        n_buf = 0
+                        bound = np.sqrt(t) + motif_radius
+                        bound_sq = bound * bound
+
+        if n_buf > 0:  # Leave the threshold exact for the next batch
+            t = _select_kth(row, k + n_buf, k - 1)
+        thresh[i] = t
+
+
+@numba.njit(cache=True, fastmath=True)
+def _update_sqdist_buffers_with_inds(
+    buf: FloatArray,
+    buf_inds: UIntArray,
+    thresh: FloatArray,
+    x: FloatArray,
+    xc: FloatArray,
+    motif_t: FloatArray,
+    lattice: FloatArray,
+    motif_radius: float,
+    k: int,
+    lat_start: int,
+    ind_offset: int,
+) -> int:
+    """``_update_sqdist_buffers`` which also records which point of the
+    cloud each distance came from.
+
+    ``buf_inds`` is permuted alongside ``buf`` and holds indices into
+    the cloud ``_lattice_to_cloud(motif, lattice)`` of this batch,
+    shifted by ``ind_offset``. Returns how many points of this batch
+    were kept as candidates, which is 0 exactly when none of them is a
+    neighbor of any point of ``x``.
+    """
+
+    n_x, dims = x.shape
+    m = motif_t.shape[-1]
+    n_lat = lattice.shape[0]
+    cap = buf.shape[-1]
+    xl = np.empty(dims, dtype=np.float64)
+    sqdists = np.empty(m, dtype=np.float64)
+    n_kept = 0
+
+    for i in range(n_x):
+        row = buf[i]
+        row_inds = buf_inds[i]
+        t = thresh[i]
+        n_buf = 0
+        bound = np.sqrt(t) + motif_radius
+        bound_sq = bound * bound
+
+        for lat_i in range(lat_start, n_lat):
+            sq = 0.0
+            for d in range(dims):
+                diff = xc[i, d] - lattice[lat_i, d]
+                sq += diff * diff
+            if sq > bound_sq:
+                continue
+
+            for d in range(dims):
+                xl[d] = x[i, d] - lattice[lat_i, d]
+            cloud_ind = ind_offset + lat_i * m
+
+            xl_d = xl[0]
+            for mot_i in range(m):
+                diff = xl_d - motif_t[0, mot_i]
+                sqdists[mot_i] = diff * diff
+            for d in range(1, dims):
+                xl_d = xl[d]
+                for mot_i in range(m):
+                    diff = xl_d - motif_t[d, mot_i]
+                    sqdists[mot_i] += diff * diff
+
+            for mot_i in range(m):
+                sq = sqdists[mot_i]
+                if sq < t:
+                    row[k + n_buf] = sq
+                    row_inds[k + n_buf] = cloud_ind + mot_i
+                    n_buf += 1
+                    n_kept += 1
+                    if k + n_buf == cap:
+                        t = _select_kth_with_inds(row, row_inds, cap, k - 1)
+                        n_buf = 0
+                        bound = np.sqrt(t) + motif_radius
+                        bound_sq = bound * bound
+
+        if n_buf > 0:
+            t = _select_kth_with_inds(row, row_inds, k + n_buf, k - 1)
+        thresh[i] = t
+
+    return n_kept
+
+
+@numba.njit(cache=True, fastmath=True)
+def _count_within_sqdist(
+    n_closer: UIntArray,
+    x: FloatArray,
+    xc: FloatArray,
+    motif_t: FloatArray,
+    lattice: FloatArray,
+    motif_radius: float,
+    min_sqval: float,
+) -> None:
+    """Add to ``n_closer[i]`` the number of points of
+    ``lattice + motif`` whose squared distance to ``x[i]`` is at most
+    ``min_sqval``. ``motif_t`` is the motif transposed, one row per
+    dimension.
+    """
+
+    n_x, dims = x.shape
+    m = motif_t.shape[-1]
+    n_lat = lattice.shape[0]
+    xl = np.empty(dims, dtype=np.float64)
+    sqdists = np.empty(m, dtype=np.float64)
+    bound = np.sqrt(min_sqval) + motif_radius
+    bound_sq = bound * bound
+
+    for i in range(n_x):
+        count = 0
+        for lat_i in range(n_lat):
+            sq = 0.0
+            for d in range(dims):
+                diff = xc[i, d] - lattice[lat_i, d]
+                sq += diff * diff
+            if sq > bound_sq:
+                continue
+
+            for d in range(dims):
+                xl[d] = x[i, d] - lattice[lat_i, d]
+
+            xl_d = xl[0]
+            for mot_i in range(m):
+                diff = xl_d - motif_t[0, mot_i]
+                sqdists[mot_i] = diff * diff
+            for d in range(1, dims):
+                xl_d = xl[d]
+                for mot_i in range(m):
+                    diff = xl_d - motif_t[d, mot_i]
+                    sqdists[mot_i] += diff * diff
+
+            for mot_i in range(m):
+                if sqdists[mot_i] <= min_sqval:
+                    count += 1
+
+        n_closer[i] += count
 
 
 def nearest_neighbors_minval(
@@ -620,15 +991,18 @@ def nearest_neighbors_minval(
     # A point of the periodic set within min_val of a point p ∈ x comes
     # from a lattice point l with |l| < min_val + max|p-p'| (p' ∈ motif),
     # so this pass counts every neighbor closer than min_val exactly.
-    int_lattice, int_lat_generator = _integer_lattice_batches(dims, m, 1)
+    int_lattice, _, int_lat_generator = _integer_lattice_batches(dims, m, 1)
     layer = _n_layers(int_lattice)
     layer_dist = _layer_dist_factor(cell)
-    cloud = _lattice_to_cloud(motif, int_lattice @ cell)
-    sqdists = _cdist_sqeulcidean(x, cloud)
-    motif_diam = np.sqrt(sqdists[:, :m].max())
+    xc, motif_radius = _motif_bounding_sphere(motif, x)
+    motif_t = np.ascontiguousarray(motif.T)
+    motif_diam = np.sqrt(_cdist_sqeulcidean(x, motif).max())
     # Counted and pruned with <= so that neighbors landing exactly on
     # min_val cannot be missed, at the cost of an occasional extra column
-    n_closer = (sqdists <= min_sqval).sum(axis=-1)
+    n_closer = np.zeros(x.shape[0], dtype=np.int64)
+    _count_within_sqdist(
+        n_closer, x, xc, motif_t, int_lattice @ cell, motif_radius, min_sqval
+    )
     radius = min_val + motif_diam
 
     while layer_dist * (layer - 1) <= radius:
@@ -638,9 +1012,9 @@ def nearest_neighbors_minval(
         if lattice.size == 0:
             continue
 
-        cloud = _lattice_to_cloud(motif, lattice)
-        sqdists = _cdist_sqeulcidean(x, cloud)
-        n_closer += (sqdists <= min_sqval).sum(axis=-1)
+        _count_within_sqdist(
+            n_closer, x, xc, motif_t, lattice, motif_radius, min_sqval
+        )
 
     # Column n_closer[i] is the first of row i which is at least min_val,
     # so this is the smallest number of columns with a last column all
