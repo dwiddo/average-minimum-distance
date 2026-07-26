@@ -87,12 +87,15 @@ def _seed_translates(lat_seed: int, n_lat: int, m: int, k: int) -> int:
     """How many translates of the motif to measure in full before the
     rest of the first batch is scanned with a threshold to prune by.
 
-    ``lat_seed`` translates (all layers of the batch but the last) are
-    enough to hold more than k points, but a threshold taken from barely
-    more than k points rules almost nothing out, and scanning the rest
-    against it then costs more than simply selecting from the whole
-    batch in one go. So the batch is only split when the seed holds
-    comfortably more points than the k asked for.
+    ``lat_seed`` translates (all layers of the batch but the last) hold
+    more than k points, but a threshold taken from barely more than k
+    points sits at the edge of what it was drawn from and rules almost
+    nothing out. Scanning the rest of the batch against such a threshold
+    costs more than selecting from the whole batch in one go, so the
+    batch is only split when the seed holds at least twice the k asked
+    for. (Widening the seed instead, to force a split, measures worse:
+    what is left is then pruned well but a translate at a time, and for
+    a small motif those passes are too short to be efficient.)
     """
 
     return lat_seed if lat_seed * m >= 2 * k else n_lat
@@ -157,7 +160,9 @@ def nearest_neighbors(
     # of lattice points is folded straight into the buffers.
     buf, thresh = _sqdist_buffers(x.shape[0], k)
     init_lattice = int_lattice @ cell
-    _init_sqdist_buffers(buf, thresh, x, motif_t, init_lattice, lat_seed, k)
+    _init_sqdist_buffers(
+        buf, thresh, x, _cloud_transposed(motif, init_lattice[:lat_seed]), k
+    )
     _update_sqdist_buffers(
         buf, thresh, x, xc, motif_t, init_lattice, motif_radius, k, lat_seed
     )
@@ -272,7 +277,7 @@ def nearest_neighbors_data(
     buf, thresh = _sqdist_buffers(x.shape[0], k)
     buf_inds = np.zeros(buf.shape, dtype=np.int64)
     _init_sqdist_buffers_with_inds(
-        buf, buf_inds, thresh, x, motif_t, lattice, lat_seed, k
+        buf, buf_inds, thresh, x, _cloud_transposed(motif, lattice[:lat_seed]), k
     )
     _update_sqdist_buffers_with_inds(
         buf, buf_inds, thresh, x, xc, motif_t, lattice, motif_radius, k,
@@ -655,46 +660,68 @@ def _sqdist_buffers(n_x: int, k: int) -> Tuple[FloatArray, FloatArray]:
 
 
 @numba.njit(cache=True, fastmath=True)
+def _cloud_transposed(motif: FloatArray, lattice: FloatArray) -> FloatArray:
+    """``_lattice_to_cloud`` with one row per dimension rather than one
+    per point, so that measuring a point of ``x`` against the whole
+    cloud is one contiguous pass per dimension.
+
+    Column ``lat_i * len(motif) + mot_i`` is the motif point ``mot_i``
+    translated by ``lattice[lat_i]``, matching the column order of
+    ``_lattice_to_cloud``.
+    """
+
+    m, dims = motif.shape
+    n_lat = lattice.shape[0]
+    cloud_t = np.empty((dims, m * n_lat), dtype=np.float64)
+    for lat_i in range(n_lat):
+        off = lat_i * m
+        for d in range(dims):
+            lat_d = lattice[lat_i, d]
+            for mot_i in range(m):
+                cloud_t[d, off + mot_i] = motif[mot_i, d] + lat_d
+    return cloud_t
+
+
+@numba.njit(cache=True, fastmath=True)
 def _init_sqdist_buffers(
     buf: FloatArray,
     thresh: FloatArray,
     x: FloatArray,
-    motif_t: FloatArray,
-    lattice: FloatArray,
-    lat_seed: int,
+    cloud_t: FloatArray,
     k: int,
 ) -> None:
-    """Seed the buffers of ``_sqdist_buffers`` with the k nearest
-    points of the first ``lat_seed`` translates of the motif, which
-    between them hold more than k points.
+    """Seed the buffers of ``_sqdist_buffers`` with the k points of
+    ``cloud_t`` nearest each point of ``x``. ``cloud_t`` comes from
+    ``_cloud_transposed`` and holds more than k points.
 
     Until k points have been found there is no threshold to prune with,
     and a running threshold would be beaten by most of them anyway. So
-    just enough translates to hold k points are measured into a scratch
-    array, one point of ``x`` at a time, and the k smallest selected in
-    a single pass; the caller folds in the remaining translates, which a
-    now exact threshold prunes properly. Only the scratch array is ever
-    materialised, not the (len(x), batch size) matrix of all distances.
+    the whole seed cloud is measured into a scratch array, one point of
+    ``x`` at a time, and the k smallest selected in a single pass; the
+    caller folds in the remaining translates, which a now exact
+    threshold prunes properly. Only the scratch array is materialised,
+    not the (len(x), seed size) matrix of all the distances.
+
+    The distances are accumulated one dimension at a time over the whole
+    cloud, which keeps the loops long and contiguous however few points
+    the motif has.
     """
 
     n_x, dims = x.shape
-    m = motif_t.shape[-1]
-    n_pairs = m * lat_seed
+    n_pairs = cloud_t.shape[-1]
     n = max(n_pairs, k)
     scratch = np.empty(n, dtype=np.float64)
 
     for i in range(n_x):
-        for lat_i in range(lat_seed):
-            off = lat_i * m
-            xl_d = x[i, 0] - lattice[lat_i, 0]
-            for mot_i in range(m):
-                diff = xl_d - motif_t[0, mot_i]
-                scratch[off + mot_i] = diff * diff
-            for d in range(1, dims):
-                xl_d = x[i, d] - lattice[lat_i, d]
-                for mot_i in range(m):
-                    diff = xl_d - motif_t[d, mot_i]
-                    scratch[off + mot_i] += diff * diff
+        x_d = x[i, 0]
+        for j in range(n_pairs):
+            diff = x_d - cloud_t[0, j]
+            scratch[j] = diff * diff
+        for d in range(1, dims):
+            x_d = x[i, d]
+            for j in range(n_pairs):
+                diff = x_d - cloud_t[d, j]
+                scratch[j] += diff * diff
 
         # Only if the whole batch holds fewer than k points, which the
         # sizing in _integer_lattice_batches rules out for a periodic set
@@ -712,35 +739,30 @@ def _init_sqdist_buffers_with_inds(
     buf_inds: UIntArray,
     thresh: FloatArray,
     x: FloatArray,
-    motif_t: FloatArray,
-    lattice: FloatArray,
-    lat_seed: int,
+    cloud_t: FloatArray,
     k: int,
 ) -> None:
     """``_init_sqdist_buffers`` which also records which point of the
-    cloud each distance came from. Point ``n`` of the scratch array is
-    point ``n`` of ``_lattice_to_cloud(motif, lattice)``.
+    cloud each distance came from. Column ``j`` of ``cloud_t`` is point
+    ``j`` of ``_lattice_to_cloud(motif, lattice)``.
     """
 
     n_x, dims = x.shape
-    m = motif_t.shape[-1]
-    n_pairs = m * lat_seed
+    n_pairs = cloud_t.shape[-1]
     n = max(n_pairs, k)
     scratch = np.empty(n, dtype=np.float64)
     scratch_inds = np.empty(n, dtype=np.int64)
 
     for i in range(n_x):
-        for lat_i in range(lat_seed):
-            off = lat_i * m
-            xl_d = x[i, 0] - lattice[lat_i, 0]
-            for mot_i in range(m):
-                diff = xl_d - motif_t[0, mot_i]
-                scratch[off + mot_i] = diff * diff
-            for d in range(1, dims):
-                xl_d = x[i, d] - lattice[lat_i, d]
-                for mot_i in range(m):
-                    diff = xl_d - motif_t[d, mot_i]
-                    scratch[off + mot_i] += diff * diff
+        x_d = x[i, 0]
+        for j in range(n_pairs):
+            diff = x_d - cloud_t[0, j]
+            scratch[j] = diff * diff
+        for d in range(1, dims):
+            x_d = x[i, d]
+            for j in range(n_pairs):
+                diff = x_d - cloud_t[d, j]
+                scratch[j] += diff * diff
 
         for j in range(n_pairs, n):
             scratch[j] = _SQDIST_MAX
