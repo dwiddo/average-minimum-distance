@@ -13,8 +13,83 @@ __all__ = [
     "cellpar_to_cell_2D",
     "cell_to_cellpar",
     "cell_to_cellpar_2D",
+    "lll_reduce",
     "random_cell",
 ]
+
+
+@numba.njit(cache=True, fastmath=True)
+def _gram_schmidt(basis: FloatArray) -> Tuple[FloatArray, FloatArray]:
+    """Return the Gram-Schmidt orthogonalisation of the rows of
+    ``basis`` along with the matrix of Gram-Schmidt coefficients.
+    """
+
+    n = basis.shape[0]
+    gs = np.empty_like(basis)
+    mu = np.zeros((n, n), dtype=np.float64)
+    for i in range(n):
+        gs[i] = basis[i]
+        for j in range(i):
+            sqnorm = np.dot(gs[j], gs[j])
+            if sqnorm > 0:
+                mu[i, j] = np.dot(basis[i], gs[j]) / sqnorm
+                gs[i] -= mu[i, j] * gs[j]
+    return gs, mu
+
+
+@numba.njit(cache=True, fastmath=True)
+def lll_reduce(cell: FloatArray, delta: float = 0.75) -> FloatArray:
+    """Perform a Lenstra-Lenstra-Lovasz reduction of a lattice basis,
+    returning a basis of the same lattice whose vectors are as short and
+    as close to orthogonal as the algorithm can make them.
+
+    A reduced basis is needed wherever a lattice is enumerated by
+    integer combinations of its basis vectors, since only for a reduced
+    basis do small integer combinations correspond to short vectors.
+
+    Parameters
+    ----------
+    cell : :class:`numpy.ndarray`
+        Unit cell represented as a square matrix (in orthogonal
+        coordinates), one lattice vector per row. Not modified.
+    delta : float, default 0.75
+        Reduction parameter. The default is usually fine.
+
+    Returns
+    -------
+    reduced_cell : :class:`numpy.ndarray`
+        A new array containing a reduced basis of the same lattice.
+    """
+
+    basis = cell.astype(np.float64).copy()
+    n = basis.shape[0]
+    if n < 2:
+        return basis
+
+    gs, mu = _gram_schmidt(basis)
+    k = 1
+    while k < n:
+        # Size reduction: make |mu[k, j]| <= 1/2 for all j < k
+        for j in range(k - 1, -1, -1):
+            q = np.rint(mu[k, j])
+            if q != 0:
+                basis[k] -= q * basis[j]
+                gs, mu = _gram_schmidt(basis)
+
+        # Lovasz condition
+        if np.dot(gs[k], gs[k]) >= (delta - mu[k, k - 1] ** 2) * np.dot(
+            gs[k - 1], gs[k - 1]
+        ):
+            k += 1
+        else:
+            for dim in range(basis.shape[-1]):
+                v = basis[k, dim]
+                basis[k, dim] = basis[k - 1, dim]
+                basis[k - 1, dim] = v
+            gs, mu = _gram_schmidt(basis)
+            k = max(k - 1, 1)
+
+    return basis
 
 
 @numba.njit(cache=True, fastmath=True)

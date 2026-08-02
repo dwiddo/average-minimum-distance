@@ -13,7 +13,6 @@ from typing import Optional, List, NamedTuple
 import math
 
 import numpy as np
-from scipy.special import factorial
 
 from .utils import (
     cellpar_to_cell,
@@ -200,9 +199,9 @@ class PeriodicSet:
         m = np.sum(self.occupancies * self.multiplicities)
         t = int(n // 2)
         if n % 2 == 0:
-            ball_vol = (np.pi ** t) / factorial(t)
+            ball_vol = (np.pi ** t) / math.factorial(t)
         else:
-            ball_vol = (2 * factorial(t) * (4 * np.pi) ** t) / factorial(n)
+            ball_vol = (2 * math.factorial(t) * (4 * np.pi) ** t) / math.factorial(n)
         return (np.abs(np.linalg.det(self.cell)) / (m * ball_vol)) ** (1.0 / n)
 
     def has_positional_disorder(self):
@@ -233,7 +232,7 @@ class PeriodicSet:
         cell_vol = np.linalg.det(self.cell)
         return (cell_mass / cell_vol) * 1.66053907
 
-    def formula(self, sep="", latex=False):
+    def formula(self, sep="", latex=False) -> str:
         """Return the reduced formula of the PeriodicSet representing a
         crystal.
 

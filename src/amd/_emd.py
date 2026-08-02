@@ -14,11 +14,30 @@ import numpy as np
 
 from ._types import FloatArray
 
+try:
+    import ot
+except ImportError:
+    ot = None
+
 __all__ = ["network_simplex"]
 
 
-@numba.njit(cache=True)
 def network_simplex(
+    source_demands: FloatArray, sink_demands: FloatArray, network_costs: FloatArray
+) -> Tuple[float, FloatArray]:
+    if ot is not None:
+        plan = ot.emd(
+            np.ascontiguousarray(source_demands),
+            np.ascontiguousarray(sink_demands),
+            np.ascontiguousarray(network_costs)
+        )
+        return float(np.sum(plan * network_costs)), plan
+    else:
+        return _network_simplex(source_demands, sink_demands, network_costs)
+
+
+@numba.njit(cache=True)
+def _network_simplex(
     source_demands: FloatArray, sink_demands: FloatArray, network_costs: FloatArray
 ) -> Tuple[float, FloatArray]:
     """Calculate the Earth mover's distance (Wasserstien metric) between
