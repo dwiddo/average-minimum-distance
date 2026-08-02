@@ -28,13 +28,28 @@ __all__ = ["PeriodicSet", "DisorderGroup", "DisorderAssembly"]
 
 
 class DisorderGroup(NamedTuple):
+    """One mutually exclusive alternative configuration within a
+    :class:`DisorderAssembly`. Atoms of the same group are simultaneously
+    occupied; atoms of different groups in the same assembly are not.
+    """
+
     indices: list[int]
     occupancy: float
 
 
 class DisorderAssembly(NamedTuple):
+    """A set of atoms whose disorder is coupled, comprised of two or more
+    mutually exclusive :class:`DisorderGroup` s.
+
+    ``source`` records how the assembly was determined: ``"cif"`` if it
+    came from explicit ``_atom_site_disorder_assembly`` /
+    ``_atom_site_disorder_group`` codes, otherwise the name of the
+    heuristic which inferred it from occupancies and positions.
+    """
+
     groups: list[DisorderGroup]
     is_substitutional: bool
+    source: str = "cif"
 
 
 class PeriodicSet:
