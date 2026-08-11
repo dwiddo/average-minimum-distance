@@ -20,12 +20,12 @@ Module                 Description
 ===================    ===================================================
 """
 
-__version__ = "1.6.1"
+__version__ = "2.0.0a1"
 __author__ = "Daniel Widdowson"
 __maintainer__ = "Daniel Widdowson"
-__email__ = "D.E.Widdowson@liverpool.ac.uk"
+__email__ = "danwiddowson1@gmail.com"
 __license__ = "CC-BY-NC-SA-4.0"
-__copyright__ = "Copyright 2025, Daniel Widdowson"
+__copyright__ = "Copyright 2026, Daniel Widdowson"
 
 
 from .calculate import *
@@ -33,6 +33,7 @@ from .compare import *
 from .io import *
 from .periodicset import *
 from .utils import *
+from .WeightedVectors import *
 
 try:
     from ._private import *

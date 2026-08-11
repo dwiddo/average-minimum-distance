@@ -176,5 +176,9 @@ cython_debug/
 .scrutinizer.yml
 *~
 
-src/amd/_private.py
+.claude
 cache/
+src/amd/_private.py
+src/amd/WeightedVectors.py
+build_instructions.txt
+build_instructions.txt

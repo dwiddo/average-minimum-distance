@@ -14,7 +14,16 @@ import errno
 import math
 import itertools
 from pathlib import Path
-from typing import Iterable, Iterator, Optional, Union, Callable, Tuple, List
+from typing import (
+    Iterable,
+    Iterator,
+    NamedTuple,
+    Optional,
+    Union,
+    Callable,
+    Tuple,
+    List,
+)
 
 import numpy as np
 import numpy.typing as npt
@@ -22,10 +31,17 @@ import numba
 import tqdm
 from scipy.spatial.distance import pdist
 
-from .utils import cellpar_to_cell
+from .utils import cellpar_to_cell, lll_reduce
 from .periodicset import DisorderGroup, DisorderAssembly, PeriodicSet
 from .calculate import _collapse_into_groups
-from .globals_ import SUBS_DISORDER_TOL, ATOMIC_NUMBERS
+from .globals_ import (
+    SUBS_DISORDER_TOL,
+    EXACT_OVERLAP_TOL,
+    OCCUPANCY_TOL,
+    SPECIAL_POSITION_OCC_TOL,
+    MAX_OCCUPANCY_SUBSET_SEARCH as _MAX_OCCUPANCY_SUBSET_SEARCH,
+    ATOMIC_NUMBERS,
+)
 from ._types import FloatArray, UIntArray
 
 
@@ -175,6 +191,8 @@ class CifReader(_Reader, Iterator[PeriodicSet]):
         position. 
     reduce_cell : bool, default False
         Reduce the unit cell (Lenstra-Lenstra-Lovasz lattice basis reduction).
+    wrap_coords : bool, default True
+        Wrap motif points inside the unit cell.
     show_warnings : bool
         Print warnings that arise during reading.
     verbose : bool, default False
@@ -222,10 +240,11 @@ class CifReader(_Reader, Iterator[PeriodicSet]):
         missing_coords: str = "warn",
         eq_site_tol: float = 1e-3,
         reduce_cell: bool = False,
+        wrap_coords: bool = True,
         show_warnings: bool = True,
         verbose: bool = False,
         heaviest_component: bool = False,
-        molecular_centres: bool = False,
+        molecular_centres: bool = False
     ):
 
         if reader != "ccdc":
@@ -255,7 +274,8 @@ class CifReader(_Reader, Iterator[PeriodicSet]):
                 skip_disorder=skip_disorder,
                 missing_coords=missing_coords,
                 eq_site_tol=eq_site_tol,
-                reduce_cell=reduce_cell
+                reduce_cell=reduce_cell,
+                wrap_coords=wrap_coords
             )
 
         # elif reader in ("ase", "pycodcif"):
@@ -297,9 +317,10 @@ class CifReader(_Reader, Iterator[PeriodicSet]):
                 skip_disorder=skip_disorder,
                 missing_coords=missing_coords,
                 eq_site_tol=eq_site_tol,
+                wrap_coords=wrap_coords,
+                reduce_cell=reduce_cell,
                 heaviest_component=heaviest_component,
-                molecular_centres=molecular_centres,
-                reduce_cell=reduce_cell
+                molecular_centres=molecular_centres
             )
 
         else:
@@ -364,6 +385,8 @@ class CSDReader(_Reader, Iterator[PeriodicSet]):
         position. 
     reduce_cell : bool, default False
         Reduce the unit cell (Lenstra-Lenstra-Lovasz lattice basis reduction).
+    wrap_coords : bool, default True
+        Wrap motif points inside the unit cell.
     show_warnings : bool
         Print warnings that arise during reading.
     verbose : bool, default False
@@ -417,10 +440,11 @@ class CSDReader(_Reader, Iterator[PeriodicSet]):
         missing_coords: str = "warn",
         eq_site_tol: float = 1e-3,
         reduce_cell: bool = False,
+        wrap_coords: bool = True,
         show_warnings: bool = True,
         verbose: bool = False,
         heaviest_component: bool = False,
-        molecular_centres: bool = False,
+        molecular_centres: bool = False
     ):
 
         try:
@@ -453,6 +477,7 @@ class CSDReader(_Reader, Iterator[PeriodicSet]):
                 query.add_identifier(refcode)
                 hits = [hit.identifier for hit in query.search()]
                 all_refcodes.extend(hits)
+
             # filter to unique refcodes while keeping order
             refcodes = []
             seen = set()
@@ -468,6 +493,7 @@ class CSDReader(_Reader, Iterator[PeriodicSet]):
             missing_coords=missing_coords,
             eq_site_tol=eq_site_tol,
             reduce_cell=reduce_cell,
+            wrap_coords=wrap_coords,
             heaviest_component=heaviest_component,
             molecular_centres=molecular_centres,
         )
@@ -482,6 +508,7 @@ class CSDReader(_Reader, Iterator[PeriodicSet]):
 
     def __iter__(self) -> Iterator[PeriodicSet]:
         return self
+
 
 # class MPReader(_Reader):
 #     """Read structures from the Materials Project API, yielding
@@ -560,7 +587,8 @@ def periodicset_from_gemmi_block(
     skip_disorder: bool = False,
     missing_coords: str = "warn",
     eq_site_tol: float = 1e-3,
-    reduce_cell: bool = False
+    reduce_cell: bool = False,
+    wrap_coords: bool = True
 ) -> PeriodicSet:
     """Convert a :class:`gemmi.cif.Block` object to a
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
@@ -584,6 +612,8 @@ def periodicset_from_gemmi_block(
         position. 
     reduce_cell : bool, default False
         Reduce the unit cell (Lenstra-Lenstra-Lovasz lattice basis reduction).
+    wrap_coords : bool, default True
+        Wrap motif points inside the unit cell.
 
     Returns
     -------
@@ -623,8 +653,11 @@ def periodicset_from_gemmi_block(
         tablified_loop[i % xyz_loop.width()].append(item)
     loop_dict = {tag: l for tag, l in zip(xyz_loop.tags, tablified_loop)}
     xyz_str = [loop_dict[t] for t in _CIF_TAGS["atom_site_fract"]]
-    asym_unit = np.transpose(np.array([[str2float(c) for c in xyz] for xyz in xyz_str]))
-    asym_unit = np.mod(asym_unit, 1)
+    asym_unit = np.transpose(
+        np.array([[str2float(c) for c in xyz] for xyz in xyz_str], dtype=np.float64)
+    )
+    if wrap_coords:
+        asym_unit = np.mod(asym_unit, 1)
 
     # recommended by pymatgen
     # asym_unit = _snap_small_prec_coords(asym_unit, 1e-4)
@@ -682,18 +715,34 @@ def periodicset_from_gemmi_block(
     # if all(a == 1 for a in asym_occs):
     #     raise ParseError('no disorder')
 
+    # Site symmetry order, i.e. the order of the site symmetry group of
+    # an atom on a special position. Its presence tells us the file keeps
+    # multiplicity out of the occupancy column.
+    site_sym_orders = None
+    for tag in ("_atom_site_site_symmetry_order", "_atom_site_symmetry_multiplicity"):
+        if tag in loop_dict:
+            site_sym_orders = []
+            for value in loop_dict[tag]:
+                try:
+                    site_sym_orders.append(str2float(value))
+                except (ValueError, TypeError):
+                    site_sym_orders.append(float("nan"))
+            break
+
+    # Disorder assembly/group codes are passed on raw:
+    # _disorder_assemblies unquotes them and distinguishes the CIF null
+    # values, "." meaning the atom takes no part in disorder and "?"
+    # meaning nothing was stated. gemmi.cif.as_string is deliberately not
+    # used here as it collapses both nulls to the empty string.
     if "_atom_site_disorder_group" in loop_dict:
-        groups = loop_dict["_atom_site_disorder_group"]
+        groups = list(loop_dict["_atom_site_disorder_group"])
     else:
         groups = [None] * len(asym_occs)
 
     if "_atom_site_disorder_assembly" in loop_dict:
-        assemblies = loop_dict["_atom_site_disorder_assembly"]
+        assemblies = list(loop_dict["_atom_site_disorder_assembly"])
     else:
         assemblies = [None] * len(asym_occs)
-
-    assemblies = [None if x in (".", "?") else x for x in assemblies]
-    groups = [None if x in (".", "?") else x for x in groups]
 
     # Missing coordinates
     remove_sites = []
@@ -774,9 +823,21 @@ def periodicset_from_gemmi_block(
     asym_labels = [s for i, s in enumerate(asym_labels) if i not in remove_sites]
     assemblies = [s for i, s in enumerate(assemblies) if i not in remove_sites]
     groups = [s for i, s in enumerate(groups) if i not in remove_sites]
+    if site_sym_orders is not None:
+        site_sym_orders = [
+            s for i, s in enumerate(site_sym_orders) if i not in remove_sites
+        ]
 
     disorder = _disorder_assemblies(
-        asym_unit, wyc_muls, cell, assemblies, groups, asym_occs, eq_site_tol
+        asym_unit,
+        wyc_muls,
+        len(rot),
+        cell,
+        asym_types,
+        assemblies,
+        groups,
+        asym_occs,
+        site_sym_orders=site_sym_orders,
     )
     asym_types = np.array(asym_types, dtype=np.uint64)
 
@@ -803,6 +864,7 @@ def periodicset_from_ccdc_entry(
     missing_coords: str = "warn",
     eq_site_tol: float = 1e-3,
     reduce_cell: bool = False,
+    wrap_coords: bool = True,
     heaviest_component: bool = False,
     molecular_centres: bool = False
 ) -> PeriodicSet:
@@ -827,6 +889,8 @@ def periodicset_from_ccdc_entry(
         position. 
     reduce_cell : bool, default False
         Reduce the unit cell (Lenstra-Lenstra-Lovasz lattice basis reduction).
+    wrap_coords : bool, default True
+        Wrap motif points inside the unit cell.
     heaviest_component : bool, optional
         Removes all but the heaviest molecule in the asymmeric unit,
         intended for removing solvents.
@@ -881,6 +945,7 @@ def periodicset_from_ccdc_crystal(
     missing_coords: str = "warn",
     eq_site_tol: float = 1e-3,
     reduce_cell: bool = False,
+    wrap_coords: bool = True,
     heaviest_component: bool = False,
     molecular_centres: bool = False
 ) -> PeriodicSet:
@@ -905,6 +970,8 @@ def periodicset_from_ccdc_crystal(
         position. 
     reduce_cell : bool, default False
         Reduce the unit cell (Lenstra-Lenstra-Lovasz lattice basis reduction).
+    wrap_coords : bool, default True
+        Wrap motif points inside the unit cell.
     heaviest_component : bool, optional
         Removes all but the heaviest molecule in the asymmeric unit,
         intended for removing solvents.
@@ -969,12 +1036,13 @@ def periodicset_from_ccdc_crystal(
         return c_pset
 
     asym_atoms = molecule.atoms
-    asym_unit = np.array([tuple(a.fractional_coordinates) for a in asym_atoms])
+    asym_unit = np.array([tuple(a.fractional_coordinates) for a in asym_atoms], dtype=np.float64)
 
     if asym_unit.shape[0] == 0:
         raise ParseError(f"{crystal.identifier} has no coordinates")
 
-    # asym_unit = np.mod(asym_unit, 1)
+    if wrap_coords:
+        asym_unit = np.mod(asym_unit, 1)
 
     # Symmetry operations
     sitesym = crystal.symmetry_operators
@@ -994,6 +1062,11 @@ def periodicset_from_ccdc_crystal(
     asym_types = np.array([a.atomic_number for a in asym_atoms], dtype=np.uint64)
     asym_labels = [a.label for a in asym_atoms]
     asym_occs = np.array([float(a.occupancy) for a in asym_atoms])
+
+    # None (rather than ".") so that atoms the ccdc disorder model does
+    # not mention still reach the occupancy heuristics; that model can be
+    # incomplete, so silence about an atom is not a statement that it is
+    # ordered.
     assemblies = [None] * len(asym_unit)
     groups = [None] * len(asym_unit)
 
@@ -1006,7 +1079,14 @@ def periodicset_from_ccdc_crystal(
                         groups[atom.index] = str(grp.id)
 
     disorder = _disorder_assemblies(
-        asym_unit, wyc_muls, cell, assemblies, groups, asym_occs, eq_site_tol
+        asym_unit,
+        wyc_muls,
+        len(rot),
+        cell,
+        asym_types,
+        assemblies,
+        groups,
+        asym_occs,
     )
 
     if reduce_cell:
@@ -1240,217 +1320,413 @@ def _unique_sites(asym_unit: FloatArray, tol: float) -> npt.NDArray[np.bool_]:
     return where_unique
 
 
-def lll_reduce(cell, delta: float = 0.75) -> npt.NDArray[np.float64]:
-    """Perform a Lenstra-Lenstra-Lovasz lattice basis reduction to obtain a
-    c-reduced basis. This method returns a basis which is as "good" as
-    possible, with "good" defined by orthogonality of the lattice vectors.
-    This basis is used for all the periodic boundary condition calculations.
-
-    Parameters
-    ----------
-        delta (float): Reduction parameter. Default of 0.75 is usually fine.
-
-    Returns
-    -------
-        Reduced lattice matrix, mapping to get to that lattice.
+class _RawAssembly(NamedTuple):
+    """Intermediate assembly, before occupancies are normalised. Each
+    entry of ``groups`` is a list of asymmetric unit indices forming one
+    mutually exclusive alternative.
     """
 
-    a = cell.T
-    b = np.zeros((3, 3))  # Vectors after the Gram-Schmidt process
-    u = np.zeros((3, 3))  # Gram-Schmidt coefficients
-    m = np.zeros(3)  # These are the norm squared of each vec
+    groups: List[List[int]]
+    is_substitutional: bool
+    source: str
 
-    b[:, 0] = a[:, 0]
-    m[0] = np.dot(b[:, 0], b[:, 0])
-    for i in range(1, 3):
-        u[i, :i] = np.dot(a[:, i].T, b[:, :i]) / m[:i]
-        b[:, i] = a[:, i] - np.dot(b[:, :i], u[i, :i].T)
-        m[i] = np.dot(b[:, i], b[:, i])
 
-    k = 2
-    mapping = np.identity(3, dtype=np.float64)
-    while k <= 3:
-        # Size reduction
-        for i in range(k - 1, 0, -1):
-            q = round(u[k - 1, i - 1])
-            if q != 0:
-                # Reduce the k-th basis vector
-                a[:, k - 1] -= q * a[:, i - 1]
-                mapping[:, k - 1] -= q * mapping[:, i - 1]
-                uu = list(u[i - 1, 0 : (i - 1)])
-                uu.append(1)
-                # Update the GS coefficients
-                u[k - 1, 0:i] -= q * np.array(uu)
+# _atom_site_disorder_assembly/_atom_site_disorder_group take the CIF
+# null values "." (inapplicable, i.e. the atom takes no part in disorder)
+# and "?" (unknown). The two are not interchangeable: "." is a statement
+# that the atom is ordered, "?" is the absence of a statement.
+_INAPPLICABLE = "."
+_UNKNOWN = "?"
 
-        # Check the Lovasz condition
-        if np.dot(b[:, k - 1], b[:, k - 1]) >= (delta - abs(u[k - 1, k - 2]) ** 2) * np.dot(
-            b[:, (k - 2)], b[:, (k - 2)]
-        ):
-            # Increment k if the Lovasz condition holds
-            k += 1
+# Key standing in for the single implicit assembly of a CIF which gives
+# disorder groups but no assembly codes. A tuple cannot collide with a
+# code read from a file, which is always a string.
+_IMPLICIT_ASSEMBLY = ("implicit",)
+
+
+def _is_code(value) -> bool:
+    """True if a disorder assembly/group value is an actual code rather
+    than one of the CIF null values."""
+    return value != _INAPPLICABLE and value != _UNKNOWN
+
+
+def _normalise_disorder_codes(values, n_sites: int) -> list:
+    """Normalise a column of disorder assembly or group codes to a list
+    of either string codes or the ``_INAPPLICABLE``/``_UNKNOWN``
+    sentinels."""
+
+    if values is None:
+        return [_UNKNOWN] * n_sites
+
+    normalised = []
+    for value in values:
+        if value is None:
+            normalised.append(_UNKNOWN)
+            continue
+        value = str(value).strip().strip("'\"")
+        if value == _INAPPLICABLE:
+            normalised.append(_INAPPLICABLE)
+        elif value in (_UNKNOWN, ""):
+            normalised.append(_UNKNOWN)
         else:
-            # If the Lovasz condition fails, swap the k-th and (k-1)-th basis vector
-            v = a[:, k - 1].copy()
-            a[:, k - 1] = a[:, k - 2].copy()
-            a[:, k - 2] = v
+            normalised.append(value)
+    return normalised
 
-            v_m = mapping[:, k - 1].copy()
-            mapping[:, k - 1] = mapping[:, k - 2].copy()
-            mapping[:, k - 2] = v_m
 
-            # Update the Gram-Schmidt coefficients
-            for s in range(k - 1, k + 1):
-                u[s - 1, : (s - 1)] = np.dot(a[:, s - 1].T, b[:, : (s - 1)]) / m[: (s - 1)]
-                b[:, s - 1] = a[:, s - 1] - np.dot(b[:, : (s - 1)], u[s - 1, : (s - 1)].T)
-                m[s - 1] = np.dot(b[:, s - 1], b[:, s - 1])
+def _declares_site_symmetry(site_sym_orders) -> bool:
+    """True if the file gave a usable site symmetry order column."""
 
-            if k > 2:
-                k -= 1
-            else:
-                # We have to do p/q, so do lstsq(q.T, p.T).T instead
-                q = np.diag(m[(k - 2) : k])
-                p = np.dot(a[:, k:3].T, b[:, (k - 2) : k])
-                result = np.linalg.lstsq(q.T, p.T, rcond=None)[0].T
-                # result = np.linalg.inv(q.T) @ p.T  # if invertibility guaranteed
-                u[k:3, (k - 2) : k] = result
+    if site_sym_orders is None:
+        return False
+    values = np.asarray(site_sym_orders, dtype=np.float64)
+    return bool(values.size) and bool(np.any(np.isfinite(values) & (values >= 1)))
 
-    return a.T
+
+def _is_special_position_occupancy(
+    occ: float, multiplicity: float, n_symmetries: int
+) -> bool:
+    """True if ``occ`` looks like it accounts for the site multiplicity
+    of an atom on a special position rather than indicating disorder.
+
+    An atom lying on a symmetry element is generated fewer times than the
+    general multiplicity. Under the CIF core dictionary its occupancy is
+    still 1 and the multiplicity is recorded separately, but files which
+    omit the multiplicity commonly fold it into the occupancy instead,
+    writing 0.5 for an atom on an inversion centre or 1/3 on a threefold
+    axis despite the atom being fully ordered.
+
+    Only used when the file does not state the site symmetry order; see
+    ``_disorder_assemblies``.
+    """
+
+    if not n_symmetries or multiplicity >= n_symmetries:
+        return False
+    expected = multiplicity / n_symmetries
+    return abs(occ - expected) <= SPECIAL_POSITION_OCC_TOL
+
+
+def _group_indices_by_occupancy(occs: FloatArray, inds: List[int]) -> List[List[int]]:
+    """Partition ``inds`` into groups of sites sharing an occupancy."""
+
+    if len(inds) == 1:
+        return [list(inds)]
+    occ_values = occs[inds]
+    # NOTE: pdist expects one row per observation, so the occupancies
+    # must form a column. Passing occ_values[None, :] yields a single
+    # n-dimensional observation and hence no pairwise distances at all.
+    close = pdist(occ_values[:, None], metric="chebyshev") <= OCCUPANCY_TOL
+    return [[inds[j] for j in grp] for grp in _collapse_into_groups(close)]
+
+
+def _overlapping_clusters(
+    asym_unit: FloatArray, cell: FloatArray, inds: List[int]
+) -> Tuple[List[Tuple[List[int], float]], List[int]]:
+    """Cluster ``inds`` into sets of mutually overlapping sites.
+
+    Returns ``(clusters, leftover)`` where each cluster is a
+    ``(indices, max_pairwise_distance)`` pair and ``leftover`` holds
+    sites belonging to no cluster.
+
+    ``_collapse_into_groups`` is single linkage, so a chain of sites each
+    just inside ``SUBS_DISORDER_TOL`` of the next would merge into one
+    arbitrarily large cluster. Clusters are therefore re-checked under
+    complete linkage and rejected wholesale if they fail, rather than
+    split at a boundary the data does not justify.
+    """
+
+    if len(inds) < 2:
+        return [], list(inds)
+
+    m = len(inds)
+    dists = _pdist_pbc(asym_unit[inds], cell)
+
+    def _pair_dist(i: int, j: int) -> float:
+        return dists[m * i + j - ((i + 2) * (i + 1)) // 2]
+
+    clusters, leftover = [], []
+    for grp in _collapse_into_groups(dists <= SUBS_DISORDER_TOL):
+
+        if len(grp) == 1:
+            leftover.append(inds[grp[0]])
+            continue
+
+        max_d = max(_pair_dist(i, j) for i, j in itertools.combinations(grp, 2))
+        if max_d > SUBS_DISORDER_TOL:
+            # Single linkage chained sites which are not all mutually
+            # close; treat them as unclustered.
+            leftover.extend(inds[j] for j in grp)
+        else:
+            clusters.append(([inds[j] for j in grp], max_d))
+
+    return clusters, leftover
+
+
+def _classify_overlapping_cluster(
+    cluster: List[int], max_d: float, types, occs: FloatArray
+) -> Optional[_RawAssembly]:
+    """Classify a cluster of mutually overlapping partially occupied
+    sites as substitutional or positional disorder.
+
+    Substitutional disorder means alternative *chemical identities* on
+    one site, so it requires the sites to be of differing element, or to
+    be refined at essentially the same position. Overlapping sites of the
+    same element pulled apart by a real distance are alternative
+    positions, i.e. positional disorder.
+    """
+
+    occ_sum = float(np.sum(occs[cluster]))
+    if occ_sum > 1 + OCCUPANCY_TOL:
+        # Cannot be alternatives on one site.
+        return None
+
+    distinct_types = True
+    if types is not None:
+        cluster_types = [types[i] for i in cluster]
+        distinct_types = len(set(cluster_types)) == len(cluster_types)
+
+    substitutional = distinct_types or max_d <= EXACT_OVERLAP_TOL
+    return _RawAssembly(
+        groups=[[i] for i in cluster],
+        is_substitutional=substitutional,
+        source="overlapping-sites",
+    )
 
 
 def _disorder_assemblies(
-        asym_unit,
-        multiplicities,
-        cell,
-        assemblies,
-        groups,
-        asym_occs,
-        eq_site_tol
-):
+    asym_unit: FloatArray,
+    multiplicities,
+    n_symmetries: int,
+    cell: FloatArray,
+    types,
+    assemblies,
+    groups,
+    asym_occs,
+    site_sym_orders=None,
+) -> Optional[List[DisorderAssembly]]:
+    """Determine the disorder assemblies of an asymmetric unit.
 
-    disorder = {}  # asm_name: {grp_name: [inds...], ...}
+    An *assembly* is a cluster of atoms whose disorder is coupled; the
+    *groups* of an assembly are its mutually exclusive alternative
+    configurations. Explicit ``_atom_site_disorder_assembly`` and
+    ``_atom_site_disorder_group`` codes are authoritative and are always
+    honoured. Sites they do not cover are assigned heuristically from
+    occupancies and positions.
 
-    # Follow given assemblies and groups
-    for i, (asmbly, grp) in enumerate(zip(assemblies, groups)):
+    Parameters
+    ----------
+    asym_unit :
+        Fractional coordinates of the asymmetric unit.
+    multiplicities :
+        Number of distinct symmetry images generated by each site.
+    n_symmetries :
+        Total number of symmetry operations, i.e. the general
+        multiplicity. Used to recognise occupancies which account for a
+        special position rather than indicating disorder.
+    cell :
+        Unit cell, for measuring distances between sites.
+    types :
+        Atomic numbers of the sites, or None. Used to tell substitutional
+        from positional disorder.
+    assemblies, groups :
+        Disorder assembly and group codes, one per site.
+    asym_occs :
+        Fractional occupancies, one per site.
+    site_sym_orders :
+        Values of ``_atom_site_site_symmetry_order`` (or the older
+        ``_atom_site_symmetry_multiplicity``) if the file gives them,
+        otherwise None. Their presence means the file records site
+        multiplicity separately from occupancy, so a fractional
+        occupancy can be taken at face value as disorder.
 
-        if asym_occs[i] == 1:
+    Returns
+    -------
+    A list of :class:`DisorderAssembly`, or None if the structure has no
+    disorder.
+    """
+
+    n_sites = len(asym_occs)
+    occs = np.asarray(asym_occs, dtype=np.float64)
+    mults = np.asarray(multiplicities, dtype=np.float64)
+    assemblies = _normalise_disorder_codes(assemblies, n_sites)
+    groups = _normalise_disorder_codes(groups, n_sites)
+
+    raw: List[_RawAssembly] = []
+
+    # 1. Explicit disorder codes. These are a statement by the author
+    # about which sites are alternatives to which, and are honoured
+    # regardless of occupancy: a group can legitimately contain a site
+    # refined at full occupancy, and a CIF can give groups without giving
+    # occupancies at all.
+    explicit: dict = collections.OrderedDict()
+    assembly_only: dict = collections.OrderedDict()
+    unassigned: List[int] = []
+    any_group_codes = any(_is_code(g) for g in groups)
+
+    for i in range(n_sites):
+        asm, grp = assemblies[i], groups[i]
+
+        if _is_code(grp):
+            # A group code with no assembly code means the single
+            # implicit assembly; _atom_site_disorder_assembly is only
+            # required when a structure has more than one assembly.
+            key = asm if _is_code(asm) else _IMPLICIT_ASSEMBLY
+            explicit.setdefault(key, collections.OrderedDict()).setdefault(
+                grp, []
+            ).append(i)
+
+        elif _is_code(asm):
+            assembly_only.setdefault(asm, []).append(i)
+
+        elif grp == _INAPPLICABLE and any_group_codes:
+            # Explicitly excluded from disorder by a CIF which does label
+            # its disordered sites, so do not second guess it.
             continue
 
-        if asmbly in disorder:
-            if grp in disorder[asmbly]:
-                disorder[asmbly][grp].append(i)
-            else:
-                disorder[asmbly][grp] = [i]
         else:
-            disorder[asmbly] = {grp: [i]}
+            unassigned.append(i)
 
-    # FIX: what to do with atoms with a given group but no assembly?
+    for grps in explicit.values():
+        grp_inds = list(grps.values())
+        if len(grp_inds) < 2:
+            # One group is not a set of alternatives. Occupancy may still
+            # reveal disorder, so let the heuristics see these sites.
+            unassigned.extend(itertools.chain.from_iterable(grp_inds))
+            continue
+        substitutional = _explicit_is_substitutional(
+            grp_inds, asym_unit, cell, types, occs
+        )
+        raw.append(_RawAssembly(grp_inds, substitutional, "cif"))
 
-    # fractional occupancies with no given groups or assemblies
-    if None in disorder and None in disorder[None]:
+    # 2. Sites given an assembly but no group. The assembly says they are
+    # coupled but not which alternative each belongs to; distinct
+    # occupancies are the only available signal.
+    for inds in assembly_only.values():
+        grp_inds = _group_indices_by_occupancy(occs, inds)
+        if len(grp_inds) < 2:
+            unassigned.extend(inds)
+            continue
+        raw.append(_RawAssembly(grp_inds, False, "cif-assembly-only"))
 
-        # Find substitutional disorder. Overlapping disordered atoms
-        # are assumed to be substitutionally disordered.
-        inds = disorder[None][None]
-        asm_count = 0
-        m = len(inds)
-        leftover_pdist = _pdist_pbc(asym_unit[inds], cell)
-        grps = _collapse_into_groups(leftover_pdist <= SUBS_DISORDER_TOL)
+    # 3. Heuristics, for sites carrying no usable disorder codes. Only
+    # partial occupancy indicates disorder here.
+    candidates = [i for i in unassigned if occs[i] < 1 - OCCUPANCY_TOL]
 
-        leftover = []  # atoms not overlapping
-        for grp in grps:
+    # A file which states site symmetry order is keeping multiplicity out
+    # of the occupancy column, so its occupancies mean what they say.
+    # Only guess at special positions when it does not.
+    if not _declares_site_symmetry(site_sym_orders):
+        candidates = [
+            i
+            for i in candidates
+            if not _is_special_position_occupancy(occs[i], mults[i], n_symmetries)
+        ]
 
-            if len(grp) == 1:
-                leftover.append(inds[grp[0]])
-            else:
-                max_d = max(  # max interpoint dist in group
-                    leftover_pdist[m * i + j - ((i + 2) * (i + 1)) // 2]
-                    for i, j in itertools.combinations(grp, 2)
-                )
-                displaced_prefix = "d_" if max_d > 1e-10 else ""
-                asm_name = f"{displaced_prefix}sub_asm_{asm_count}"
-                disorder[asm_name] = {i: [inds[j]] for i, j in enumerate(grp)}
-                asm_count += 1
+    if candidates:
+        raw.extend(_heuristic_assemblies(asym_unit, cell, types, occs, candidates))
 
-        # Not substiutional
-        if leftover:
-
-            # seperate atoms with different occuapancies
-            leftover_occs_arr = np.array(asym_occs)[leftover]
-            occ_grps_pdist = (
-                pdist(leftover_occs_arr[None, :], metric="chebyshev") < 1e-6
+    # 4. Normalise occupancies and build the result.
+    out = []
+    for asm in raw:
+        occ_sum = sum(float(occs[grp[0]]) for grp in asm.groups)
+        norm = max(1.0, occ_sum)
+        out.append(
+            DisorderAssembly(
+                groups=[
+                    DisorderGroup(indices=grp, occupancy=float(occs[grp[0]]) / norm)
+                    for grp in asm.groups
+                ],
+                is_substitutional=asm.is_substitutional,
+                source=asm.source,
             )
-            occ_grps = _collapse_into_groups(occ_grps_pdist)
-            leftover_occs = np.array([leftover_occs_arr[grp[0]] for grp in occ_grps])
+        )
 
-            # for now, put all 1/2 occupancy atoms in one assembly
-            where_half_occ = np.argwhere(leftover_occs == 0.5)
-            if where_half_occ.size > 0:
-                grp_i = where_half_occ[0, 0]
-                asm = {0: [leftover[j] for j in occ_grps[grp_i]]}
-                disorder[f"half_asm_{asm_count}"] = asm
-                asm_count += 1
-                del occ_grps[grp_i]
-                leftover_occs = np.delete(leftover_occs, grp_i)
+    return out if out else None
 
-            # Assemble atoms with occ > 1
-            where_gt_1 = np.argwhere(leftover_occs > 1)
-            if where_gt_1.size > 0:
-                where_gt1_flat = where_gt_1.flatten()
-                for grp_i in where_gt1_flat:
-                    asm = {0: [leftover[j] for j in occ_grps[grp_i]]}
-                    disorder[f"gt1_asm_{asm_count}"] = asm
-                    asm_count += 1
 
-                for grp_i in sorted(where_gt1_flat, reverse=True):
-                    del occ_grps[grp_i]
-                leftover_occs = np.delete(leftover_occs, where_gt_1)
+def _explicit_is_substitutional(
+    grp_inds: List[List[int]], asym_unit: FloatArray, cell: FloatArray, types, occs
+) -> bool:
+    """Decide whether an assembly read from explicit CIF codes describes
+    substitutional disorder. The CIF disorder tags do not distinguish the
+    two, so this applies the same geometric test used for inferred
+    assemblies: every group must be a single site, and all those sites
+    must share one position.
+    """
 
-            unity_sum_grps = _tuples_sum_to_one(leftover_occs)
-            if unity_sum_grps:
-                for grps in unity_sum_grps:
-                    asm = {
-                        en: [leftover[j] for j in occ_grps[grp_i]]
-                        for en, (grp_i) in enumerate(grps)
-                    }
-                    disorder[f"sum_asm_{asm_count}"] = asm
-                    asm_count += 1
+    if any(len(grp) != 1 for grp in grp_inds):
+        return False
+    cluster = [grp[0] for grp in grp_inds]
+    clusters, _ = _overlapping_clusters(asym_unit, cell, cluster)
+    if len(clusters) != 1 or len(clusters[0][0]) != len(cluster):
+        return False
+    asm = _classify_overlapping_cluster(cluster, clusters[0][1], types, occs)
+    return asm is not None and asm.is_substitutional
 
-                all_grp_inds = [i for grp in unity_sum_grps for i in grp]
-                for grp_i in sorted(all_grp_inds, reverse=True):
-                    del occ_grps[grp_i]
-                leftover_occs = np.delete(leftover_occs, all_grp_inds)
 
-            # assemble all remaining groups seperately.
-            for grp in occ_grps:
-                asm = {None: [leftover[j] for j in grp]}
-                disorder[f"asm_{asm_count}"] = asm
-                asm_count += 1
+def _heuristic_assemblies(
+    asym_unit: FloatArray,
+    cell: FloatArray,
+    types,
+    occs: FloatArray,
+    candidates: List[int],
+) -> List[_RawAssembly]:
+    """Infer assemblies for partially occupied sites which carry no
+    disorder codes, from their positions and occupancies."""
 
-    # Check multiplicities ?
-    assemblies = []
-    for asm_name, asm_ in disorder.items():
-        
-        if asm_name is None:
+    raw: List[_RawAssembly] = []
+
+    # Sites sharing a position are alternatives for that position.
+    clusters, leftover = _overlapping_clusters(asym_unit, cell, candidates)
+    for cluster, max_d in clusters:
+        asm = _classify_overlapping_cluster(cluster, max_d, types, occs)
+        if asm is None:
+            leftover.extend(cluster)
+        else:
+            raw.append(asm)
+
+    if not leftover:
+        return raw
+
+    # Remaining sites are grouped by occupancy, then occupancies summing
+    # to one are taken to be alternatives of one assembly.
+    occ_grps = _group_indices_by_occupancy(occs, sorted(leftover))
+    grp_occs = np.array([occs[grp[0]] for grp in occ_grps])
+
+    over_occupied = [i for i, occ in enumerate(grp_occs) if occ > 1 + OCCUPANCY_TOL]
+    if over_occupied:
+        warnings.warn(
+            f"{len(over_occupied)} site(s) have occupancy > 1; "
+            "ignoring them when assigning disorder"
+        )
+
+    usable = [i for i in range(len(occ_grps)) if i not in set(over_occupied)]
+    consumed = set()
+    for combination in _tuples_sum_to_one(grp_occs[usable]):
+        combination = [usable[j] for j in combination]
+        raw.append(
+            _RawAssembly(
+                groups=[occ_grps[i] for i in combination],
+                is_substitutional=False,
+                source="occupancies-sum-to-one",
+            )
+        )
+        consumed.update(combination)
+
+    # Anything left is disorder we can see but cannot pair up: a site
+    # partially occupied against a vacancy, or one alternative of a set
+    # the occupancies do not resolve. Model it as present-or-absent.
+    for i in usable:
+        if i in consumed:
             continue
+        raw.append(
+            _RawAssembly(
+                groups=[occ_grps[i]],
+                is_substitutional=False,
+                source="partial-occupancy",
+            )
+        )
 
-        if len(asm_) < 2 and asym_occs[list(asm_.values())[0][0]] >= 1:
-            continue
-
-        # normalise if occupancies sum to > 1
-        occ_sum = sum(asym_occs[grp[0]] for grp in asm_.values())
-        norm = max(1, occ_sum)
-        assemblies.append(DisorderAssembly(
-            groups=[
-                DisorderGroup(indices=grp, occupancy=asym_occs[grp[0]] / norm)
-                for grp in asm_.values()
-            ],
-            is_substitutional=(asm_name.startswith("sub") and occ_sum >= 1)
-        ))
-
-    if not assemblies:
-        assemblies = None
-
-    return assemblies
+    return raw
 
 
 @numba.njit(cache=True)
@@ -1468,45 +1744,66 @@ def _pdist_pbc(points, cell):
     return np.sqrt(out)
 
 
-def _tuples_sum_to_one(unqiue_occs):
-    """Given a vector ``unqiue_occs`` of numbers between 0 and 1, return
-    tuples of indices specifying groups of elements summing to one."""
+def _tuples_sum_to_one(occupancies) -> List[List[int]]:
+    """Given a vector ``occupancies`` of numbers between 0 and 1, return
+    disjoint groups of two or more indices whose occupancies sum to one.
 
-    ret = []
-    done = set()
+    Each index is used at most once, and smaller combinations are found
+    first, so that a plain pair is preferred over a larger set. The
+    result can still be ambiguous where several subsets sum to one
+    (0.3, 0.7, 0.1, 0.2 admits both ``{0.3, 0.7}`` and
+    ``{0.7, 0.1, 0.2}``); the pair is returned.
+    """
 
-    def _combs_totalling_one(occs, m):
+    occs = np.asarray(occupancies, dtype=np.float64)
+    n = len(occs)
+    if n < 2:
+        return []
 
-        def helper(start, index, current_combination):
+    if n > _MAX_OCCUPANCY_SUBSET_SEARCH:
+        warnings.warn(
+            f"{n} distinct occupancies is too many to pair up by subset sum; "
+            "leaving these sites unassembled"
+        )
+        return []
 
-            if index == m:
-                if np.sum(occs[current_combination]) == 1:
-                    for i in current_combination:
-                        done.add(i)
-                    yield current_combination
-                return
+    # Search largest first so the running total exceeds one, and pruning
+    # takes effect, as early as possible.
+    order = np.argsort(-occs, kind="stable")
+    sorted_occs = occs[order]
+    used: set = set()
 
-            for i in range(start, len(occs)):
-                if any(current_combination[j] in done for j in range(index)):
-                    return
-                if i in done:
+    def _find(size: int) -> Optional[List[int]]:
+        """Find one unused combination of exactly ``size`` indices whose
+        occupancies sum to one."""
+
+        def helper(start: int, chosen: List[int], total: float):
+            if len(chosen) == size:
+                return list(chosen) if abs(total - 1.0) <= OCCUPANCY_TOL else None
+            if total > 1.0 + OCCUPANCY_TOL:
+                return None
+            for i in range(start, n):
+                if i in used:
                     continue
-                current_combination[index] = i
-                if np.sum(occs[current_combination[: index + 1]]) > 1:
-                    return
-                yield from helper(i + 1, index + 1, current_combination)
+                chosen.append(i)
+                result = helper(i + 1, chosen, total + sorted_occs[i])
+                if result is not None:
+                    return result
+                chosen.pop()
+            return None
 
-        combination = np.zeros((m,), dtype=np.int64)
-        yield from helper(0, 0, combination)
+        return helper(0, [], 0.0)
 
-    argsorted = np.argsort(unqiue_occs)
-    occs = unqiue_occs[argsorted]
+    found = []
+    for size in range(2, n + 1):
+        while True:
+            combination = _find(size)
+            if combination is None:
+                break
+            used.update(combination)
+            found.append([int(order[i]) for i in combination])
 
-    for asize in range(2, len(occs)):
-        for comb in _combs_totalling_one(occs, asize):
-            ret.append(argsorted[comb])
-
-    return ret
+    return found
 
 
 def _has_disorder(label: str, occupancy) -> bool:

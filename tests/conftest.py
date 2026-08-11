@@ -1,7 +1,12 @@
 import os
 import pickle
+import sys
 import pytest
 import pathlib
+
+# Test the working tree rather than whichever version of amd happens to
+# be installed in site-packages.
+sys.path.insert(0, str(pathlib.Path(__file__).absolute().parent.parent / "src"))
 
 
 @pytest.fixture(scope="session", autouse=True)

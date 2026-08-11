@@ -6,3 +6,4 @@ pandas>=1.2.5
 scikit-learn>=1.0.0
 scipy>=1.6.1
 tqdm>=4.1.0
+POT>=0.9.7
