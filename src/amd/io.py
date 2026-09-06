@@ -38,8 +38,11 @@ from .globals_ import (
     SUBS_DISORDER_TOL,
     EXACT_OVERLAP_TOL,
     OCCUPANCY_TOL,
+    OCCUPANCY_ROUNDING_TOL,
     SPECIAL_POSITION_OCC_TOL,
-    MAX_OCCUPANCY_SUBSET_SEARCH as _MAX_OCCUPANCY_SUBSET_SEARCH,
+    DISORDER_REGION_TOL,
+    DISORDER_COMPONENT_TOL,
+    MAX_OCCUPANCY_SUBSET_SEARCH,
     ATOMIC_NUMBERS,
 )
 from ._types import FloatArray, UIntArray
@@ -71,13 +74,24 @@ _CIF_TAGS: dict = {
         "_atom_site_Cartn_y",
         "_atom_site_Cartn_z",
     ],
+    "_atom_site_symmetry": [
+        "_atom_site_site_symmetry_order",
+        "_atom_site_symmetry_multiplicity"
+    ],
     "symop": [
         "_space_group_symop_operation_xyz",
         "_space_group_symop.operation_xyz",
         "_symmetry_equiv_pos_as_xyz",
     ],
-    "spacegroup_name": ["_space_group_name_H-M_alt", "_symmetry_space_group_name_H-M"],
-    "spacegroup_number": ["_space_group_IT_number", "_symmetry_Int_Tables_number"],
+    "spacegroup_name": [
+        "_space_group_name_H-M_alt",
+        "_symmetry_space_group_name_H-M"
+    ],
+    "spacegroup_number": [
+        "_space_group_IT_number",
+        "_symmetry_Int_Tables_number"
+    ],
+    
 }
 
 __all__ = [
@@ -125,10 +139,8 @@ class _Reader(collections.abc.Iterator):
         self._converter are printed if self.show_warnings is True.
         """
 
-        if not self.show_warnings:
-            warnings.simplefilter("ignore")
-
         while True:
+
             try:
                 item = next(self._iterator)
             except StopIteration:
@@ -136,15 +148,24 @@ class _Reader(collections.abc.Iterator):
                     self._progress_bar.close()
                 raise StopIteration
 
+            error = None
             with warnings.catch_warnings(record=True) as warning_msgs:
                 try:
                     periodic_set = self._converter(item)
                 except ParseError as err:
-                    warnings.warn(str(err))
-                    continue
+                    error = err
                 finally:
                     if self._progress_bar is not None:
                         self._progress_bar.update(1)
+
+            if not self.show_warnings:
+                if error is not None:
+                    continue
+                return periodic_set
+
+            if error is not None:
+                warnings.warn(str(error))
+                continue
 
             for warning in warning_msgs:
                 msg = f"(name={periodic_set.name}) {warning.message}"
@@ -602,7 +623,7 @@ def periodicset_from_gemmi_block(
     remove_hydrogens : bool, optional
         Remove Hydrogens from the crystal.
     skip_disorder : bool
-        Do not read disordered structures.
+        Raise ParseError for disordered structures.
     missing_coords : str
         Action to take upon finding missing coordinates. "warn" (default) will
         emit a warning when a structure has missing coordinates, and the sites
@@ -651,7 +672,8 @@ def periodicset_from_gemmi_block(
     tablified_loop = [[] for _ in range(len(xyz_loop.tags))]
     for i, item in enumerate(xyz_loop.values):
         tablified_loop[i % xyz_loop.width()].append(item)
-    loop_dict = {tag: l for tag, l in zip(xyz_loop.tags, tablified_loop)}
+
+    loop_dict = {tag.lower(): l for tag, l in zip(xyz_loop.tags, tablified_loop)}
     xyz_str = [loop_dict[t] for t in _CIF_TAGS["atom_site_fract"]]
     asym_unit = np.transpose(
         np.array([[str2float(c) for c in xyz] for xyz in xyz_str], dtype=np.float64)
@@ -672,29 +694,16 @@ def periodicset_from_gemmi_block(
 
     # Atomic types
     if "_atom_site_type_symbol" in loop_dict:
-        symbols = []
-        for s in loop_dict["_atom_site_type_symbol"]:
-            sym = gemmi.cif.as_string(s)
-            match = re.search(r"([A-Za-z][A-Za-z]?)", sym)
-            if match is not None:
-                sym = match.group()
-            else:
-                sym = ""
-            sym = list(sym)
-            if len(sym) > 0:
-                sym[0] = sym[0].upper()
-            if len(sym) > 1:
-                sym[1] = sym[1].lower()
-            symbols.append("".join(sym))
-    else:  # Get atomic types from label
+        symbols = [
+            _element_symbol(gemmi.cif.as_string(s))
+            for s in loop_dict["_atom_site_type_symbol"]
+        ]
+    else:
         symbols = _atomic_symbols_from_labels(asym_labels)
 
-    asym_types = []
-    for s in symbols:
-        if s in ATOMIC_NUMBERS:
-            asym_types.append(ATOMIC_NUMBERS[s])
-        else:
-            asym_types.append(0)
+    asym_types = [
+        ATOMIC_NUMBERS[s] if s in ATOMIC_NUMBERS else 0 for s in symbols
+    ]
 
     # Fractional occupancies
     if "_atom_site_occupancy" in loop_dict:
@@ -706,20 +715,14 @@ def periodicset_from_gemmi_block(
                 occ = 1
             if math.isnan(occ):
                 occ = 1
-            if skip_disorder and occ < 1:
-                raise ParseError(f"{block.name} has disorder")
             asym_occs.append(occ)
     else:
         asym_occs = [1] * xyz_loop.length()
 
-    # if all(a == 1 for a in asym_occs):
-    #     raise ParseError('no disorder')
-
-    # Site symmetry order, i.e. the order of the site symmetry group of
-    # an atom on a special position. Its presence tells us the file keeps
-    # multiplicity out of the occupancy column.
+    # Site symmetry order, the number of symops a site is invariant under.
+    # If present, the file keeps multiplicity out of the occupancy column.
     site_sym_orders = None
-    for tag in ("_atom_site_site_symmetry_order", "_atom_site_symmetry_multiplicity"):
+    for tag in _CIF_TAGS["_atom_site_symmetry"]:
         if tag in loop_dict:
             site_sym_orders = []
             for value in loop_dict[tag]:
@@ -729,11 +732,6 @@ def periodicset_from_gemmi_block(
                     site_sym_orders.append(float("nan"))
             break
 
-    # Disorder assembly/group codes are passed on raw:
-    # _disorder_assemblies unquotes them and distinguishes the CIF null
-    # values, "." meaning the atom takes no part in disorder and "?"
-    # meaning nothing was stated. gemmi.cif.as_string is deliberately not
-    # used here as it collapses both nulls to the empty string.
     if "_atom_site_disorder_group" in loop_dict:
         groups = list(loop_dict["_atom_site_disorder_group"])
     else:
@@ -755,15 +753,9 @@ def periodicset_from_gemmi_block(
         remove_sites.extend(np.nonzero(where_missing_atoms)[0])
 
     # Remove dummy sites
-    # remove_sites.extend(i for i, occ in enumerate(asym_occs) if occ > 1)
     if "_atom_site_calc_flag" in loop_dict:
         calc_flags = [gemmi.cif.as_string(f) for f in loop_dict["_atom_site_calc_flag"]]
         remove_sites.extend(i for i, f in enumerate(calc_flags) if f == "dum")
-
-    # # Remove sites with disorder if needed or skip
-    # if skip_disorder:
-    #     if any(_has_disorder(l, o) for l, o in zip(asym_labels, asym_occs)):
-    #         raise ParseError(f"{block.name} has disorder")
 
     if remove_hydrogens:
         remove_sites.extend(i for i, num in enumerate(asym_types) if num == 1)
@@ -796,28 +788,32 @@ def periodicset_from_gemmi_block(
             # Try international number
             for tag in _CIF_TAGS["spacegroup_number"]:
                 spg_num = block.find_value(tag)
-                if spg_num is not None:
-                    spg_num = gemmi.cif.as_int(spg_num)
+                if spg_num is None:
+                    continue
+                try:
+                    spg = gemmi.SpaceGroup(gemmi.cif.as_int(spg_num))
                     break
-            else:
+                except ValueError:
+                    continue
+            if spg is None:
                 warnings.warn(f"{block.name} has no symmetry data, defaulting to P1")
-                spg_num = 1
-            spg = gemmi.SpaceGroup(spg_num)
+                spg = gemmi.SpaceGroup(1)
 
         rot = np.array([np.array(o.rot) / o.DEN for o in spg.operations()])
         trans = np.array([np.array(o.tran) / o.DEN for o in spg.operations()])
 
-    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, eq_site_tol, uniquify_sites=False)
+    frac_motif, invs, kept = _expand_asym_unit(
+        asym_unit, rot, trans, eq_site_tol, uniquify_sites=False,
+        wrap_coords=wrap_coords
+    )
     _, wyc_muls = np.unique(invs, return_counts=True)
     wyc_muls = np.array(wyc_muls, dtype=np.uint64)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.uint64)
     asym_inds[1:] = np.cumsum(wyc_muls, dtype=np.uint64)[:-1]
 
     motif = np.matmul(frac_motif, cell)
-    
-    # for i, (type, occ, lab, asm, grp) in zip(asym_types, asym_occs, asym_labels, assemblies, groups):
-    #     if i not in remove_sites:
 
+    remove_sites = set(int(i) for i in remove_sites)
     asym_types = [s for i, s in enumerate(asym_types) if i not in remove_sites]
     asym_occs = [s for i, s in enumerate(asym_occs) if i not in remove_sites]
     asym_labels = [s for i, s in enumerate(asym_labels) if i not in remove_sites]
@@ -827,6 +823,14 @@ def periodicset_from_gemmi_block(
         site_sym_orders = [
             s for i, s in enumerate(site_sym_orders) if i not in remove_sites
         ]
+
+    n_sites = asym_unit.shape[0]
+    asym_types, asym_occs, asym_labels, assemblies, groups, site_sym_orders = _keep_sites(
+        kept, n_sites,
+        asym_types, asym_occs, asym_labels, assemblies, groups, site_sym_orders
+    )
+    if len(kept) != n_sites:
+        asym_unit = asym_unit[np.asarray(kept, dtype=np.intp)]
 
     disorder = _disorder_assemblies(
         asym_unit,
@@ -839,11 +843,17 @@ def periodicset_from_gemmi_block(
         asym_occs,
         site_sym_orders=site_sym_orders,
     )
+    if skip_disorder and disorder is not None:
+        raise ParseError(f"{block.name} has disorder")
     asym_types = np.array(asym_types, dtype=np.uint64)
 
+    symop_rotations, symop_translations = rot, trans
     if reduce_cell:
         cell = lll_reduce(cell)
-        motif = np.mod(motif @ np.linalg.inv(cell), 1) @ cell
+        if wrap_coords:
+            motif = np.mod(motif @ np.linalg.inv(cell), 1) @ cell
+        # Original symops not correct
+        symop_rotations, symop_translations = None, None
 
     return PeriodicSet(
         motif=motif,
@@ -854,6 +864,8 @@ def periodicset_from_gemmi_block(
         types=asym_types,
         labels=asym_labels,
         disorder=disorder,
+        symop_rotations=symop_rotations,
+        symop_translations=symop_translations
     )
 
 
@@ -918,11 +930,9 @@ def periodicset_from_ccdc_entry(
         removing Hydrogens and disordered sites.
     """
 
-    # Entry specific flag
     if not entry.has_3d_structure:
         raise ParseError(f"{entry.identifier} has no 3D structure")
 
-    # Disorder
     if skip_disorder and entry.has_disorder:
         raise ParseError(f"{entry.identifier} has disorder")
 
@@ -932,9 +942,10 @@ def periodicset_from_ccdc_entry(
         skip_disorder=skip_disorder,
         missing_coords=missing_coords,
         eq_site_tol=eq_site_tol,
+        reduce_cell=reduce_cell,
+        wrap_coords=wrap_coords,
         heaviest_component=heaviest_component,
-        molecular_centres=molecular_centres,
-        reduce_cell=reduce_cell
+        molecular_centres=molecular_centres
     )
 
 
@@ -991,11 +1002,11 @@ def periodicset_from_ccdc_crystal(
     ------
     ParseError
         Raised if the structure fails parsing for any of the following:
-        1. :code:``disorder == 'skip'`` and disorder is found on any
-        atom, 2. crystal.molecule.all_atoms_have_sites is False,
-        3. a.fractional_coordinates is None for any a in
-        crystal.disordered_molecule, 4. The motif is empty after
-        removing H, disordered sites or solvents.
+        1. :code:``skip_disorder is True`` and either ccdc reports
+        disorder or any site is partially occupied, 2. The crystal has
+        no unit cell, 3. :code:``missing_coords == 'skip'`` and any site
+        has no coordinates, 4. The motif is empty after removing H,
+        sites without coordinates or solvents.
     """
 
     molecule = crystal.asymmetric_unit_molecule
@@ -1005,37 +1016,83 @@ def periodicset_from_ccdc_crystal(
         if crystal.has_disorder:
             raise ParseError(f"{crystal.identifier} has disorder")
 
+    # molecule.atoms builds a fresh list of wrappers over the C++ layer
+    # on every access, so it is fetched once per state of the molecule.
+    sites_removed = False
+    atoms = molecule.atoms
     if remove_hydrogens:
-        molecule.remove_atoms(a for a in molecule.atoms if a.atomic_symbol in "HD")
+        hydrogens = [a for a in atoms if a.atomic_symbol in ("H", "D")]
+        if hydrogens:
+            molecule.remove_atoms(hydrogens)
+            atoms = molecule.atoms
+            sites_removed = True
 
-    # Missing coordinates
-    if any(a.fractional_coordinates is None for a in molecule.atoms):
+    missing = [a for a in atoms if a.fractional_coordinates is None]
+    if missing:
         if missing_coords == "skip":
             raise ParseError(f"{crystal.identifier} has missing coordinates")
         elif missing_coords == "warn":
             warnings.warn(f"{crystal.identifier} has missing coordinates")
+        molecule.remove_atoms(missing)
+        sites_removed = True
 
-        molecule.remove_atoms(
-            a for a in molecule.atoms if a.fractional_coordinates is None
-        )
-
-    if heaviest_component and len(molecule.components) > 1:
-        molecule = _heaviest_component_ccdc(molecule)
+    if heaviest_component:
+        components = molecule.components
+        if len(components) > 1:
+            molecule = _heaviest_component_ccdc(components)
+            sites_removed = True
 
     # Unit cell
-    cellpar = crystal.cell_lengths + crystal.cell_angles
+    cellpar = np.array(crystal.cell_lengths + crystal.cell_angles)
     if None in cellpar:
         raise ParseError(f"{crystal.identifier} has no unit cell")
-    cell = cellpar_to_cell(np.array(cellpar))
+    cell = cellpar_to_cell(cellpar)
 
-    c_pset = None
+    # Molecular centres
     if molecular_centres:
         frac_centres = _frac_molecular_centres_ccdc(crystal, eq_site_tol)
         mol_centres = np.matmul(frac_centres, cell)
-        c_pset = PeriodicSet(mol_centres, cell, name=crystal.identifier)
-        return c_pset
+        return PeriodicSet(mol_centres, cell, name=crystal.identifier)
 
-    asym_atoms = molecule.atoms
+    # Symmetry operations
+    sitesym = crystal.symmetry_operators
+    if not sitesym:
+        warnings.warn(f"{crystal.identifier} has no symmetry data, defaulting to P1")
+        sitesym = ["x,y,z"]
+    rot, trans = _parse_sitesyms(sitesym)
+
+    asym_atoms = list(molecule.atoms)
+
+    # crystal.disorder is documented to be None when the structure has
+    # no disorder, which should agree with has_disorder but is not worth
+    # relying on. The model is read once, into plain data that both the
+    # restore step and the code assignment below work from.
+    disorder_model = crystal.disorder if crystal.has_disorder else None
+    model_groups = (
+        [] if disorder_model is None
+        else _ccdc_disorder_snapshot(disorder_model)
+    )
+
+    # ccdc's asymmetric unit describes one disorder configuration
+    restored, covered_by_symmetry = _restore_disorder_sites_ccdc(
+        model_groups,
+        asym_atoms,
+        cell,
+        rot,
+        trans,
+        eq_site_tol,
+        remove_hydrogens=remove_hydrogens,
+        heaviest_component=heaviest_component,
+    )
+    # Which configuration each site belongs to. The asymmetric unit ccdc
+    # built is one self-consistent configuration of the crystal, so the
+    # sites read from it are simultaneously present, while the restored
+    # ones are its alternatives. The disorder heuristics can use that
+    # where occupancies distinguish nothing - every site of a suppressed
+    # 0.5:0.5 model carries the same occupancy.
+    majority_config = [True] * len(asym_atoms) + [False] * len(restored)
+    asym_atoms.extend(restored)
+
     asym_unit = np.array([tuple(a.fractional_coordinates) for a in asym_atoms], dtype=np.float64)
 
     if asym_unit.shape[0] == 0:
@@ -1044,24 +1101,31 @@ def periodicset_from_ccdc_crystal(
     if wrap_coords:
         asym_unit = np.mod(asym_unit, 1)
 
-    # Symmetry operations
-    sitesym = crystal.symmetry_operators
-    if not sitesym:
-        warnings.warn(f"{crystal.identifier} has no symmetry data, defaulting to P1")
-        sitesym = ["x,y,z"]
+    asym_types = [a.atomic_number for a in asym_atoms]
+    asym_labels = [_ccdc_label(a.label) for a in asym_atoms]
+    # None where the structure recorded no occupancy, kept apart from a
+    # recorded 1 so the disorder model below can fill it in.
+    asym_occs = [_ccdc_float(a.occupancy) for a in asym_atoms]
 
-    # Apply symmetries to asymmetric unit
-    rot, trans = _parse_sitesyms(sitesym)
-    frac_motif, invs = _expand_asym_unit(asym_unit, rot, trans, eq_site_tol)
+    # crystal.has_disorder is ccdc's own judgement, and a structure can
+    # carry a partial occupancy it does not call disorder - an unmodelled
+    # half occupied solvent, say. The gemmi backend takes any occupancy
+    # below one as disorder, so without this the same structure survives
+    # skip_disorder under one reader and not the other.
+    if skip_disorder and any(occ is not None and occ < 1 for occ in asym_occs):
+        raise ParseError(f"{crystal.identifier} has disorder")
+
+    # Apply symmetries to asymmetric unit. Without uniquify_sites,
+    # _expand_asym_unit keeps every site, so the per-site columns built
+    # above stay aligned with asym_unit as they are.
+    frac_motif, invs, _ = _expand_asym_unit(
+        asym_unit, rot, trans, eq_site_tol, wrap_coords=wrap_coords
+    )
     _, wyc_muls = np.unique(invs, return_counts=True)
     wyc_muls = np.array(wyc_muls, dtype=np.uint64)
     asym_inds = np.zeros_like(wyc_muls, dtype=np.uint64)
     asym_inds[1:] = np.cumsum(wyc_muls, dtype=np.uint64)[:-1]
     motif = np.matmul(frac_motif, cell)
-
-    asym_types = np.array([a.atomic_number for a in asym_atoms], dtype=np.uint64)
-    asym_labels = [a.label for a in asym_atoms]
-    asym_occs = np.array([float(a.occupancy) for a in asym_atoms])
 
     # None (rather than ".") so that atoms the ccdc disorder model does
     # not mention still reach the occupancy heuristics; that model can be
@@ -1070,13 +1134,45 @@ def periodicset_from_ccdc_crystal(
     assemblies = [None] * len(asym_unit)
     groups = [None] * len(asym_unit)
 
-    if crystal.has_disorder and not crystal.disorder.is_suppressed:
-        for asm in crystal.disorder.assemblies:
-            for grp in asm.groups:
-                for atom in grp.atoms:
-                    if atom.index < len(asym_unit): # fix: asym unit not giving all atoms
-                        assemblies[atom.index] = str(asm.id)
-                        groups[atom.index] = str(grp.id)
+    # A suppressed disorder model does not describe the structure's
+    # assemblies. Per the ccdc documentation it holds a single assembly
+    # of two groups, the first containing every minority occupancy atom
+    # in the crystal and the second none of them, so reading its ids as
+    # assembly and group codes would declare unrelated regions of
+    # disorder to be alternatives of one another. Leave it to the
+    # occupancy heuristics.
+    if disorder_model is not None and not disorder_model.is_suppressed:
+        match_site = _ccdc_site_matcher(
+            asym_unit, asym_labels, asym_types, eq_site_tol
+        )
+        saw_atoms, filled_groups, empty_groups = _assign_ccdc_disorder_codes(
+            model_groups, match_site, assemblies, groups, asym_occs,
+            covered_by_symmetry,
+        )
+
+        # Some atoms of the model not matching is normal - they are the
+        # removed ones, or symmetry copies completing a molecule outside
+        # the asymmetric unit. None of them matching is not, and means
+        # the codes have been lost rather than applied.
+        if saw_atoms and not filled_groups:
+            warnings.warn(
+                f"{crystal.identifier} has a disorder model whose atoms could "
+                "not be matched to any site; inferring disorder from "
+                "occupancies instead"
+            )
+        elif empty_groups and filled_groups and not sites_removed:
+            # A whole group having no site left, while its siblings do,
+            # means one alternative of an assembly is missing from the
+            # asymmetric unit rather than merely unmatched. Nothing was
+            # removed here, so the sites never arrived - most likely the
+            # majority component only.
+            warnings.warn(
+                f"{crystal.identifier} has {empty_groups} disorder group(s) "
+                "with no corresponding site in the asymmetric unit; those "
+                "alternatives are missing from the motif"
+            )
+
+    asym_occs = [1.0 if occ is None else occ for occ in asym_occs]
 
     disorder = _disorder_assemblies(
         asym_unit,
@@ -1087,11 +1183,15 @@ def periodicset_from_ccdc_crystal(
         assemblies,
         groups,
         asym_occs,
+        majority_config=majority_config,
     )
+    asym_types = np.array(asym_types, dtype=np.uint64)
 
     if reduce_cell:
         cell = lll_reduce(cell)
-        motif = np.mod(motif @ np.linalg.inv(cell), 1) @ cell
+        if wrap_coords:
+            motif = np.mod(motif @ np.linalg.inv(cell), 1) @ cell
+        rot, trans = None, None
 
     return PeriodicSet(
         motif=motif,
@@ -1102,6 +1202,8 @@ def periodicset_from_ccdc_crystal(
         types=asym_types,
         labels=asym_labels,
         disorder=disorder,
+        symop_rotations=rot,
+        symop_translations=trans,
     )
 
 
@@ -1178,38 +1280,63 @@ def _parse_sitesym(sym: str) -> Tuple[FloatArray, FloatArray]:
     return rot, trans
 
 
+def _keep_sites(kept: UIntArray, n_sites: int, *columns):
+    """Removes items with index not in kept from columns."""
+    if len(kept) == n_sites:
+        return columns
+    return tuple(
+        None if col is None else [col[int(i)] for i in kept] for col in columns
+    )
+
+
 def _expand_asym_unit(
     asym_unit: FloatArray,
     rotations: FloatArray,
     translations: FloatArray,
     tol: float,
     uniquify_sites: bool = False,
-) -> Tuple[FloatArray, UIntArray]:
+    wrap_coords: bool = True,
+) -> Tuple[FloatArray, UIntArray, UIntArray]:
     """Expand the asymmetric unit by applying symmetries given by
     ``rotations`` and ``translations`` and removing invariant points.
+
+    Returns ``(frac_motif, inverses, kept)`` where ``inverses`` gives the
+    asymmetric unit index each motif point came from and ``kept`` lists
+    the asymmetric unit indices which survived. ``kept`` is everything
+    unless ``uniquify_sites`` dropped a site for being symmetrically
+    equivalent to an earlier one, but it is always returned, so a caller
+    can index its own per site data by it unconditionally.
+
+    Points are wrapped into the unit cell unless ``wrap_coords`` is
+    False; duplicates are found modulo 1 either way.
     """
 
     asym_unit = asym_unit.astype(np.float64, copy=False)
     rotations = rotations.astype(np.float64, copy=False)
     translations = translations.astype(np.float64, copy=False)
-    expanded_sites = _expand_sites(asym_unit, rotations, translations)
+    expanded_sites = _expand_sites(asym_unit, rotations, translations, wrap_coords)
     frac_motif, invs = _reduce_expanded_sites(expanded_sites, tol)
 
     if uniquify_sites:
         if not all(_unique_sites(frac_motif, tol)):
             return _reduce_expanded_equiv_sites(expanded_sites, tol)
 
-    return frac_motif, invs
+    kept = np.arange(asym_unit.shape[0], dtype=np.uint64)
+    return frac_motif, invs, kept
 
 
 @numba.njit(cache=True)
 def _expand_sites(
-    asym_unit: FloatArray, rotations: FloatArray, translations: FloatArray
+    asym_unit: FloatArray,
+    rotations: FloatArray,
+    translations: FloatArray,
+    wrap: bool = True,
 ) -> FloatArray:
     """Expand the asymmetric unit by applying ``rotations`` and
     ``translations``, without yet removing points duplicated because
     they are invariant under a symmetry. Returns a 3D array shape
-    (#points, #syms, dims).
+    (#points, #syms, dims). Points are wrapped into the unit cell
+    unless ``wrap`` is False.
     """
 
     m, dims = asym_unit.shape
@@ -1222,7 +1349,9 @@ def _expand_sites(
                 for dim_ in range(3):
                     v += rotations[j, dim, dim_] * asym_unit[i, dim_]
                 expanded_sites[i, j, dim] = v + translations[j, dim]
-    return np.mod(expanded_sites, 1)
+    if wrap:
+        return np.mod(expanded_sites, 1)
+    return expanded_sites
 
 
 @numba.njit(cache=True)
@@ -1259,17 +1388,23 @@ def _reduce_expanded_sites(
 
 def _reduce_expanded_equiv_sites(
     expanded_sites: FloatArray, tol: float
-) -> Tuple[FloatArray, UIntArray]:
+) -> Tuple[FloatArray, UIntArray, UIntArray]:
     """Reduce the asymmetric unit after being expended by symmetries by
     removing invariant points. This version also removes symmetrically
     equivalent sites in the asymmetric unit.
+
+    Returns ``(frac_motif, inverses, kept)`` like
+    :func:`_expand_asym_unit`, ``kept`` being the asymmetric unit indices
+    which were not dropped for duplicating an earlier site.
     """
 
     sites = expanded_sites[0]
     unique_inds = _unique_sites(sites, tol)
     frac_motif = sites[unique_inds]
     inverses = [0] * len(frac_motif)
-    asym_inds = []
+    # Site 0 is the one every other site is compared against, so it is
+    # always kept and has to be in the list.
+    asym_inds = [0]
 
     for i in range(1, len(expanded_sites)):
         sites = expanded_sites[i]
@@ -1294,7 +1429,11 @@ def _reduce_expanded_equiv_sites(
             frac_motif = np.concatenate((frac_motif, np.array(points)))
             asym_inds.append(i)
 
-    return frac_motif, np.array(inverses, dtype=np.uint64), np.array(asym_inds)
+    return (
+        frac_motif,
+        np.array(inverses, dtype=np.uint64),
+        np.array(asym_inds, dtype=np.uint64),
+    )
 
 
 @numba.njit(cache=True)
@@ -1321,10 +1460,7 @@ def _unique_sites(asym_unit: FloatArray, tol: float) -> npt.NDArray[np.bool_]:
 
 
 class _RawAssembly(NamedTuple):
-    """Intermediate assembly, before occupancies are normalised. Each
-    entry of ``groups`` is a list of asymmetric unit indices forming one
-    mutually exclusive alternative.
-    """
+    """Intermediate assembly, before occupancies are normalised."""
 
     groups: List[List[int]]
     is_substitutional: bool
@@ -1335,39 +1471,29 @@ class _RawAssembly(NamedTuple):
 # null values "." (inapplicable, i.e. the atom takes no part in disorder)
 # and "?" (unknown). The two are not interchangeable: "." is a statement
 # that the atom is ordered, "?" is the absence of a statement.
-_INAPPLICABLE = "."
-_UNKNOWN = "?"
-
-# Key standing in for the single implicit assembly of a CIF which gives
-# disorder groups but no assembly codes. A tuple cannot collide with a
-# code read from a file, which is always a string.
-_IMPLICIT_ASSEMBLY = ("implicit",)
-
 
 def _is_code(value) -> bool:
-    """True if a disorder assembly/group value is an actual code rather
-    than one of the CIF null values."""
-    return value != _INAPPLICABLE and value != _UNKNOWN
+    """True if a value is not . or ? (CIF null/unknown)."""
+    return value != "." and value != "?"
 
 
 def _normalise_disorder_codes(values, n_sites: int) -> list:
     """Normalise a column of disorder assembly or group codes to a list
-    of either string codes or the ``_INAPPLICABLE``/``_UNKNOWN``
-    sentinels."""
+    of either string codes or the ./? sentinels."""
 
     if values is None:
-        return [_UNKNOWN] * n_sites
+        return ["?"] * n_sites
 
     normalised = []
     for value in values:
         if value is None:
-            normalised.append(_UNKNOWN)
+            normalised.append("?")
             continue
         value = str(value).strip().strip("'\"")
-        if value == _INAPPLICABLE:
-            normalised.append(_INAPPLICABLE)
-        elif value in (_UNKNOWN, ""):
-            normalised.append(_UNKNOWN)
+        if value == ".":
+            normalised.append(".")
+        elif value in ("?", ""):
+            normalised.append("?")
         else:
             normalised.append(value)
     return normalised
@@ -1438,7 +1564,7 @@ def _overlapping_clusters(
         return [], list(inds)
 
     m = len(inds)
-    dists = _pdist_pbc(asym_unit[inds], cell)
+    dists = _pdist_pbc(np.mod(asym_unit[inds], 1), cell)
 
     def _pair_dist(i: int, j: int) -> float:
         return dists[m * i + j - ((i + 2) * (i + 1)) // 2]
@@ -1461,8 +1587,33 @@ def _overlapping_clusters(
     return clusters, leftover
 
 
+def _sites_sharing_a_position_with_another_element(
+    asym_unit: FloatArray, cell: FloatArray, types: list, inds: List[int]
+) -> set:
+    """Which of ``inds`` sit on the same position as another of ``inds``
+    of a different element.
+
+    A site multiplicity cannot account for that: a symmetry element puts
+    an atom on top of *itself*, never a Co on top of an Ni. Such a site
+    is substitutional disorder whatever its occupancy looks like.
+    """
+
+    if types is None or len(inds) < 2:
+        return set()
+
+    dists = _pdist_pbc(np.mod(asym_unit[inds], 1), cell)
+    close = np.flatnonzero(dists <= EXACT_OVERLAP_TOL)
+    row, col = np.triu_indices(len(inds), 1)
+    shared = set()
+    for a, b in zip(row[close], col[close]):
+        if types[inds[a]] != types[inds[b]]:
+            shared.add(inds[a])
+            shared.add(inds[b])
+    return shared
+
+
 def _classify_overlapping_cluster(
-    cluster: List[int], max_d: float, types, occs: FloatArray
+    cluster: List[int], max_d: float, types: list, occs: FloatArray
 ) -> Optional[_RawAssembly]:
     """Classify a cluster of mutually overlapping partially occupied
     sites as substitutional or positional disorder.
@@ -1475,14 +1626,17 @@ def _classify_overlapping_cluster(
     """
 
     occ_sum = float(np.sum(occs[cluster]))
-    if occ_sum > 1 + OCCUPANCY_TOL:
-        # Cannot be alternatives on one site.
+    if occ_sum > 1 + OCCUPANCY_ROUNDING_TOL:
+        # Cannot be alternatives on one site. The tolerance is rounding
+        # in the deposited occupancies rather than OCCUPANCY_TOL: CSD
+        # LEYQUD gives its mixed Mo/V sites as 0.88 and 0.13, and
+        # rejecting those leaves the two atoms unpaired on one position,
+        # both present at once, which puts a zero distance into the
+        # structure's PDD.
         return None
 
-    distinct_types = True
-    if types is not None:
-        cluster_types = [types[i] for i in cluster]
-        distinct_types = len(set(cluster_types)) == len(cluster_types)
+    cluster_types = [types[i] for i in cluster]
+    distinct_types = len(set(cluster_types)) == len(cluster_types)
 
     substitutional = distinct_types or max_d <= EXACT_OVERLAP_TOL
     return _RawAssembly(
@@ -1497,11 +1651,12 @@ def _disorder_assemblies(
     multiplicities,
     n_symmetries: int,
     cell: FloatArray,
-    types,
-    assemblies,
-    groups,
-    asym_occs,
+    types: list,
+    assemblies: list,
+    groups: list,
+    asym_occs: list,
     site_sym_orders=None,
+    majority_config=None,
 ) -> Optional[List[DisorderAssembly]]:
     """Determine the disorder assemblies of an asymmetric unit.
 
@@ -1537,6 +1692,13 @@ def _disorder_assemblies(
         otherwise None. Their presence means the file records site
         multiplicity separately from occupancy, so a fractional
         occupancy can be taken at face value as disorder.
+    majority_config :
+        One bool per site, True for sites belonging to one
+        self-consistent configuration of the crystal (ccdc's asymmetric
+        unit) and False for the alternatives restored from its disorder
+        model, or None when the source does not distinguish them. Lets
+        the heuristics split sites into groups when the occupancies
+        cannot, e.g. a suppressed model whose alternatives are all 0.5.
 
     Returns
     -------
@@ -1569,7 +1731,7 @@ def _disorder_assemblies(
             # A group code with no assembly code means the single
             # implicit assembly; _atom_site_disorder_assembly is only
             # required when a structure has more than one assembly.
-            key = asm if _is_code(asm) else _IMPLICIT_ASSEMBLY
+            key = asm if _is_code(asm) else ("implicit",)
             explicit.setdefault(key, collections.OrderedDict()).setdefault(
                 grp, []
             ).append(i)
@@ -1577,9 +1739,18 @@ def _disorder_assemblies(
         elif _is_code(asm):
             assembly_only.setdefault(asm, []).append(i)
 
-        elif grp == _INAPPLICABLE and any_group_codes:
+        elif (
+            grp == "." and any_group_codes and occs[i] >= 1 - OCCUPANCY_TOL
+        ):
             # Explicitly excluded from disorder by a CIF which does label
-            # its disordered sites, so do not second guess it.
+            # its disordered sites, so do not second guess it - but only
+            # while the site is fully occupied. A partial occupancy states
+            # disorder on its own, and files routinely give group codes for
+            # one disordered fragment while leaving a half occupied solvent
+            # site marked '.'. COD 1100728 is one: its C50/Cl1/Cl2 fragment
+            # carries group codes, and `Cl5 ... 0.50 1` does not, so
+            # skipping it here hid the structure's disorder completely.
+            # Such sites must reach the occupancy heuristics below.
             continue
 
         else:
@@ -1588,9 +1759,19 @@ def _disorder_assemblies(
     for grps in explicit.values():
         grp_inds = list(grps.values())
         if len(grp_inds) < 2:
-            # One group is not a set of alternatives. Occupancy may still
-            # reveal disorder, so let the heuristics see these sites.
-            unassigned.extend(itertools.chain.from_iterable(grp_inds))
+            # One group is not a set of alternatives, but the author still
+            # labelled these sites as disordered, and at partial occupancy
+            # that is a statement in itself: the group is either present or
+            # it is not, with the implicit vacancy carrying the rest. That
+            # is an assembly with one alternative, and keeping it as one
+            # matters - handing these sites to the heuristics instead
+            # discards the assembly code, after which sites the file put in
+            # *different* assemblies are fused for sharing an occupancy.
+            # Only fully occupied sites have nothing to model here.
+            if occs[grp_inds[0][0]] < 1 - OCCUPANCY_TOL:
+                raw.append(_RawAssembly(grp_inds, False, "cif"))
+            else:
+                unassigned.extend(itertools.chain.from_iterable(grp_inds))
             continue
         substitutional = _explicit_is_substitutional(
             grp_inds, asym_unit, cell, types, occs
@@ -1603,7 +1784,13 @@ def _disorder_assemblies(
     for inds in assembly_only.values():
         grp_inds = _group_indices_by_occupancy(occs, inds)
         if len(grp_inds) < 2:
-            unassigned.extend(inds)
+            # One occupancy across the whole assembly, so no alternatives
+            # to tell apart - but as above, an assembly code plus partial
+            # occupancy is present-or-absent, not silence.
+            if occs[grp_inds[0][0]] < 1 - OCCUPANCY_TOL:
+                raw.append(_RawAssembly(grp_inds, False, "cif-assembly-only"))
+            else:
+                unassigned.extend(inds)
             continue
         raw.append(_RawAssembly(grp_inds, False, "cif-assembly-only"))
 
@@ -1615,14 +1802,25 @@ def _disorder_assemblies(
     # of the occupancy column, so its occupancies mean what they say.
     # Only guess at special positions when it does not.
     if not _declares_site_symmetry(site_sym_orders):
+        # Except where two elements share one position, which no site
+        # multiplicity explains. CSD KESFOG is one: its Co/Ni site is
+        # half occupied and of multiplicity 8 out of 16, so the special
+        # position reading drops it and leaves both atoms in the motif,
+        # on top of one another and both always present.
+        shared = _sites_sharing_a_position_with_another_element(
+            asym_unit, cell, types, candidates
+        )
         candidates = [
             i
             for i in candidates
-            if not _is_special_position_occupancy(occs[i], mults[i], n_symmetries)
+            if i in shared
+            or not _is_special_position_occupancy(occs[i], mults[i], n_symmetries)
         ]
 
     if candidates:
-        raw.extend(_heuristic_assemblies(asym_unit, cell, types, occs, candidates))
+        raw.extend(_heuristic_assemblies(
+            asym_unit, cell, types, occs, candidates, majority_config
+        ))
 
     # 4. Normalise occupancies and build the result.
     out = []
@@ -1644,7 +1842,11 @@ def _disorder_assemblies(
 
 
 def _explicit_is_substitutional(
-    grp_inds: List[List[int]], asym_unit: FloatArray, cell: FloatArray, types, occs
+    grp_inds: List[List[int]],
+    asym_unit: FloatArray,
+    cell: FloatArray,
+    types: list,
+    occs: np.ndarray
 ) -> bool:
     """Decide whether an assembly read from explicit CIF codes describes
     substitutional disorder. The CIF disorder tags do not distinguish the
@@ -1663,15 +1865,134 @@ def _explicit_is_substitutional(
     return asm is not None and asm.is_substitutional
 
 
+def _connected_components(
+    linked: npt.NDArray[np.bool_], m: int
+) -> List[List[int]]:
+    """Connected components of ``m`` items whose pairwise adjacency is
+    given as a condensed boolean matrix (the layout of ``pdist``).
+
+    Unlike :func:`_collapse_into_groups <.calculate._collapse_into_groups>`
+    this takes the transitive closure: that function assigns each item in
+    one pass and never revisits, so a chain a-b-c where b is claimed
+    first leaves c stranded. Region clustering needs the closure - a site
+    reaches its region through any neighbour.
+    """
+
+    parent = list(range(m))
+
+    def find(a: int) -> int:
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    row, col = np.triu_indices(m, 1)
+    for i, j in zip(row[linked], col[linked]):
+        ri, rj = find(int(i)), find(int(j))
+        if ri != rj:
+            parent[rj] = ri
+
+    comps = collections.defaultdict(list)
+    for i in range(m):
+        comps[find(i)].append(i)
+    return list(comps.values())
+
+
+def _majority_minority_assemblies(
+    asym_unit: FloatArray,
+    cell: FloatArray,
+    occs: FloatArray,
+    inds: List[int],
+    majority: List[bool],
+) -> Tuple[List[_RawAssembly], List[int]]:
+    """Pair up disordered sites by which configuration of the crystal
+    each belongs to.
+
+    ccdc's asymmetric unit represents one self-consistent configuration:
+    the sites read from it are simultaneously present, never alternatives
+    of one another, while the minority alternatives restored from the
+    disorder model are what replaces them. Within one *region* of
+    disorder that is exactly the grouping wanted - and it is the only
+    signal that resolves a suppressed 0.5:0.5 model, where every site
+    carries the same occupancy and no occupancy pairing can say which
+    sites are alternatives of which.
+
+    Sites are first split into regions by distance: an alternative
+    position sits within a bond length or so of the sites it replaces,
+    while independent regions of disorder are separated by van der Waals
+    contacts. Each region containing sites of both configurations
+    becomes one assembly, its groups being the majority sites and the
+    minority sites split by occupancy, provided the group occupancies
+    are consistent with being mutually exclusive. Where several regions
+    were fused by proximity (group occupancies sum past one),
+    complementary majority/minority pairs are matched within the region
+    instead, and anything unresolved is returned in ``leftover`` for the
+    occupancy heuristics.
+
+    Returns ``(assemblies, leftover)``.
+    """
+
+    if len(inds) < 2 or all(majority[i] for i in inds):
+        return [], list(inds)
+
+    raw: List[_RawAssembly] = []
+    leftover: List[int] = []
+    dists = _pdist_pbc(np.mod(asym_unit[inds], 1), cell)
+
+    for comp in _connected_components(dists <= DISORDER_REGION_TOL, len(inds)):
+        comp = [inds[j] for j in comp]
+        maj = [i for i in comp if majority[i]]
+        mino = [i for i in comp if not majority[i]]
+        if not maj or not mino:
+            # A region entirely of one configuration has nothing to pair
+            # against here; the occupancy heuristics may still place it.
+            leftover.extend(comp)
+            continue
+
+        maj_groups = _group_indices_by_occupancy(occs, maj)
+        min_groups = _group_indices_by_occupancy(occs, mino)
+        groups = maj_groups + min_groups
+        occ_sum = sum(float(occs[grp[0]]) for grp in groups)
+
+        if occ_sum <= 1 + OCCUPANCY_ROUNDING_TOL:
+            raw.append(_RawAssembly(groups, False, "majority-minority"))
+            continue
+
+        # Group occupancies past one mean proximity fused several
+        # regions. Salvage the unambiguous part: a majority group and a
+        # minority group whose occupancies complement to one are a
+        # two-way assembly whichever region boundary was missed.
+        unused = [True] * len(min_groups)
+        for maj_grp in maj_groups:
+            for k, min_grp in enumerate(min_groups):
+                pair_occ = float(occs[maj_grp[0]]) + float(occs[min_grp[0]])
+                if unused[k] and abs(pair_occ - 1) <= OCCUPANCY_ROUNDING_TOL:
+                    unused[k] = False
+                    raw.append(
+                        _RawAssembly([maj_grp, min_grp], False, "majority-minority")
+                    )
+                    break
+            else:
+                leftover.extend(maj_grp)
+        for k, min_grp in enumerate(min_groups):
+            if unused[k]:
+                leftover.extend(min_grp)
+
+    return raw, leftover
+
+
 def _heuristic_assemblies(
     asym_unit: FloatArray,
     cell: FloatArray,
-    types,
+    types: list,
     occs: FloatArray,
     candidates: List[int],
+    majority_config=None,
 ) -> List[_RawAssembly]:
     """Infer assemblies for partially occupied sites which carry no
-    disorder codes, from their positions and occupancies."""
+    disorder codes, from their positions and occupancies, and - when the
+    source distinguishes them - which configuration of the crystal each
+    site belongs to."""
 
     raw: List[_RawAssembly] = []
 
@@ -1687,19 +2008,28 @@ def _heuristic_assemblies(
     if not leftover:
         return raw
 
+    # Sites split by which configuration they belong to
+    if majority_config is not None:
+        mm_assemblies, leftover = _majority_minority_assemblies(
+            asym_unit, cell, occs, sorted(leftover), majority_config
+        )
+        raw.extend(mm_assemblies)
+
+    if not leftover:
+        return raw
+
     # Remaining sites are grouped by occupancy, then occupancies summing
     # to one are taken to be alternatives of one assembly.
     occ_grps = _group_indices_by_occupancy(occs, sorted(leftover))
     grp_occs = np.array([occs[grp[0]] for grp in occ_grps])
 
-    over_occupied = [i for i, occ in enumerate(grp_occs) if occ > 1 + OCCUPANCY_TOL]
-    if over_occupied:
+    usable = [i for i, occ in enumerate(grp_occs) if occ <= 1 + OCCUPANCY_TOL]
+    if len(usable) != len(occ_grps):
         warnings.warn(
-            f"{len(over_occupied)} site(s) have occupancy > 1; "
+            f"{len(occ_grps) - len(usable)} site(s) have occupancy > 1; "
             "ignoring them when assigning disorder"
         )
 
-    usable = [i for i in range(len(occ_grps)) if i not in set(over_occupied)]
     consumed = set()
     for combination in _tuples_sum_to_one(grp_occs[usable]):
         combination = [usable[j] for j in combination]
@@ -1731,14 +2061,30 @@ def _heuristic_assemblies(
 
 @numba.njit(cache=True)
 def _pdist_pbc(points, cell):
+    """Condensed matrix of distances between the fractional coordinates
+    ``points``, which are expected to be wrapped into the unit cell.
+
+    Each distance is measured to the image given by wrapping the signed
+    fractional difference into [-1/2, 1/2). That is not always the
+    nearest image in a strongly skewed cell, but it is exact for the
+    near-coincident pairs this is used to find, and it is an upper bound
+    otherwise, so a pair is never reported closer than it really is.
+    """
+
     m = len(points)
     out = np.empty((int(m * (m - 1) / 2),), dtype=np.float64)
     ind = 0
     for i in range(m):
         for j in range(i + 1, m):
-            diffs1 = np.abs(points[i] - points[j])
-            diffs2 = np.abs(diffs1 - 1)
-            diff_v = np.minimum(diffs1, diffs2) @ cell
+            # Wrap the SIGNED difference into [-1/2, 1/2). Taking the
+            # absolute value of each fractional component first and then
+            # applying the cell only gives the right length when the cell
+            # is orthogonal: it turns a difference of a - b into a + b,
+            # which is a different vector whenever the axes are not
+            # perpendicular.
+            diffs = points[i] - points[j]
+            diffs = diffs - np.floor(diffs + 0.5)
+            diff_v = diffs @ cell
             out[ind] = np.sum(diff_v**2)
             ind += 1
     return np.sqrt(out)
@@ -1760,7 +2106,7 @@ def _tuples_sum_to_one(occupancies) -> List[List[int]]:
     if n < 2:
         return []
 
-    if n > _MAX_OCCUPANCY_SUBSET_SEARCH:
+    if n > MAX_OCCUPANCY_SUBSET_SEARCH:
         warnings.warn(
             f"{n} distinct occupancies is too many to pair up by subset sum; "
             "leaving these sites unassembled"
@@ -1815,22 +2161,34 @@ def _has_disorder(label: str, occupancy) -> bool:
     return (occupancy < 1) or label.endswith("?")
 
 
+# Hydrogen isotopes appear as their own symbols in neutron structures.
+_ISOTOPE_SYMBOLS = {"D": "H", "T": "H"}
+
+
+def _element_symbol(text: str) -> str:
+    """Element symbol at the start of an atom type symbol or label, or
+    "" if there is none. Tries the two letter symbol first and falls
+    back to one letter, so ``HA`` is hydrogen but ``Ca1`` is calcium
+    (and ``CA``, ambiguous, is read as calcium like ase and pymatgen
+    do). D and T are read as hydrogen.
+    """
+
+    if not text or text in (".", "?"):
+        return ""
+    match = re.match(r"([A-Za-z])([A-Za-z]?)", text)
+    if match is None:
+        return ""
+    first, second = match.group(1).upper(), match.group(2).lower()
+    if second and first + second in ATOMIC_NUMBERS:
+        return first + second
+    first = _ISOTOPE_SYMBOLS.get(first, first)
+    if first in ATOMIC_NUMBERS:
+        return first
+    return ""
+
+
 def _atomic_symbols_from_labels(symbols: List[str]) -> List[str]:
-    symbols_ = []
-    for label in symbols:
-        sym = ""
-        if label and label not in (".", "?"):
-            match = re.search(r"([A-Za-z][A-Za-z]?)", label)
-            if match is not None:
-                sym = match.group()
-            sym = list(sym)
-            if len(sym) > 0:
-                sym[0] = sym[0].upper()
-            if len(sym) > 1:
-                sym[1] = sym[1].lower()
-            sym = "".join(sym)
-        symbols_.append(sym)
-    return symbols_
+    return [_element_symbol(label) for label in symbols]
 
 
 def _get_syms_pymatgen(data: dict) -> Tuple[FloatArray, FloatArray]:
@@ -1900,44 +2258,387 @@ def _get_syms_pymatgen(data: dict) -> Tuple[FloatArray, FloatArray]:
     return rotations, translations
 
 
-def _frac_molecular_centres_ccdc(crystal, tol: float) -> FloatArray:
+def _ccdc_float(value, default: Optional[float] = None) -> Optional[float]:
+    """Coerce a possibly-null ccdc field to float, or ``default``."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return default
+    return default if math.isnan(value) else value
+
+
+def _ccdc_id_str(value, fallback: str) -> str:
+    """Stringify the id of a ccdc disorder assembly or group, falling
+    back to ``fallback`` when it says nothing.
+    """
+
+    if value is None:
+        return fallback
+    value = str(value).strip()
+    return value if value and _is_code(value) else fallback
+
+
+def _ccdc_label(label) -> str:
+    """Name of a ccdc atom, without the ``?`` ccdc suffixes onto the
+    label of an atom which is not part of the structure's majority
+    configuration. Stripping it gives a site one name whether it was read
+    from the asymmetric unit or from the disorder model.
+    """
+
+    label = "" if label is None else str(label)
+    return label[:-1] if label.endswith("?") else label
+
+
+class _CcdcModelAtom(NamedTuple):
+    """One atom of a ccdc disorder model, read once into plain data.
+    ``atom`` is the underlying ccdc Atom, kept so a restored alternative
+    can join the asymmetric unit; ``label`` has the ``?`` minority
+    marker stripped so a site has one name whichever way it was read.
+    """
+
+    atom: object
+    label: str
+    atomic_number: int
+    atomic_symbol: str
+    occupancy: Optional[float]
+    frac: Optional[tuple]
+
+
+class _CcdcModelGroup(NamedTuple):
+    """One group of a ccdc disorder model, with its ids resolved."""
+
+    assembly_id: str
+    group_id: str
+    occupancy: Optional[float]
+    atoms: List[_CcdcModelAtom]
+
+
+def _ccdc_disorder_snapshot(disorder_model) -> List[_CcdcModelGroup]:
+    """Read a ccdc disorder model into plain data in one traversal.
+
+    Every property access on a ccdc object crosses into its C++ layer
+    and builds fresh wrappers, so the model is read exactly once, and
+    the two consumers - restoring the absent alternatives, and applying
+    the assembly/group codes - work from the same snapshot rather than
+    walking the model separately.
+
+    Assembly and group ids are resolved here. An id is not guaranteed
+    to be a code: it can be empty or None, and ccdc numbers groups
+    within their assembly rather than across the structure. Two
+    assemblies both giving nothing for an id would then hand their
+    group 1s the same (assembly, group) key downstream, fusing sites
+    from independent regions of disorder into one set of alternatives.
+    Fall back to the position in the model, which is unique by
+    construction.
+    """
+
+    groups = []
+    for k, asm in enumerate(disorder_model.assemblies):
+        asm_id = _ccdc_id_str(asm.id, f"ccdc-{k}")
+        for j, grp in enumerate(asm.groups):
+            groups.append(
+                _CcdcModelGroup(
+                    assembly_id=asm_id,
+                    group_id=_ccdc_id_str(grp.id, f"ccdc-{j}"),
+                    occupancy=_ccdc_float(getattr(grp, "occupancy", None)),
+                    atoms=[
+                        _CcdcModelAtom(
+                            atom=a,
+                            label=_ccdc_label(a.label),
+                            atomic_number=a.atomic_number,
+                            atomic_symbol=a.atomic_symbol,
+                            occupancy=_ccdc_float(a.occupancy),
+                            frac=(
+                                None if a.fractional_coordinates is None
+                                else tuple(a.fractional_coordinates)
+                            ),
+                        )
+                        for a in grp.atoms
+                    ],
+                )
+            )
+    return groups
+
+
+def _symmetry_images(
+    frac: FloatArray,
+    types: FloatArray,
+    rotations: FloatArray,
+    translations: FloatArray,
+) -> Tuple[FloatArray, FloatArray]:
+    """Every symmetry image of ``frac``, wrapped into the unit cell, with
+    the atomic number of the site each image came from. Images are in
+    site-major order: the rows of site ``i`` are ``i*n_syms`` to
+    ``(i+1)*n_syms``.
+    """
+
+    frac = np.asarray(frac, dtype=np.float64).reshape(-1, 3)
+    images = _expand_sites(frac, rotations, translations).reshape(-1, 3)
+    return images, np.repeat(types, len(rotations))
+
+
+def _restore_disorder_sites_ccdc(
+    model_groups: List[_CcdcModelGroup],
+    asym_atoms: list,
+    cell: FloatArray,
+    rotations: FloatArray,
+    translations: FloatArray,
+    tol: float,
+    remove_hydrogens: bool = False,
+    heaviest_component: bool = False,
+) -> Tuple[list, set]:
+    """Return the atoms of a ccdc disorder model which are absent from
+    ``asym_atoms``, i.e. the minority alternatives ccdc leaves out of
+    :attr:`ccdc.crystal.Crystal.asymmetric_unit_molecule`, together with
+    the labels of those it left out because a site already read covers
+    them.
+
+    The model describes the whole disordered molecule, which can reach
+    beyond one asymmetric unit, so some of its atoms are symmetry copies
+    of sites already read rather than alternatives to them. Each
+    candidate is therefore compared against every symmetry image of the
+    accepted sites: a copy restored as a site of its own lands exactly
+    on top of an existing motif point, putting a zero into the
+    structure's PDD.
+    """
+
+    if not model_groups:
+        return [], set()
+
+    present = {_ccdc_label(a.label) for a in asym_atoms}
+    kept = [a for a in asym_atoms if a.fractional_coordinates is not None]
+    n_syms = len(rotations)
+
+    # One row per accepted site (the asymmetric unit, then each restored
+    # alternative in turn), alongside a preallocated table of their
+    # symmetry images in site-major blocks of n_syms rows - so an
+    # image's owning site is its row // n_syms, with no bookkeeping.
+    site_types = [a.atomic_number for a in kept]
+    site_occs = [_ccdc_float(a.occupancy, 1.0) for a in kept]
+    kept_frac = np.mod(
+        np.array(
+            [tuple(a.fractional_coordinates) for a in kept], dtype=np.float64
+        ).reshape(-1, 3),
+        1,
+    )
+    n_model_atoms = sum(len(grp.atoms) for grp in model_groups)
+    images = np.empty(((len(kept) + n_model_atoms) * n_syms, 3))
+    n_img = len(kept) * n_syms
+    images[:n_img] = _expand_sites(kept_frac, rotations, translations).reshape(
+        -1, 3
+    )
+
+    extra = []
+    # Labels of model atoms left out because a site already read covers
+    # them, so a group built only of these is accounted for rather than
+    # missing.
+    covered = set()
+    for grp in model_groups:
+        for matom in grp.atoms:
+            if matom.label in present or matom.frac is None:
+                continue
+            if remove_hydrogens and matom.atomic_symbol in ("H", "D"):
+                continue
+
+            point = np.mod(np.array(matom.frac, dtype=np.float64), 1)
+            # Signed minimum-image displacement to every image, shared
+            # by all three tests below.
+            d = images[:n_img] - point
+            d -= np.round(d)
+            coincident = np.all(np.abs(d) <= tol, axis=-1)
+            owners = np.unique(np.flatnonzero(coincident) // n_syms)
+
+            # A site of the same element in the same place is the same
+            # site under another name, not an alternative to it - and
+            # not a loss: symmetry expansion regenerates this position
+            # from the site it duplicates. Substitutional partners do
+            # coincide, so position alone is not enough to call this a
+            # duplicate.
+            if any(site_types[o] == matom.atomic_number for o in owners):
+                covered.add(matom.label)
+                continue
+
+            # Sharing a position with sites of other elements is
+            # substitution, but only if the occupancies allow it. Where
+            # they do not the deposited data contradicts itself - CSD
+            # MOQKOS gives a mixed C/N site as two atoms of occupancy 1
+            # - and restoring the alternative would put a second point
+            # on an occupied position, always present alongside the
+            # first.
+            if owners.size:
+                occ = 1.0 if matom.occupancy is None else matom.occupancy
+                total = occ + sum(site_occs[o] for o in owners)
+                if total > 1 + OCCUPANCY_ROUNDING_TOL:
+                    continue
+
+            if heaviest_component and n_img:
+                # Everything but one component has been discarded, and
+                # the disorder model still describes the whole
+                # asymmetric unit. Only alternatives of a site which
+                # survived belong in the motif.
+                dists = np.linalg.norm(d @ cell, axis=-1)
+                if dists.min() > DISORDER_COMPONENT_TOL:
+                    continue
+
+            present.add(matom.label)
+            extra.append(matom.atom)
+            site_types.append(matom.atomic_number)
+            site_occs.append(1.0 if matom.occupancy is None else matom.occupancy)
+            # A later alternative can equally be a symmetry copy of this
+            # one, so its images join the table.
+            images[n_img:n_img + n_syms] = np.mod(
+                rotations @ point + translations, 1
+            )
+            n_img += n_syms
+
+    return extra, covered
+
+
+def _assign_ccdc_disorder_codes(
+    model_groups: List[_CcdcModelGroup],
+    match_site: Callable,
+    assemblies: list,
+    groups: list,
+    asym_occs: list,
+    covered_by_symmetry: set,
+) -> Tuple[bool, int, int]:
+    """Write a ccdc disorder model's assembly and group codes onto the
+    per-site ``assemblies`` and ``groups`` columns, in place.
+
+    Returns ``(saw_atoms, filled_groups, empty_groups)``: whether the
+    model named any atom at all, and how many of its groups did or did
+    not land a code on at least one site, for the caller's diagnostics.
+    A group whose atoms are all covered by symmetry images of existing
+    sites counts as neither - nothing of it is missing from the motif,
+    since disorder across a symmetry element is one crystallographic
+    site at partial occupancy.
+    """
+
+    saw_atoms = False
+    filled_groups, empty_groups = 0, 0
+    for grp in model_groups:
+        matched = covered = False
+        for matom in grp.atoms:
+            saw_atoms = True
+            i = match_site(matom)
+            if i is None:
+                covered = covered or matom.label in covered_by_symmetry
+                continue
+            matched = True
+            assemblies[i] = grp.assembly_id
+            groups[i] = grp.group_id
+            # ccdc states the occupancy of an alternative on the group.
+            # Only used for sites whose own occupancy was not recorded:
+            # a group is otherwise built of atoms which already carry
+            # it, and the group value is a summary of theirs rather than
+            # a correction to it.
+            if asym_occs[i] is None and grp.occupancy is not None:
+                asym_occs[i] = grp.occupancy
+        if grp.atoms:
+            if matched:
+                filled_groups += 1
+            elif not covered:
+                empty_groups += 1
+    return saw_atoms, filled_groups, empty_groups
+
+
+def _ccdc_site_matcher(
+    asym_unit: FloatArray,
+    asym_labels: List[str],
+    asym_types: List[int],
+    tol: float,
+) -> Callable:
+    """Return a function mapping a :class:`_CcdcModelAtom` onto its
+    index in the asymmetric unit, or None if it is not one of those
+    sites.
+
+    ``atom.index`` cannot be used: it is a position in the molecule the
+    disorder model was built from, not in the asymmetric unit, which has
+    had hydrogens, sites without coordinates and lighter components taken
+    out of it. Indexing by it puts the codes on the wrong sites as soon
+    as any of those removals happened.
+
+    Labels are tried first as they identify a site and survive the
+    removals, but ccdc does not guarantee they are unique - the same
+    label can appear on two components - so ambiguous ones fall back to
+    matching on position. A label naming a different element is not that
+    site either: CSD KAKMIX has a V atom labelled Co1 alongside the Co
+    atom of the same name, and taking the label at its word puts the
+    codes of a mixed metal site on whichever it happened to hit.
+    """
+
+    label_counts = collections.Counter(asym_labels)
+    pos_by_label = {
+        lab: i
+        for i, lab in enumerate(asym_labels)
+        if lab and label_counts[lab] == 1
+    }
+    wrapped = np.mod(np.asarray(asym_unit, dtype=np.float64), 1)
+    types = np.asarray(asym_types, dtype=np.int64)
+
+    def match(matom: _CcdcModelAtom) -> Optional[int]:
+        i = pos_by_label.get(matom.label)
+        if i is not None and types[i] == matom.atomic_number:
+            return i
+
+        if matom.frac is None:
+            return None
+        point = np.mod(np.array(matom.frac, dtype=np.float64), 1)
+        d = wrapped - point
+        d -= np.round(d)
+        hits = np.flatnonzero(np.all(np.abs(d) <= tol, axis=-1))
+        hits = hits[types[hits] == matom.atomic_number]
+        if hits.size != 1:
+            # Either nothing of the asymmetric unit is there (a symmetry
+            # copy completing a molecule, or a site removed above), or
+            # several same-element sites are, which positional disorder
+            # makes routine. Guessing which of those the model meant
+            # would be worse than leaving them to the heuristics.
+            return None
+        return int(hits[0])
+
+    return match
+
+
+def _frac_molecular_centres_ccdc(
+    crystal, tol: float, min_atoms: int = 2
+) -> FloatArray:
     """Return the geometric centres of molecules in the unit cell.
     Expects a ccdc Crystal object and returns fractional coordiantes.
     """
     frac_centres = []
     for comp in crystal.packing(inclusion="AnyAtomIncluded").components:
-        # if len(comp.atoms) < 2:  # Temporary: delete single atoms
-        #     continue
+        if len(comp.atoms) < min_atoms:  # Temporary: delete single atoms
+            continue
         coords = [a.fractional_coordinates for a in comp.atoms]
         frac_centres.append([sum(ax) / len(coords) for ax in zip(*coords)])
+    
     if not frac_centres:
         raise ValueError("No molecules with > 1 atom found")
+    
     frac_centres = np.mod(np.array(frac_centres, dtype=np.float64), 1)
     return frac_centres[_unique_sites(frac_centres, tol)]
 
 
-def _heaviest_component_ccdc(molecule):
-    """Remove all but the heaviest component of the asymmetric unit.
-    Intended for removing solvents. Expects and returns a ccdc Molecule
-    object.
+def _heaviest_component_ccdc(components):
+    """The heaviest of a molecule's components, by occupancy-weighted
+    atomic weight. Intended for removing solvents. Takes the value of
+    :attr:`ccdc.molecule.Molecule.components` (fetching that property
+    builds every component afresh, so the caller passes it in) and
+    returns one ccdc Molecule.
     """
 
     component_weights = []
-    for component in molecule.components:
+    for component in components:
         weight = 0
         for a in component.atoms:
-            try:
-                occ = float(a.occupancy)
-            except:
-                occ = 1
+            occ = _ccdc_float(a.occupancy, 1.0)
             try:
                 weight += float(a.atomic_weight) * occ
-            except ValueError:
+            except (TypeError, ValueError):
                 pass
         component_weights.append(weight)
-    largest_component_ind = np.argmax(np.array(component_weights))
-    molecule = molecule.components[largest_component_ind]
-    return molecule
+    return components[np.argmax(np.array(component_weights))]
 
 
 def str2float(string):
@@ -1946,9 +2647,14 @@ def str2float(string):
     try:
         return float(re.sub(r"\(.+\)*", "", string))
     except TypeError:
+        # A one element list is the shape a looped tag comes back as;
+        # anything else is not a number and must not fall through as None.
         if isinstance(string, list) and len(string) == 1:
-            return float(re.sub(r"\(.+\)*", "", string[0]))
-    except ValueError as e:
+            return str2float(string[0])
+        raise ParseError(
+            f"{string.__class__.__name__} could not be converted to float"
+        )
+    except ValueError:
         if string.strip() in (".", "?"):
             return np.nan
         raise ParseError("String could not be converted to float")
@@ -2415,6 +3121,8 @@ def periodicset_from_pymatgen_structure(
     skip_disorder: bool = False,
     missing_coords: str = "warn",
     eq_site_tol: float = 1e-3,
+    reduce_cell: bool = False,
+    wrap_coords: bool = True
 ) -> PeriodicSet:
     """Convert a :class:`pymatgen.core.structure.Structure` object to a
     :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`. Does not set
@@ -2435,7 +3143,21 @@ def periodicset_from_pymatgen_structure(
         asymmetric unit for calculation.
     """
 
+    unimplemented = []
+    if skip_disorder:
+        unimplemented.append("skip_disorder")
+    if missing_coords != "warn":
+        unimplemented.append("missing_coords")
+    if eq_site_tol != 1e-3:
+        unimplemented.append("eq_site_tol")
+    if unimplemented:
+        warnings.warn(
+            f"{', '.join(unimplemented)} not implemented by "
+            "periodicset_from_pymatgen_structure, ignoring"
+        )
+
     if remove_hydrogens:
+        structure = structure.copy()
         structure.remove_species(["H", "D"])
 
     # # Disorder
@@ -2453,6 +3175,12 @@ def periodicset_from_pymatgen_structure(
     cell = structure.lattice.matrix
     types = np.array(structure.atomic_numbers, dtype=np.uint64)
     # occupancies = np.ones((len(motif), ), dtype=np.float64)
+
+    if reduce_cell:
+        cell = lll_reduce(cell)
+        if wrap_coords:
+            motif = np.mod(motif @ np.linalg.inv(cell), 1) @ cell
+        rot, trans = None, None
 
     return PeriodicSet(
         motif=motif,

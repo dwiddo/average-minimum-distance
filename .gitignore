@@ -179,6 +179,6 @@ cython_debug/
 .claude
 cache/
 src/amd/_private.py
-src/amd/WeightedVectors.py
+src/amd/pointwise_distance_distribution.py
 build_instructions.txt
 build_instructions.txt

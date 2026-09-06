@@ -12,6 +12,8 @@ List of modules
 Module                 Description
 ===================    ===================================================
 :mod:`.calculate`      Calculate invariants (AMD, PDD, ADA, PDA)
+:mod:`.pointwise_distance_distribution`
+                       Implements the PDD object and compares PDDs
 :mod:`.compare`        Compare invariants
 :mod:`.io`             Read crystals as PeriodicSets from files or the CSD
 :mod:`.periodicset`    Implements the PeriodicSet object
@@ -33,7 +35,7 @@ from .compare import *
 from .io import *
 from .periodicset import *
 from .utils import *
-from .WeightedVectors import *
+from .pointwise_distance_distribution import *
 
 try:
     from ._private import *

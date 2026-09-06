@@ -151,7 +151,31 @@ def test_assembly_without_group_split_by_occupancy():
 
 def test_inapplicable_group_excluded_from_heuristics():
     """"." means the atom takes no part in disorder. It must not be
-    confused with "?", which means nothing was stated."""
+    confused with "?", which means nothing was stated.
+
+    Honoured only while the site is fully occupied; see
+    test_partial_occupancy_overrides_inapplicable_group.
+    """
+
+    disorder = build_disorder(
+        [[0, 0, 0], [0.5, 0, 0], [0, 0.5, 0]],
+        [0.5, 0.5, 1.0],
+        groups=["1", "2", "."],
+    )
+
+    assigned = {i for asm in disorder for grp in asm.groups for i in grp.indices}
+    assert 2 not in assigned, "site explicitly marked '.' was assigned disorder"
+    assert assigned == {0, 1}
+
+
+def test_partial_occupancy_overrides_inapplicable_group():
+    """A partial occupancy states disorder in its own right.
+
+    Files routinely give group codes for one disordered fragment while leaving
+    a half occupied solvent site marked ".". COD 1100728 is one: its
+    C50/Cl1/Cl2 fragment carries codes and ``Cl5 ... 0.50 1`` does not. Taking
+    the "." at face value there reported the whole structure as ordered.
+    """
 
     disorder = build_disorder(
         [[0, 0, 0], [0.5, 0, 0], [0, 0.5, 0]],
@@ -160,8 +184,7 @@ def test_inapplicable_group_excluded_from_heuristics():
     )
 
     assigned = {i for asm in disorder for grp in asm.groups for i in grp.indices}
-    assert 2 not in assigned, "site explicitly marked '.' was assigned disorder"
-    assert assigned == {0, 1}
+    assert 2 in assigned, "a 0.4 occupied site was reported as ordered"
 
 
 def test_unknown_group_still_reaches_heuristics():
@@ -418,3 +441,155 @@ def test_cifreader_disordered_solvent_keeps_every_atom(data_dir):
 
     assert len(assigned) == 15
     assert assigned == partial
+
+
+# --------------------------------------------------------------------
+# A single group is still an assembly: present, or absent
+# --------------------------------------------------------------------
+
+
+def test_single_group_assembly_at_partial_occupancy_is_kept():
+    """An assembly with one group states no alternative to its sites, but
+    at partial occupancy it still states that they are either there or
+    not. The implicit vacancy is the other alternative."""
+
+    disorder = build_disorder(
+        [[0, 0, 0], [0.5, 0.5, 0.5]],
+        [1.0, 0.5],
+        assemblies=[".", "A"],
+        groups=[".", "1"],
+    )
+
+    assert disorder is not None
+    assert len(disorder) == 1
+    assert group_indices(disorder[0]) == [[1]]
+    assert disorder[0].groups[0].occupancy == pytest.approx(0.5)
+
+
+def test_single_group_assemblies_are_not_fused_by_a_shared_occupancy():
+    """Regression: sites the file puts in *different* assemblies must stay
+    apart. Discarding the assembly code and falling back to the occupancy
+    heuristics fused these two, inventing a correlation between an N and
+    an O six angstroms apart and losing half the configurations."""
+
+    disorder = build_disorder(
+        [[0, 0, 0], [0.31, 0.11, 0.23], [0.62, 0.17, 0.27], [0.15, 0.71, 0.63]],
+        [1.0, 1.0, 0.5, 0.5],
+        types=[6, 6, 7, 8],
+        assemblies=[".", ".", "A", "B"],
+        groups=[".", ".", "1", "1"],
+    )
+
+    assert len(disorder) == 2
+    assert sorted(group_indices(a) for a in disorder) == [[[2]], [[3]]]
+
+
+def test_fully_occupied_single_group_assembly_is_not_disorder():
+    """Nothing to model: the sites are there in every configuration."""
+
+    disorder = build_disorder(
+        [[0, 0, 0], [0.5, 0.5, 0.5]],
+        [1.0, 1.0],
+        assemblies=["A", "A"],
+        groups=["1", "1"],
+    )
+
+    assert disorder is None
+
+
+def test_assembly_without_group_at_one_occupancy_is_present_or_absent():
+    """An assembly code and no group codes gives nothing to tell apart,
+    but the code plus partial occupancy is still a statement."""
+
+    disorder = build_disorder(
+        [[0, 0, 0], [0.5, 0.5, 0.5]],
+        [1.0, 0.4],
+        assemblies=[".", "A"],
+    )
+
+    assert len(disorder) == 1
+    assert group_indices(disorder[0]) == [[1]]
+    assert disorder[0].groups[0].occupancy == pytest.approx(0.4)
+
+
+def test_cifreader_keeps_separate_assemblies_separate(tmp_path):
+    """End to end, and on through to the PDD: two independent half
+    occupied sites are four configurations, not two."""
+
+    path = write_cif(
+        tmp_path,
+        [
+            "C1 C 0.00 0.00 0.00 1.00 . .",
+            "C2 C 0.31 0.11 0.23 1.00 . .",
+            "N1 N 0.62 0.17 0.27 0.50 A 1",
+            "O1 O 0.15 0.71 0.63 0.50 B 1",
+        ],
+    )
+    pset = list(amd.CifReader(path, show_warnings=False))[0]
+
+    assert len(pset.disorder) == 2
+    pdd = amd.pointwise_distance_distribution.PointwiseDistanceDistribution(pset, 3)
+    assert pdd.n_components == 4
+    assert float(pdd.weights.sum()) == pytest.approx(1.0)
+
+
+def test_exactly_coincident_sites_pair_up_despite_rounded_occupancies():
+    """Deposited occupancies are rounded, so a mixed site can be given as
+    0.88 and 0.13. Sites refined at literally the same position have no
+    reading other than alternatives on one site, and leaving them
+    unpaired puts both in the motif at once - two points on top of one
+    another, i.e. a zero distance in the PDD."""
+
+    from amd.io import _disorder_assemblies
+
+    asym_unit = np.array([[0.1, 0.1, 0.1], [0.1, 0.1, 0.1]])
+    cell = np.eye(3) * 10
+    disorder = _disorder_assemblies(
+        asym_unit,
+        multiplicities=[1, 1],
+        n_symmetries=1,
+        cell=cell,
+        types=[42, 23],
+        assemblies=None,
+        groups=None,
+        asym_occs=[0.88, 0.13],
+    )
+
+    assert disorder is not None and len(disorder) == 1
+    assembly = disorder[0]
+    assert assembly.is_substitutional
+    assert len(assembly.groups) == 2
+    assert sum(g.occupancy for g in assembly.groups) <= 1 + 1e-9
+
+
+def test_two_elements_on_one_position_are_not_read_as_a_special_position():
+    """An occupancy matching the site multiplicity usually means an atom
+    on a symmetry element written the old way. It cannot mean that when
+    two different elements share the position: a symmetry element puts an
+    atom on top of itself, never a Co on top of an Ni."""
+
+    disorder = build_disorder(
+        [[0.25, 0.25, 0.25], [0.25, 0.25, 0.25]],
+        [0.5, 0.5],
+        types=[27, 28],
+        multiplicities=np.array([8, 8], dtype=np.uint64),
+        n_symmetries=16,
+    )
+
+    assert disorder is not None and len(disorder) == 1
+    assert disorder[0].is_substitutional
+    assert len(disorder[0].groups) == 2
+
+
+def test_one_element_on_a_special_position_is_still_not_disorder():
+    """The exemption above must not swallow the case it came from."""
+
+    disorder = build_disorder(
+        [[0.25, 0.25, 0.25], [0.6, 0.6, 0.6]],
+        [0.5, 1.0],
+        types=[27, 6],
+        multiplicities=np.array([8, 16], dtype=np.uint64),
+        n_symmetries=16,
+    )
+
+    assert disorder is None

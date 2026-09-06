@@ -1,5 +1,185 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- ``PeriodicSet`` now keeps the symmetry operations of a crystal, in the attributes
+``symop_rotations`` and ``symop_translations``. Previously the readers built these to expand
+the asymmetric unit and then discarded them, so the space group of a structure could not be
+recovered from the ``PeriodicSet``. ``PeriodicSet.has_symmetry()`` reports whether they are
+known and ``PeriodicSet.symops_xyz()`` returns them as xyz triplet strings.
+
+- ``PeriodicSet.site_labels()`` returns one label per point of the asymmetric unit, and
+``PeriodicSet.expanded_labels()`` one per motif point, the latter labelling each point with
+the asymmetric unit point it came from.
+
+- ``PointwiseDistanceDistribution``, a PDD as an object rather than a matrix. It holds a
+list of ``WeightedVectors`` components, each of mass 1 and each exactly the PDD of one
+ordered configuration of the crystal, together with a probability vector over them. An
+ordered crystal is the case of one component of weight 1, so there is one type either way.
+``.flatten()`` gives the pooled measure, ``.to_matrix()`` the old ``(n, k+1)`` shape and
+``.AMD()`` the barycenter, which is the AMD.
+
+- ``WeightedVectors``, a finitely supported measure on R^k compared by Earth Mover's
+distance, with a cached barycenter and an optional ``sources`` field recording where each
+row came from, carried through merging and sorting.
+
+- Two ways to compare disordered PDDs, chosen with ``emd(..., disorder=)``: ``"pooled"``
+(one LP on the pooled measures, the previous behaviour) and ``"coupled"`` (Wasserstein
+between the measures over configurations, with the EMD between configurations as the ground
+cost). Mass moves configuration-to-configuration under ``"coupled"``, so it cannot match one
+crystal's configuration A against another's configuration B. They are ordered
+``||AMD - AMD'|| <= pooled <= coupled``, so the cheap ones prune the expensive one.
+``"best-match"`` gives the minimum over pairs of configurations - useful for "could these be
+the same crystal?", but not a metric.
+
+- ``compare_structures(a, b, k, describe=True)`` returns the EMD between two periodic sets
+together with a report naming the sites which did not line up, and why: weight split across
+several sites, a different environment, or a different type or occupancy. PDD sees neither
+type nor occupancy, so two crystals can be at distance zero and still be flagged, which is
+the point of reporting them. Sites of a disordered crystal contribute one row per
+configuration they survive in, and the report works with the total flow in and out of each
+site rather than with single rows, so a site's weight is its expected presence in the
+ensemble.
+
+- ``PointwiseDistanceDistribution`` carries the asymptotics of the crystal it came from and
+can normalise by them: ``.PPC`` is the point packing coefficient, ``.AMD_estimate()`` the
+curve ``PPC * k^(1/n)`` the AMD converges to, ``.PDA()`` the pointwise deviation from
+asymptotic and ``.ADA()`` the average deviation. The PDA is itself a
+``PointwiseDistanceDistribution``, so it compares with ``emd()`` like any other, and
+``.ADA()`` is the AMD of the PDA.
+
+- A disordered crystal has one PPC per configuration, held in ``.ppcs``, and each is
+subtracted from its own component. Every configuration is an ordered periodic set converging
+on its own terms, and where vacancies make them differ in how many atoms they hold they
+converge to different constants; ``.PPC`` is the average of those, weighted by
+``.weights``, and is the constant the pooled AMD really converges to. It is *not*
+``PeriodicSet.PPC()`` of the disordered set: that uses the expected number of atoms per cell,
+which by Jensen overestimates whenever the atom count varies from one configuration to the
+next. The two agree exactly when it does not - substitutional disorder, or alternatives of
+equal size - and for every ordered crystal. ``PeriodicSet.PPC()`` is unchanged and its
+docstring now says when it is exact.
+
+### Changed
+
+- Disorder configurations are now weighted by their probability. Previously every
+configuration of a disordered crystal contributed equally regardless of occupancy, so a
+crystal refined at 0.99/0.01 gave the same PDD as one refined at 0.5/0.5 and never converged
+on the ordered crystal it was becoming. PDD is now continuous in the occupancies.
+
+- A site whose occupancies do not account for the whole site is disordered against a
+**vacancy**, and the vacancy is now enumerated as an alternative. Previously a site refined
+at occupancy 0.25 - which ``io`` records as an assembly of one group - was treated as fully
+occupied. The same applies to substitutional assemblies whose occupancies sum to less than 1.
+
+- Exceeding the disorder configuration limit no longer falls back to the single majority
+occupancy configuration, which was a discontinuity: two nearly identical crystals either side
+of the limit got completely different PDDs. Configurations are now enumerated
+most-probable-first and cut off once they account for ``config_mass`` of the probability,
+which costs at most the probability dropped and warns with the amount.
+
+- Configurations with identical PDDs, which is what a symmetry of the parent structure
+produces, are merged. This is exact rather than an approximation, and it is what makes
+equality of PDDs well defined.
+
+- Collapsing PDD rows takes the weight-weighted centroid rather than the plain mean, so the
+barycenter - the AMD - is preserved exactly. Collapsed rows may differ from 1.x by less than
+``collapse_tol``.
+
+- ``emd()`` does not accept the ``"RMS"`` metric which ``EMD()`` does. It is
+``"euclidean"`` divided by the square root of the number of columns; pass ``"euclidean"``
+and divide, or keep using ``EMD()``.
+
+- ``compare_structures()`` merges the rows of one site which are within ``collapse_tol`` of
+each other before solving, so a site away from the disorder no longer contributes one row
+per configuration. Rows of different sites are never merged, which is what the site level
+report needs. Pass ``collapse_tol=None`` for the previous behaviour.
+
+### Fixed
+
+- An explicit disorder assembly holding a single group had its assembly code discarded and
+its sites handed to the occupancy heuristics, which regroup by occupancy value. Sites the
+file had put in *different* assemblies were then fused for sharing an occupancy, inventing a
+correlation between them and losing every configuration in which one is present and the other
+is not. A single group at partial occupancy is an assembly whose one alternative is present
+or absent, and is now kept as one. COD 2108745, which declares six assemblies at occupancy
+0.5, was read as one.
+
+- The ccdc reader built ``types`` as a Python list where every other path builds a numpy
+array, so ``PeriodicSet.majority_occupancy_config()`` raised ``TypeError`` on any disordered
+crystal read from the CSD.
+
+- The ccdc reader keyed disorder assemblies on ``Assembly.id``, which csd-python-api does not
+guarantee to be a usable code. Since it numbers groups within their assembly rather than
+across the structure, two assemblies both answering nothing for an id gave their group 1s the
+same key, fusing sites from independent regions of disorder into one set of alternatives.
+Assemblies are now keyed on their position when the id says nothing.
+
+- The ccdc reader called ``float(atom.occupancy)`` unguarded, so one site whose structure
+recorded no occupancy raised ``TypeError`` and lost the whole crystal. A site with no recorded
+occupancy now takes the occupancy csd-python-api states on its disorder group, and 1 if there
+is none, as it already did when weighing components for ``heaviest_component``.
+
+- The ccdc reader matched the disorder model onto the asymmetric unit by label alone, and
+csd-python-api does not guarantee labels are unique. Ambiguous ones silently dropped their
+sites out of the assembly the model had put them in; they now fall back to matching on
+position. It also warns when a whole disorder group has no corresponding site in the
+asymmetric unit while its siblings do, which means one alternative of an assembly is missing
+from the motif rather than merely unmatched.
+
+- ``skip_disorder`` meant different things in the two backends: the ccdc reader skipped on
+``Crystal.has_disorder`` alone, so a structure carrying a partial occupancy that ccdc does not
+call disorder - an unmodelled half occupied solvent, say - survived under ``reader='ccdc'``
+and not under ``reader='gemmi'``. Both now skip on any occupancy below one.
+
+- ``WeightedVectors._merge`` was declared a ``classmethod`` without a ``cls`` parameter, so
+``merge_duplicates()`` raised ``TypeError``.
+
+- A disorder alternative whose occupancy was zero (or within ``OCCUPANCY_TOL`` of it) was
+dropped from the enumeration without its sites being dropped with it, so a site which is
+never occupied was present in every configuration.
+
+- Equality of PDDs no longer depends on the order of the rows, and its tolerance is 1e-9
+rather than 1e-12. Rows which agree to within rounding but share a leading distance can be
+lexsorted either way round, so two equal PDDs could compare unequal and a duplicate
+configuration could survive canonicalisation.
+
+- ``network_simplex()`` let POT stop at its default 100000 iterations and returned the
+unfinished plan, silently overstating the distance on the larger problems a disordered
+crystal produces. It now runs to optimality and warns if it cannot.
+
+- ``PeriodicSet.to_cif_str()`` writes the asymmetric unit plus a ``_symmetry_equiv_pos_as_xyz``
+loop when the symmetry operations are known, rather than always writing P1 with the motif
+expanded in full. It also now writes atom labels, and occupancies and disorder assembly/group
+codes for disordered crystals. Coordinates are written to 6 decimal places instead of 4.
+
+- Symmetry operations are not recorded when ``reduce_cell`` is used, since they are expressed
+in the basis of the cell they were read with and cell reduction replaces it.
+
+- The gemmi reader crashed the whole ``CifReader`` loop, rather than skipping the block, on a
+CIF whose only symmetry data was a null or invalid ``_space_group_IT_number`` (raised a bare
+``ValueError``) or whose atom site tags were not lowercase (raised ``KeyError``; CIF tags are
+case-insensitive and gemmi found the loop, but the columns were then looked up by exact
+spelling). An unusable space group number now warns and defaults to P1 like missing symmetry
+data does, and tags are matched case-insensitively.
+
+- ``wrap_coords=False`` had no effect on the motif in either backend: the asymmetric unit was
+left unwrapped, but expanding it by symmetry wrapped every point regardless. Points are now
+only wrapped when asked, including under ``reduce_cell``.
+
+- ``skip_disorder`` in the gemmi reader only looked at occupancies, while
+``_atom_site_disorder_group`` and ``_atom_site_disorder_assembly`` codes are honoured even at
+full occupancy when reading disorder. A structure whose alternatives were coded but fully
+occupied passed ``skip_disorder=True`` and came back with ``disorder`` populated. Codes now
+count as disorder for skipping.
+
+- Element symbols inferred from ``_atom_site_label`` or ``_atom_site_type_symbol`` took the
+first two letters and gave up if they were not an element, so ``HA``, ``HB``, ``HN`` got type
+0 and survived ``remove_hydrogens``. The reader now falls back to the one letter symbol as ase
+and pymatgen do. ``D`` and ``T`` are read as hydrogen, so ``remove_hydrogens`` removes
+deuterium as the ccdc backend already did.
+
 ## [1.6.1] - 17/11/2025
 
 ### Added

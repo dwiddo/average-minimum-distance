@@ -93,10 +93,7 @@ def nearest_neighbors(
     # Every point not yet generated lies in layer ``layer`` or later, so
     # has norm > layer - 1 in the integer lattice and is further than
     # layer_dist * (layer - 1) from the origin. Once that reaches the
-    # radius above, no remaining lattice point can give a neighbor. An
-    # individual layer being empty does not imply this, since layers of
-    # the integer lattice need not grow outwards steadily once mapped
-    # into Cartesian space.
+    # radius above, no remaining lattice point can give a neighbor.
     while layer_dist * (layer - 1) < radius:
         # Get next layer of lattice and prune distant lattice points.
         # This bound holds for every point of x at once, so it is worth

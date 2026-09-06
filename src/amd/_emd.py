@@ -7,6 +7,7 @@ Copyright (C) 2020 Cameron Hargreaves. This code is adapted from the
 Element Movers Distance project https://github.com/lrcfmd/ElMD.
 """
 
+import warnings
 from typing import Tuple
 
 import numba
@@ -21,17 +22,33 @@ except ImportError:
 
 __all__ = ["network_simplex"]
 
+# POT stops at 100000 iterations by default and returns whatever it has,
+# which for the LPs a disordered PDD produces is not the optimum: the
+# distance comes back too large with nothing to say it is wrong. The
+# solver is fast enough that a cap this high is only ever a backstop
+# against a genuinely pathological problem.
+_MAX_SIMPLEX_ITER = 10_000_000
+
 
 def network_simplex(
     source_demands: FloatArray, sink_demands: FloatArray, network_costs: FloatArray
 ) -> Tuple[float, FloatArray]:
     if ot is not None:
-        plan = ot.emd(
+        costs = np.ascontiguousarray(network_costs)
+        plan, log = ot.emd(
             np.ascontiguousarray(source_demands),
             np.ascontiguousarray(sink_demands),
-            np.ascontiguousarray(network_costs)
+            costs,
+            numItermax=_MAX_SIMPLEX_ITER,
+            log=True,
         )
-        return float(np.sum(plan * network_costs)), plan
+        if log.get("warning") is not None:
+            warnings.warn(
+                f"The transportation problem did not solve to optimality "
+                f"({log['warning']}); the distance returned is not exact.",
+                stacklevel=2,
+            )
+        return float(np.sum(plan * costs)), plan
     else:
         return _network_simplex(source_demands, sink_demands, network_costs)
 

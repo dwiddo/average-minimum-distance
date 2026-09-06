@@ -8,8 +8,8 @@ keywords = [
     "isometry invariant", "geometric data science", "crystal", "amd", "pdd",
     "similarity", "average", "minimum", "pointwise", "distance", "cif",
 ]
-authors = [{name = "Daniel Widdowson", email = "dwiddo@liverpool.ac.uk"}]
-maintainers = [{name = "Daniel Widdowson", email = "dwiddo@liverpool.ac.uk"}]
+authors = [{name = "Daniel Widdowson", email = "danwiddowson1@gmail.com"}]
+maintainers = [{name = "Daniel Widdowson", email = "danwiddowson1@gmail.com"}]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",

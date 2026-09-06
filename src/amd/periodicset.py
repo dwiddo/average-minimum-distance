@@ -10,6 +10,7 @@ calculate the invariants of crystals.
 
 from __future__ import annotations
 from typing import Optional, List, NamedTuple
+from fractions import Fraction
 import math
 
 import numpy as np
@@ -25,6 +26,21 @@ from .globals_ import ATOMIC_MASSES, ATOMIC_NUMBERS_TO_SYMS
 
 
 __all__ = ["PeriodicSet", "DisorderGroup", "DisorderAssembly"]
+
+# Rotation matrix entries are 0 or +-1, so anything smaller than this is
+# a zero which floating point arithmetic has nudged off the mark.
+_SYMOP_TOL = 1e-8
+
+
+def _assembly_code(index: int) -> str:
+    """Name disorder assembly `index` the way a CIF does: A, B, ... Z,
+    AA, AB and so on."""
+    code = ""
+    index += 1
+    while index > 0:
+        index, remainder = divmod(index - 1, 26)
+        code = chr(ord("A") + remainder) + code
+    return code
 
 
 class DisorderGroup(NamedTuple):
@@ -89,7 +105,20 @@ class PeriodicSet:
         Labels of atoms in the asymmetric unit.
     disorder : list, optional
         Contains disorder assemblies of the crystal.
+    symop_rotations : :class:`numpy.ndarray`, optional
+        Rotation parts of the symmetry operations of the crystal, shape
+        ``(n_ops, dims, dims)``. These are the operations which were
+        applied to ``motif[asym_unit]`` to build the motif, so they are
+        expressed in the basis of ``cell``.
+    symop_translations : :class:`numpy.ndarray`, optional
+        Translation parts of the symmetry operations, shape
+        ``(n_ops, dims)``, in fractional coordinates.
     """
+
+    # Attributes added after the first release. They are absent from the
+    # __dict__ of anything pickled by an earlier version, so __setstate__
+    # fills them in rather than letting attribute access fail.
+    _ADDED_ATTRS = ("symop_rotations", "symop_translations")
 
     def __init__(
         self,
@@ -101,6 +130,8 @@ class PeriodicSet:
         types: Optional[AtomTypeArray] = None,
         labels: Optional[List[str]] = None,
         disorder: Optional[list[DisorderAssembly]] = None,
+        symop_rotations: Optional[FloatArray] = None,
+        symop_translations: Optional[FloatArray] = None,
     ):
         self.motif = motif
         self.cell = cell
@@ -110,6 +141,15 @@ class PeriodicSet:
         self.types = types
         self.labels = labels
         self.disorder = disorder
+        self.symop_rotations = symop_rotations
+        self.symop_translations = symop_translations
+
+    def __setstate__(self, state: dict) -> None:
+        """Restore from a pickle, defaulting any attribute added since
+        the pickle was written."""
+        for attr in PeriodicSet._ADDED_ATTRS:
+            state.setdefault(attr, None)
+        self.__dict__.update(state)
 
     @property
     def ndim(self) -> int:
@@ -138,8 +178,13 @@ class PeriodicSet:
 
     @property
     def multiplicities(self) -> np.ndarray:
+        # One per asymmetric unit point, like types, labels and
+        # occupancies - NOT one per motif point. The two agree only when
+        # there is no asymmetric unit, and defaulting to self.m instead
+        # silently misaligns every consumer of this the moment a set has
+        # an asym_unit but no multiplicities of its own.
         if self._multiplicities is None:
-            return np.ones((self.m,), dtype=np.uint64)
+            return np.ones((self.n_asym,), dtype=np.uint64)
         else:
             return self._multiplicities
 
@@ -176,6 +221,11 @@ class PeriodicSet:
                 st = str(val).replace("\n ", "\n" + " " * (len(attr) + 6))
                 optional_attrs.append(f"{attr}={st}")
 
+        if self.has_symmetry():
+            n_ops = len(self.symop_rotations)
+            op_pl = "" if n_ops == 1 else "s"
+            optional_attrs.append(f"symops={n_ops} operation{op_pl}")
+
         optional_attrs_str = ",\n    " if optional_attrs else ""
         optional_attrs_str += ",\n    ".join(optional_attrs)
 
@@ -209,6 +259,27 @@ class PeriodicSet:
         -------
         ppc : float
             The PPC of ``self``.
+
+        Notes
+        -----
+        For a disordered crystal :math:`m` is the *expected* number of
+        atoms in a unit cell, the occupancies summed. That is the right
+        count for the density, but it is not in general the constant the
+        AMD of a disordered crystal converges to. A disordered crystal is
+        a distribution over ordered ones, each of which has its own PPC,
+        and the limit is the average of those.
+
+        .. math::
+
+            E[m^{1-1/n}] \le E[m]^{1-1/n}
+
+        so this formula is exact when every configuration holds the same
+        number of atoms - substitutional disorder, or alternatives of
+        equal size - and an overestimate when that number varies, which
+        is what a partially occupied site does. The exact constant is
+        :attr:`PointwiseDistanceDistribution.PPC
+        <.pointwise_distance_distribution.PointwiseDistanceDistribution.PPC>`,
+        the average of the configurations' own PPCs.
         """
         _, n = self.motif.shape
         m = np.sum(self.occupancies * self.multiplicities)
@@ -217,6 +288,7 @@ class PeriodicSet:
             ball_vol = (np.pi ** t) / math.factorial(t)
         else:
             ball_vol = (2 * math.factorial(t) * (4 * np.pi) ** t) / math.factorial(n)
+
         return (np.abs(np.linalg.det(self.cell)) / (m * ball_vol)) ** (1.0 / n)
 
     def has_positional_disorder(self):
@@ -244,7 +316,9 @@ class PeriodicSet:
             ATOMIC_MASSES[num] * tot_occ
             for num, tot_occ in zip(self.types, self.multiplicities * self.occupancies)
         )
-        cell_vol = np.linalg.det(self.cell)
+        # abs: a left handed basis has a negative determinant, which is
+        # not a negative volume.
+        cell_vol = np.abs(np.linalg.det(self.cell))
         return (cell_mass / cell_vol) * 1.66053907
 
     def formula(self, sep="", latex=False) -> str:
@@ -383,56 +457,247 @@ class PeriodicSet:
         frac_motif = np.random.uniform(size=(n_points, dims))
         return PeriodicSet(frac_motif @ cell, cell)
 
+    def has_symmetry(self) -> bool:
+        """Whether the symmetry operations of the crystal are known."""
+        return (
+            self.symop_rotations is not None
+            and self.symop_translations is not None
+            and len(self.symop_rotations) > 0
+        )
+
+    def symops_xyz(self) -> List[str]:
+        """Return the symmetry operations as xyz triplet strings, e.g.
+        ``["x,y,z", "-x,y+1/2,-z+1/2"]``, the form a CIF's
+        ``_symmetry_equiv_pos_as_xyz`` loop takes.
+
+        Raises :class:`ValueError` if the operations are not known; check
+        :meth:`has_symmetry` first.
+        """
+
+        if not self.has_symmetry():
+            raise ValueError(
+                "Cannot write the symmetry operations of a PeriodicSet "
+                "which does not have any."
+            )
+
+        axes = "xyz"
+        symops = []
+        for rot, trans in zip(self.symop_rotations, self.symop_translations):
+            terms = []
+            for i in range(len(rot)):
+                term = ""
+                for j, coeff in enumerate(rot[i]):
+                    if abs(coeff) < _SYMOP_TOL:
+                        continue
+                    sign = "-" if coeff < 0 else ("+" if term else "")
+                    term += sign + axes[j]
+
+                # Translations are always a multiple of 1/24 (gemmi's own
+                # denominator), so bounding the denominator recovers the
+                # exact fraction from the float rather than approximating
+                # it - 1/3 comes back as 1/3, not 0.3333.
+                frac = Fraction(float(trans[i])).limit_denominator(24)
+                if frac:
+                    magnitude = abs(frac)
+                    text = (
+                        str(magnitude.numerator)
+                        if magnitude.denominator == 1
+                        else f"{magnitude.numerator}/{magnitude.denominator}"
+                    )
+                    term += ("-" if frac < 0 else "+") + text
+
+                terms.append(term.lstrip("+") or "0")
+            symops.append(",".join(terms))
+
+        return symops
+
+    def site_labels(self) -> List[str]:
+        """Return one label per point of the asymmetric unit.
+
+        ``self.labels`` is used when it is set, which is the case for
+        :class:`PeriodicSet` s read from a file. Otherwise labels are
+        generated from the atomic types by numbering each element over
+        the asymmetric unit (``Si1``, ``O1``, ``O2``, ...), which is what
+        a CIF's own labels usually look like.
+        """
+
+        if self.labels is not None and len(self.labels) == self.n_asym:
+            # Whitespace would split a label across two columns of the
+            # CIF atom site loop. Real labels are single tokens, but
+            # collapsing keeps generated labels and file text in step.
+            return ["".join(str(lab).split()) for lab in self.labels]
+
+        if self.types is None:
+            raise ValueError(
+                "Cannot label the points of a PeriodicSet without either "
+                "labels or atomic types."
+            )
+
+        labels = []
+        counts = {}
+        for t in self.types:
+            sym = ATOMIC_NUMBERS_TO_SYMS[t]
+            counts[sym] = counts.get(sym, 0) + 1
+            labels.append(f"{sym}{counts[sym]}")
+        return labels
+
+    def expanded_labels(self) -> List[str]:
+        """Return one label per motif point, in the order of ``motif``.
+
+        Point ``i`` of the asymmetric unit contributes
+        ``multiplicities[i]`` points to the motif; its copies are
+        labelled ``<site label>_1``, ``<site label>_2`` and so on, so
+        that a label names both the site a point came from and which
+        copy of that site the point is.
+
+        This is what :meth:`to_cif_str` writes as ``_atom_site_label``,
+        so a program displaying that CIF can map an atom it has picked
+        back onto a row of ``motif`` - and from there, via
+        ``multiplicities``, onto a row of the PDD.
+        """
+
+        labels = []
+        for label, mul in zip(self.site_labels(), self.multiplicities):
+            labels.extend(f"{label}_{copy + 1}" for copy in range(int(mul)))
+        return labels
+
+    def _disorder_codes(self) -> tuple[Optional[List[str]], Optional[List[str]]]:
+        """Return the ``_atom_site_disorder_assembly`` and
+        ``_atom_site_disorder_group`` code of each point of the
+        asymmetric unit, or ``(None, None)`` if there is no disorder.
+
+        Codes are generated from the position of each assembly and group
+        rather than kept from the file, so they exist even for
+        assemblies which were inferred rather than read
+        (``DisorderAssembly.source != "cif"``) and so never had codes of
+        their own. Points outside every assembly take ``"."``, the CIF
+        way of writing "not applicable".
+        """
+
+        if not self.disorder:
+            return None, None
+
+        assemblies = ["."] * self.n_asym
+        groups = ["."] * self.n_asym
+        for asm_ind, asm in enumerate(self.disorder):
+            code = _assembly_code(asm_ind)
+            for grp_ind, grp in enumerate(asm.groups):
+                for i in grp.indices:
+                    assemblies[i] = code
+                    groups[i] = str(grp_ind + 1)
+
+        return assemblies, groups
+
     def to_cif_str(self) -> str:
-        """Return a CIF string representing the PeriodicSet. Does not
-        write disorder data, atom labels or symmetries."""
+        """Return a CIF string representing the PeriodicSet.
+
+        If the symmetry operations of the crystal are known, only the
+        asymmetric unit is listed, along with a
+        ``_symmetry_equiv_pos_as_xyz`` loop for a reader to rebuild the
+        rest of the motif from. Atom labels are then those of
+        :meth:`site_labels`.
+
+        Otherwise the cell is written in P1 with the motif listed in
+        full, labelled with :meth:`expanded_labels` so that a label still
+        identifies the asymmetric unit point its atom came from.
+
+        Occupancies and disorder assembly/group codes are written when
+        the crystal has any disorder.
+        """
+
+        if self.types is None:
+            raise ValueError(
+                "Cannot convert PeriodicSet to CIF without atomic types."
+            )
+
+        # A CIF names three cell lengths, three angles and an x, y and z
+        # per atom; there is no form of it for any other dimension.
+        if self.ndim != 3:
+            raise ValueError(
+                f"Cannot convert a PeriodicSet in {self.ndim} dimensions to CIF."
+            )
+
+        use_symmetry = self.has_symmetry()
 
         a, b, c, al, be, ga = cell_to_cellpar(self.cell)
-        out = [
-            f"data_{self.name}",
-            "_symmetry_space_group_name_H-M   'P 1'",
-            f"_cell_length_a   {a}",
-            f"_cell_length_b   {b}",
-            f"_cell_length_c   {c}",
-            f"_cell_angle_alpha   {al}",
-            f"_cell_angle_beta   {be}",
-            f"_cell_angle_gamma   {ga}",
-            "loop_",
-            " _symmetry_equiv_pos_site_id",
-            " _symmetry_equiv_pos_as_xyz",
-            " 1  'x, y, z'",
-            "loop_",
+        out = [f"data_{self.name}"]
+
+        # With operations to write there is no need to name the space
+        # group: a reader takes the operations over the name, and the
+        # name is not known here anyway. Without them, P1 is exactly what
+        # listing every motif point means.
+        if not use_symmetry:
+            out.append("_symmetry_space_group_name_H-M   'P 1'")
+
+        out.extend(
+            [
+                f"_cell_length_a   {a}",
+                f"_cell_length_b   {b}",
+                f"_cell_length_c   {c}",
+                f"_cell_angle_alpha   {al}",
+                f"_cell_angle_beta   {be}",
+                f"_cell_angle_gamma   {ga}",
+                "loop_",
+                " _symmetry_equiv_pos_site_id",
+                " _symmetry_equiv_pos_as_xyz",
+            ]
+        )
+
+        symops = self.symops_xyz() if use_symmetry else ["x,y,z"]
+        for i, symop in enumerate(symops):
+            out.append(f" {i + 1}  '{symop}'")
+
+        occupancies = self.occupancies
+        write_occupancies = not np.allclose(occupancies, 1.0)
+        assemblies, groups = self._disorder_codes()
+
+        tags = [
             " _atom_site_label",
             " _atom_site_type_symbol",
             " _atom_site_fract_x",
             " _atom_site_fract_y",
             " _atom_site_fract_z",
         ]
+        if write_occupancies:
+            tags.append(" _atom_site_occupancy")
+        if assemblies is not None:
+            tags.append(" _atom_site_disorder_assembly")
+            tags.append(" _atom_site_disorder_group")
+        out.append("loop_")
+        out.extend(tags)
+
+        # (label, asymmetric unit index, motif index) of every atom to be
+        # listed. Under symmetry that is one atom per asymmetric unit
+        # point; otherwise it is the whole motif.
+        if use_symmetry:
+            labels = self.site_labels()
+            entries = [
+                (labels[i], i, int(self.asym_unit[i])) for i in range(self.n_asym)
+            ]
+        else:
+            labels = self.expanded_labels()
+            entries = []
+            motif_ind = 0
+            for asym_ind, mul in enumerate(self.multiplicities):
+                for _ in range(int(mul)):
+                    entries.append((labels[motif_ind], asym_ind, motif_ind))
+                    motif_ind += 1
 
         frac_motif = self.motif @ np.linalg.inv(self.cell)
-        ind = 0
-        label_nums = {}
-        for asym_ind, mul in enumerate(self.multiplicities):
-            for _ in range(mul):
-
-                sym = ATOMIC_NUMBERS_TO_SYMS[self.types[asym_ind]]
-                if sym in label_nums:
-                    label_nums[sym] += 1
-                else:
-                    label_nums[sym] = 1
-
-                out.append(
-                    "  ".join(
-                        [
-                            f"{sym}{label_nums[sym]}",
-                            sym,
-                            f"{frac_motif[ind, 0]:.4f}",
-                            f"{frac_motif[ind, 1]:.4f}",
-                            f"{frac_motif[ind, 2]:.4f}",
-                        ]
-                    )
-                )
-                ind += 1
+        for label, asym_ind, motif_ind in entries:
+            row = [
+                label,
+                ATOMIC_NUMBERS_TO_SYMS[self.types[asym_ind]],
+                f"{frac_motif[motif_ind, 0]:.6f}",
+                f"{frac_motif[motif_ind, 1]:.6f}",
+                f"{frac_motif[motif_ind, 2]:.6f}",
+            ]
+            if write_occupancies:
+                row.append(f"{occupancies[asym_ind]:.4f}")
+            if assemblies is not None:
+                row.append(assemblies[asym_ind])
+                row.append(groups[asym_ind])
+            out.append("  ".join(row))
 
         return "\n".join(out)
 
@@ -494,18 +759,33 @@ class PeriodicSet:
                     motif_mask[m_i : m_i + mul] = False
 
         muls = self.multiplicities[asym_mask]
-        asym_unit = np.zeros_like(muls, dtype=np.int64)
+        asym_unit = np.zeros_like(muls, dtype=np.uint64)
         asym_unit[1:] = np.cumsum(muls)[:-1]
-        masked_labels = [l for l, flag in zip(self.labels, asym_mask) if flag]
 
+        # types and labels are both optional, so a set which has neither
+        # still has a majority configuration - mask them only if present.
+        masked_labels = None
+        if self.labels is not None:
+            masked_labels = [
+                lab for lab, flag in zip(self.labels, asym_mask) if flag
+            ]
+        masked_types = None
+        if self.types is not None:
+            masked_types = np.asarray(self.types)[asym_mask]
+
+        # The operations still generate the points which survive the
+        # mask, so they carry over; the disorder itself does not, having
+        # just been collapsed to one configuration.
         return PeriodicSet(
             self.motif[motif_mask],
             self.cell,
             self.name,
             asym_unit,
-            self.multiplicities[asym_mask],
-            self.types[asym_mask],
-            masked_labels
+            muls,
+            masked_types,
+            masked_labels,
+            symop_rotations=self.symop_rotations,
+            symop_translations=self.symop_translations,
         )
     
     def compressed_dtypes(self) -> PeriodicSet:
@@ -521,12 +801,15 @@ class PeriodicSet:
             multiplicities = np.array(self._multiplicities, dtype=np.uint32)
         else:
             multiplicities = None
-        
+
         if self.types is not None:
             types = np.array(self.types, dtype=np.uint8)
         else:
             types = None
 
+        # The symmetry operations are left alone: there are at most a few
+        # hundred tiny numbers, so narrowing them saves nothing worth the
+        # precision, and they have to reproduce exact fractions.
         return PeriodicSet(
             np.array(self.motif, dtype=np.float32),
             np.array(self.cell, dtype=np.float32),
@@ -535,5 +818,7 @@ class PeriodicSet:
             multiplicities=multiplicities,
             types=types,
             labels=self.labels,
-            disorder=self.disorder
+            disorder=self.disorder,
+            symop_rotations=self.symop_rotations,
+            symop_translations=self.symop_translations,
         )
