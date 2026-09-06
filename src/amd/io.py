@@ -3115,6 +3115,221 @@ def _snap_small_prec_coords(frac_coords: FloatArray, tol: float) -> FloatArray:
 #     )
 
 
+class _PymatgenSites(NamedTuple):
+    """Per (site, species) entry read from a pymatgen Structure."""
+
+    site_inds: List[int]
+    frac: FloatArray
+    types: List[int]
+    occs: List[float]
+    labels: Optional[List[str]]
+    assemblies: List[str]
+    groups: List[str]
+
+
+def _pymatgen_atomic_number(species) -> int:
+    """Atomic number of a pymatgen ``Element`` or ``Species``, or 0, this
+    module's code for an unrecognised element, where it has none.
+    """
+
+    for obj in (species, getattr(species, "element", None)):
+        if obj is None:
+            continue
+        try:
+            return int(obj.Z)
+        except Exception:
+            continue
+    return 0
+
+
+def _pymatgen_symbol(species) -> str:
+    """Element symbol of a pymatgen ``Element`` or ``Species``."""
+
+    symbol = getattr(species, "symbol", None)
+    if isinstance(symbol, str) and symbol:
+        return symbol
+    return str(species)
+
+
+def _pymatgen_name(structure, name: Optional[str]) -> Optional[str]:
+    """Name to give the periodic set.
+
+    A pymatgen Structure has no name of its own, so fall back to any
+    identifier its ``properties`` dict carries - the Materials Project
+    puts ``material_id`` there - and then to the reduced formula, which
+    at least tells one structure from another in a warning message.
+    """
+
+    if name is not None:
+        return name
+
+    # properties was added to Structure in 2023; older releases have no
+    # such attribute.
+    properties = getattr(structure, "properties", None)
+    if isinstance(properties, dict):
+        for key in ("name", "id", "material_id"):
+            value = properties.get(key)
+            if value:
+                return str(value)
+
+    try:
+        return structure.composition.reduced_formula
+    except Exception:
+        return None
+
+
+def _split_pymatgen_sites(structure) -> _PymatgenSites:
+    """Read a pymatgen Structure into one entry per (site, species) pair.
+
+    A pymatgen site holds a ``Composition``, so one site can carry
+    several partially occupied species. A periodic set has one type per
+    point, so such a site becomes one entry per species, all at the same
+    position - which is also how a CIF writes substitutional disorder,
+    as several ``_atom_site`` rows sharing coordinates.
+
+    Species sharing a site are alternatives to one another, and that is
+    something pymatgen states rather than something to be guessed, so
+    they are given a shared disorder assembly code and one group code
+    each. A site with a single species gets no codes, leaving it to the
+    occupancy heuristics of :func:`_disorder_assemblies`, which can link
+    a partially occupied site to its neighbours - a relationship a
+    Structure does not record.
+    """
+
+    site_inds: List[int] = []
+    frac: List[FloatArray] = []
+    types: List[int] = []
+    occs: List[float] = []
+    labels: List[Optional[str]] = []
+    symbols: List[str] = []
+    assemblies: List[str] = []
+    groups: List[str] = []
+    any_labels = False
+
+    for site_ind, site in enumerate(structure):
+        species = site.species
+
+        # Composition is a mapping of species to occupancy, so .items()
+        # covers the ordered and the disordered site in one branch.
+        try:
+            items = list(species.items())
+        except AttributeError:
+            items = [(species, 1.0)]
+
+        # PeriodicSite.label defaults to the species string, which is a
+        # formula and not a label. Only a label differing from it was
+        # given by whoever built the structure. Both label and
+        # species_string may be absent on older pymatgen releases.
+        default_label = getattr(site, "species_string", None)
+        if default_label is None:
+            default_label = str(species)
+        label = getattr(site, "label", None)
+        if label is not None and str(label) != str(default_label):
+            label = str(label)
+            any_labels = True
+        else:
+            label = None
+
+        coords = np.asarray(site.frac_coords, dtype=np.float64)
+        is_mixed = len(items) > 1
+
+        for grp_ind, (sp, occ) in enumerate(items):
+            symbol = _pymatgen_symbol(sp)
+            site_inds.append(site_ind)
+            frac.append(coords)
+            types.append(_pymatgen_atomic_number(sp))
+            occs.append(float(occ))
+            symbols.append(symbol)
+            if is_mixed:
+                assemblies.append(f"pmg{site_ind}")
+                groups.append(str(grp_ind + 1))
+                # One label per species, so the column stays unique.
+                labels.append(None if label is None else f"{label}_{symbol}")
+            else:
+                assemblies.append("?")
+                groups.append("?")
+                labels.append(label)
+
+    if frac:
+        frac_arr = np.array(frac, dtype=np.float64)
+    else:
+        frac_arr = np.empty((0, 3), dtype=np.float64)
+
+    final_labels = None
+    if any_labels:
+        # Some sites were labelled and some were not; name the rest after
+        # their element, as PeriodicSet.site_labels() would have done,
+        # skipping any name already taken so the column stays unique.
+        taken = set(lab for lab in labels if lab is not None)
+        counts: dict = {}
+        final_labels = []
+        for lab, symbol in zip(labels, symbols):
+            if lab is not None:
+                final_labels.append(lab)
+                continue
+            while True:
+                counts[symbol] = counts.get(symbol, 0) + 1
+                generated = f"{symbol}{counts[symbol]}"
+                if generated not in taken:
+                    break
+            taken.add(generated)
+            final_labels.append(generated)
+
+    return _PymatgenSites(
+        site_inds, frac_arr, types, occs, final_labels, assemblies, groups
+    )
+
+
+def _pymatgen_symmetry(structure, symprec: float, name: Optional[str]):
+    """Detect the symmetry of a pymatgen Structure with spglib, through
+    pymatgen's :class:`SpacegroupAnalyzer`.
+
+    Returns ``(rotations, translations, orbits)``, ``orbits`` being lists
+    of the indices of symmetrically equivalent sites, or None if the
+    analysis failed. A Structure records no symmetry of its own, so this
+    infers it from the geometry and can disagree with the space group the
+    structure was built from; ``symprec`` is the tolerance it uses.
+    """
+
+    try:
+        from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+
+        sga = SpacegroupAnalyzer(structure, symprec=symprec)
+        # get_symmetry_operations and get_symmetrized_structure are
+        # preferred over get_symmetry_dataset, which recent versions of
+        # spglib return as a dataclass rather than a dict.
+        ops = sga.get_symmetry_operations(cartesian=False)
+        orbits = [
+            list(orbit)
+            for orbit in sga.get_symmetrized_structure().equivalent_indices
+        ]
+    except Exception as e:
+        warnings.warn(f"{name} could not be symmetrised ({e!r}), reading it in P1")
+        return None
+
+    if not ops or not orbits:
+        return None
+
+    rot = np.array(
+        [np.asarray(op.rotation_matrix, dtype=np.float64) for op in ops],
+        dtype=np.float64,
+    )
+    trans = np.array(
+        [np.asarray(op.translation_vector, dtype=np.float64) for op in ops],
+        dtype=np.float64,
+    )
+    return rot, trans, orbits
+
+
+def _p1_symmetry() -> Tuple[FloatArray, FloatArray]:
+    """The identity operation alone, as rotation and translation arrays."""
+
+    return (
+        np.identity(3, dtype=np.float64)[None, :, :],
+        np.zeros((1, 3), dtype=np.float64),
+    )
+
+
 def periodicset_from_pymatgen_structure(
     structure,
     remove_hydrogens: bool = False,
@@ -3122,17 +3337,61 @@ def periodicset_from_pymatgen_structure(
     missing_coords: str = "warn",
     eq_site_tol: float = 1e-3,
     reduce_cell: bool = False,
-    wrap_coords: bool = True
+    wrap_coords: bool = True,
+    name: Optional[str] = None,
+    symprec: Optional[float] = None,
 ) -> PeriodicSet:
     """Convert a :class:`pymatgen.core.structure.Structure` object to a
-    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`. Does not set
-    the name of the periodic set, as pymatgen Structure objects seem to
-    have no name attribute.
+    :class:`amd.PeriodicSet <.periodicset.PeriodicSet>`.
+
+    A Structure is a P1 listing of a whole unit cell which records
+    neither a space group nor an asymmetric unit, so unlike the CIF and
+    ccdc readers this one has no symmetry to read. Pass ``symprec`` to
+    have it inferred from the geometry with spglib instead.
+
+    Fractional occupancies are read: a site holding several species
+    becomes one point per species sharing a position, and both that and
+    a site occupied below 1 become disorder assemblies of the periodic
+    set.
 
     Parameters
     ----------
     structure : :class:`pymatgen.core.structure.Structure`
         A pymatgen Structure object representing a crystal.
+    remove_hydrogens : bool, optional
+        Remove Hydrogens from the crystal.
+    skip_disorder : bool
+        Do not read structures with any partially occupied site.
+    missing_coords : str
+        Action to take upon finding missing coordinates. "warn" (default)
+        will emit a warning when a structure has missing coordinates, and
+        the sites will be removed. "skip" will not read structures with
+        missing coords.
+    eq_site_tol : float, default 0.001
+        Tolerance below which two sites are considered to be at the same
+        position.
+    reduce_cell : bool, default False
+        Reduce the unit cell (Lenstra-Lenstra-Lovasz lattice basis
+        reduction).
+    wrap_coords : bool, default True
+        Wrap motif points inside the unit cell.
+    name : str, optional
+        Name of the periodic set. A Structure has no name of its own, so
+        without this one is taken from ``structure.properties`` if it
+        holds a name, id or material_id, and otherwise from the reduced
+        formula.
+    symprec : float, optional
+        If given, the symmetry of the structure is found with spglib
+        (through pymatgen's :class:`SpacegroupAnalyzer`) at this
+        tolerance, and the resulting periodic set has an asymmetric unit,
+        Wyckoff multiplicities and symmetry operations. Without it the
+        set is P1, one point of the asymmetric unit per site. The
+        symmetry is inferred from the geometry, so it can differ from the
+        space group the structure was built from. The motif is then
+        rebuilt from the asymmetric unit, which idealises a structure
+        only approximately symmetric: points can move by up to about
+        ``symprec``, so an experimental structure comes back slightly
+        changed.
 
     Returns
     -------
@@ -3141,50 +3400,159 @@ def periodicset_from_pymatgen_structure(
         set of points (motif) and lattice (unit cell). Contains other
         useful data, e.g. the crystal's name and information about the
         asymmetric unit for calculation.
+
+    Raises
+    ------
+    ParseError
+        Raised if the structure fails parsing for any of the following:
+        1. :code:``skip_disorder is True`` and any site is partially
+        occupied, 2. :code:``missing_coords == 'skip'`` and any site has
+        no coordinates, 3. The motif is empty, either to begin with or
+        after removing Hydrogens and sites without coordinates.
     """
 
-    unimplemented = []
-    if skip_disorder:
-        unimplemented.append("skip_disorder")
-    if missing_coords != "warn":
-        unimplemented.append("missing_coords")
-    if eq_site_tol != 1e-3:
-        unimplemented.append("eq_site_tol")
-    if unimplemented:
-        warnings.warn(
-            f"{', '.join(unimplemented)} not implemented by "
-            "periodicset_from_pymatgen_structure, ignoring"
-        )
+    name = _pymatgen_name(structure, name)
+    cell = np.array(structure.lattice.matrix, dtype=np.float64)
 
+    if skip_disorder and not structure.is_ordered:
+        raise ParseError(f"{name} has disorder")
+
+    sites = _split_pymatgen_sites(structure)
+    n_entries = len(sites.types)
+    if n_entries == 0:
+        raise ParseError(f"{name} has no coordinates")
+
+    keep = np.ones((n_entries,), dtype=np.bool_)
+
+    # Missing coordinates. A pymatgen site always has coordinates, so
+    # this guards against NaNs arriving from elsewhere rather than being
+    # a common path, but it makes missing_coords mean here what it means
+    # in the other converters.
+    where_missing = np.isnan(sites.frac).any(axis=-1)
+    if np.any(where_missing):
+        if missing_coords == "skip":
+            raise ParseError(f"{name} has missing coordinates")
+        elif missing_coords == "warn":
+            warnings.warn(f"{name} has missing coordinates")
+        keep &= ~where_missing
+
+    # Hydrogens go by atomic number rather than through
+    # Structure.remove_species(["H", "D"]): that depends on which
+    # pymatgen version names the isotopes as elements, and cannot remove
+    # a hydrogen which is one species of a mixed site.
     if remove_hydrogens:
-        structure = structure.copy()
-        structure.remove_species(["H", "D"])
+        keep &= np.array([t != 1 for t in sites.types], dtype=np.bool_)
 
-    # # Disorder
-    # if skip_disorder:
-    #     if not structure.is_ordered:
-    #         raise ParseError("Structure has disorder")
-    # else:
-    #     remove_inds = []
-    #     for i, comp in enumerate(structure.species_and_occu):
-    #         if comp.num_atoms < 1:
-    #             remove_inds.append(i)
-    #     structure.remove_sites(remove_inds)
+    kept_entries = [i for i in range(n_entries) if keep[i]]
+    if not kept_entries:
+        raise ParseError(f"{name} has no coordinates")
 
-    motif = structure.cart_coords
-    cell = structure.lattice.matrix
-    types = np.array(structure.atomic_numbers, dtype=np.uint64)
-    # occupancies = np.ones((len(motif), ), dtype=np.float64)
+    rot, trans, asym_entries = None, None, None
 
+    if symprec is not None:
+        found = _pymatgen_symmetry(structure, symprec, name)
+        if found is not None:
+            detected_rot, detected_trans, orbits = found
+            kept_sites = set(sites.site_inds[i] for i in kept_entries)
+
+            # A removed site has to take its whole orbit with it. If it
+            # does not, the surviving sites are not the images of the
+            # representatives and the asymmetric unit would be wrong.
+            reps, usable = [], True
+            for orbit in orbits:
+                inside = [s for s in orbit if s in kept_sites]
+                if not inside:
+                    continue
+                if len(inside) != len(orbit):
+                    usable = False
+                    break
+                reps.append(orbit[0])
+
+            if usable and reps:
+                rep_sites = set(reps)
+                asym_entries = [
+                    i for i in kept_entries if sites.site_inds[i] in rep_sites
+                ]
+                rot, trans = detected_rot, detected_trans
+            else:
+                warnings.warn(
+                    f"{name} has symmetrically equivalent sites of which only "
+                    "some were read, so it is read in P1"
+                )
+
+    used_symmetry = rot is not None
+    if not used_symmetry:
+        rot, trans = _p1_symmetry()
+        asym_entries = kept_entries
+
+    def _expand(entries):
+        asym_frac = sites.frac[np.asarray(entries, dtype=np.intp)]
+        if wrap_coords:
+            asym_frac = np.mod(asym_frac, 1)
+        frac_motif, invs, _ = _expand_asym_unit(
+            asym_frac, rot, trans, eq_site_tol,
+            uniquify_sites=False, wrap_coords=wrap_coords,
+        )
+        return asym_frac, frac_motif, invs
+
+    asym_frac, frac_motif, invs = _expand(asym_entries)
+
+    # The operations must regenerate exactly the sites the structure
+    # listed. Where they do not, spglib described a cell other than the
+    # one in hand and the motif would disagree with the input, so fall
+    # back to reading every site as its own.
+    if used_symmetry and frac_motif.shape[0] != len(kept_entries):
+        warnings.warn(
+            f"{name}: the symmetry found generates {frac_motif.shape[0]} sites "
+            f"where the structure has {len(kept_entries)}, so it is read in P1"
+        )
+        rot, trans = _p1_symmetry()
+        asym_entries = kept_entries
+        asym_frac, frac_motif, invs = _expand(asym_entries)
+
+    _, wyc_muls = np.unique(invs, return_counts=True)
+    wyc_muls = np.array(wyc_muls, dtype=np.uint64)
+    asym_inds = np.zeros_like(wyc_muls, dtype=np.uint64)
+    asym_inds[1:] = np.cumsum(wyc_muls, dtype=np.uint64)[:-1]
+    motif = np.matmul(frac_motif, cell)
+
+    asym_types = [sites.types[i] for i in asym_entries]
+    asym_occs = [sites.occs[i] for i in asym_entries]
+    assemblies = [sites.assemblies[i] for i in asym_entries]
+    groups = [sites.groups[i] for i in asym_entries]
+    asym_labels = None
+    if sites.labels is not None:
+        asym_labels = [sites.labels[i] for i in asym_entries]
+
+    disorder = _disorder_assemblies(
+        asym_frac,
+        wyc_muls,
+        len(rot),
+        cell,
+        asym_types,
+        assemblies,
+        groups,
+        asym_occs,
+    )
+    asym_types = np.array(asym_types, dtype=np.uint64)
+
+    symop_rotations, symop_translations = rot, trans
     if reduce_cell:
         cell = lll_reduce(cell)
         if wrap_coords:
             motif = np.mod(motif @ np.linalg.inv(cell), 1) @ cell
-        rot, trans = None, None
+        # The operations are expressed in the basis of the old cell.
+        symop_rotations, symop_translations = None, None
 
     return PeriodicSet(
         motif=motif,
         cell=cell,
-        types=types,
-        # occupancies=occupancies,
+        name=name,
+        asym_unit=asym_inds,
+        multiplicities=wyc_muls,
+        types=asym_types,
+        labels=asym_labels,
+        disorder=disorder,
+        symop_rotations=symop_rotations,
+        symop_translations=symop_translations,
     )

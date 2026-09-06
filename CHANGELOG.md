@@ -61,6 +61,23 @@ next. The two agree exactly when it does not - substitutional disorder, or alter
 equal size - and for every ordered crystal. ``PeriodicSet.PPC()`` is unchanged and its
 docstring now says when it is exact.
 
+- ``periodicset_from_pymatgen_structure`` now implements the arguments the other converters
+take rather than warning that it ignores them, and reads everything a
+``pymatgen.core.Structure`` holds that a ``PeriodicSet`` can carry. ``skip_disorder``,
+``missing_coords`` and ``eq_site_tol`` now do what their names say; fractional occupancies
+become disorder assemblies; ``site.label`` is kept where the structure was actually labelled,
+and ``name`` is taken from a new argument, then ``structure.properties`` (where the Materials
+Project puts ``material_id``), then the reduced formula.
+
+- A pymatgen ``Structure`` is a P1 listing of a unit cell recording neither a space group nor
+an asymmetric unit, so ``periodicset_from_pymatgen_structure`` takes a new ``symprec``
+argument which has the symmetry found from the geometry with spglib, through pymatgen's
+``SpacegroupAnalyzer``. The result then has an asymmetric unit, Wyckoff multiplicities and
+symmetry operations like a set read from a CIF. It is off by default: the symmetry is
+inferred rather than read, so it can differ from the space group the structure was built
+from, and rebuilding the motif from the asymmetric unit idealises a structure which is only
+approximately symmetric.
+
 ### Changed
 
 - Disorder configurations are now weighted by their probability. Previously every
@@ -97,6 +114,12 @@ per configuration. Rows of different sites are never merged, which is what the s
 report needs. Pass ``collapse_tol=None`` for the previous behaviour.
 
 ### Fixed
+
+- ``periodicset_from_pymatgen_structure`` raised ``AttributeError`` on any structure with a
+site holding more than one species, since it read atomic numbers through
+``Structure.atomic_numbers``, which is defined only for ordered structures. A site with
+several species now becomes one point per species sharing a position, the way a CIF writes
+substitutional disorder.
 
 - An explicit disorder assembly holding a single group had its assembly code discarded and
 its sites handed to the occupancy heuristics, which regroup by occupancy value. Sites the
